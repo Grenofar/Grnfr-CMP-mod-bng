@@ -1,4 +1,4 @@
--- GRNFR CPM - session log.
+-- GRNFR CMP - session log.
 -- Writes ONE plain-English text file per play session (from loading a map until leaving it) to:
 --   <BeamNG user folder>/settings/grnfr/logs/
 -- The file is a simple diary: what you clicked, what the mod did, and anything that went wrong.
@@ -63,7 +63,7 @@ function M.begin(info)
   pcall(function() FS:directoryCreate(DIR, true) end)
   active = true
   raw('============================================================')
-  raw(' GRNFR CPM - session log')
+  raw(' GRNFR CMP - session log')
   raw('============================================================')
   raw(' This file is a simple diary of what the mod did during one play session.')
   raw(' Nothing personal is saved here (no name, no folder paths, no PC hardware info).')

@@ -1,16 +1,16 @@
-# GRNFR CPM
+# GRNFR CMP
 
 Shows your FPS and current game mode in an in-game HUD, with a settings window (main menu / pause menu), an in-game window and an optional always-visible FPS counter.
-It also adds one experimental option: **Adaptive traffic**. The rest of the mod is **GRNFR CPM** (Career MultiPlayer): a shared career-style multiplayer economy (see below).
+It also adds one experimental option: **Adaptive traffic**. The rest of the mod is **GRNFR CMP** (Career MultiPlayer): a shared career-style multiplayer economy (see below).
 
 ## How to use
 | I want to... | Do this |
 |---|---|
-| Open or close the small HUD (in a map) | Press **K** (change it in Options > Controls > "GRNFR CPM") |
+| Open or close the small HUD (in a map) | Press **K** (change it in Options > Controls > "GRNFR CMP") |
 | Open the in-game window (Adaptive traffic, Anti-stutter) | Small HUD > **Option** button (press K to close it) |
-| Change settings (HUD, FPS counter, language) | Main menu > **GRNFR CPM**, or Pause menu > **Mods** tab > GRNFR CPM |
+| Change settings (HUD, FPS counter, language) | Main menu > **GRNFR CMP**, or Pause menu > **Mods** tab > GRNFR CMP |
 | Join a game server from the main menu | Main menu > **Rejoindre / Join** button: one card per server (name, players connected), opens straight to the Servers tab |
-| Open the quick window (chat, players, drag races) | Press **J** (change it in Options > Controls > "GRNFR CPM") — a small panel, does not hide the game like the full window does |
+| Open the quick window (chat, players, drag races) | Press **J** (change it in Options > Controls > "GRNFR CMP") — a small panel, does not hide the game like the full window does |
 
 English and French are available (choose on first launch, change any time in Settings).
 
@@ -27,9 +27,9 @@ One text file per session, named by date and time. The 10 newest are kept. Lines
 are the ones that matter. If you report a bug, please attach the latest file.
 
 The logs contain **no personal data**: no user name, no folder paths and no PC hardware information. The logs never leave your PC.
-The FPS HUD and adaptive traffic feature send nothing over the network. **GRNFR CPM** (below) does, only once you sign in.
+The FPS HUD and adaptive traffic feature send nothing over the network. **GRNFR CMP** (below) does, only once you sign in.
 
-## GRNFR CPM (press **O**, or "Join" from the main menu)
+## GRNFR CMP (press **O**, or "Join" from the main menu)
 Needs an internet connection and a free account on the GRNFR server. Free roam only (disabled in the game's career, scenarios and missions) — the window itself can also be opened from the main menu, before loading any map, to browse and join a server.
 
 | Tab | What it does |
@@ -49,7 +49,7 @@ Needs an internet connection and a free account on the GRNFR server. Free roam o
 Whoever has been connected to the server the longest ("host", recomputed automatically on every sync — no election step) drives 2 AI traffic cars and sends their position like their own. Everyone else on the server sees them as ghosts, without collision. If the host leaves, the next-longest-connected player takes over and spawns their own 2 cars at the next sync.
 
 ## Quick window (press **J**)
-A small panel — unlike the full GRNFR CPM window, it does not take over the screen or hide the game.
+A small panel — unlike the full GRNFR CMP window, it does not take over the screen or hide the game.
 - **Chat**: text messages with everyone on your current server.
 - **Players**: for each one, Track (a point on the ground follows them, refreshed every couple of seconds),
   Give money, and Trade (pick one of your vehicles and/or one of theirs, propose the swap).

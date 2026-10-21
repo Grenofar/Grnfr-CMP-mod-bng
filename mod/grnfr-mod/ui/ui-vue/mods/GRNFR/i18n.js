@@ -2,7 +2,7 @@
 export const STRINGS = {
   fr: {
     subtitle: "Vos FPS et le mode de jeu, en un coup d'œil",
-    desc: "GRNFR CPM affiche vos FPS (instantanés et moyenne sur 1 s), le mode de jeu en cours, dans un HUD personnalisable (couleur, taille, position) et un compteur FPS discret, visible en permanence.",
+    desc: "GRNFR CMP affiche vos FPS (instantanés et moyenne sur 1 s), le mode de jeu en cours, dans un HUD personnalisable (couleur, taille, position) et un compteur FPS discret, visible en permanence.",
     tab_optim: "Optimisation",
     graph_hint: "Survolez la courbe : chaque seconde de jeu avec sa moyenne sur 1 s et la valeur instantanée.", graph_empty: "En attente des mesures…",
     avg_1s: "Moyenne 1 s", hud_option: "Option",
@@ -21,7 +21,7 @@ export const STRINGS = {
     s_hud: "UI en jeu (HUD)", hudEnabled: "HUD activé", showFps: "Afficher les FPS",
     showAvg: "Afficher la moyenne 1 s", showMode: "Afficher le mode de jeu", showGraph: "Graphique de performance", compact: "Mode compact",
     accent: "Accent", hud_opacity: "Opacité du HUD", hud_key: "Touche d'ouverture du HUD",
-    key_note: "Touche par défaut : K. Pour la changer : Options → Contrôles → « GRNFR CPM ».",
+    key_note: "Touche par défaut : K. Pour la changer : Options → Contrôles → « GRNFR CMP ».",
 
     spec_cpu: "Processeur", spec_gpu: "Carte graphique", spec_ram: "Mémoire RAM", spec_vram: "Mémoire vidéo",
     spec_os: "Système d'exploitation", spec_resolution: "Résolution", spec_gameVersion: "Version du jeu",
@@ -34,7 +34,7 @@ export const STRINGS = {
     badge_dev: "EN DÉVELOPPEMENT", mm_note: "Fonctionnalité prévue, non disponible dans cette version.",
     mode_garage: "Garage", mode_bus: "Bus", mode_rally: "Rallye", mode_multiplayer: "Multijoueur", mode_localmp: "Multijoueur local", mode_startexp: "Expérience de démarrage",
     no_lua: "Pas de réponse du mod côté jeu : les réglages affichés sont ceux par défaut et ne seront peut-être pas appliqués.",
-    game_settings_hint: "Réglages (HUD, compteur FPS, langue) : menu principal ou menu pause > Mods > GRNFR CPM.",
+    game_settings_hint: "Réglages (HUD, compteur FPS, langue) : menu principal ou menu pause > Mods > GRNFR CMP.",
     s_key: "Touche d'ouverture",
     refresh_rate: "Rafraîchissement du HUD", refresh_auto: "Auto (maximum)",
     hud_open: "HUD ouvert", hud_closed: "HUD fermé", hud_close: "Fermer", hud_openA: "Ouvrir", hud_pos: "Position du HUD", diag_wait: "En attente des mesures",
@@ -42,7 +42,7 @@ export const STRINGS = {
   },
   en: {
     subtitle: "Your FPS and game mode, at a glance",
-    desc: "GRNFR CPM shows your FPS (instant and 1 s average), the current game mode, in a customizable HUD (color, size, position) and a discreet always-visible FPS counter.",
+    desc: "GRNFR CMP shows your FPS (instant and 1 s average), the current game mode, in a customizable HUD (color, size, position) and a discreet always-visible FPS counter.",
     tab_optim: "Optimization",
     graph_hint: "Hover the curve: each second of gameplay with its 1 s average and the instant value.", graph_empty: "Waiting for measurements…",
     avg_1s: "1 s average", hud_option: "Options",
@@ -61,7 +61,7 @@ export const STRINGS = {
     s_hud: "In-game UI (HUD)", hudEnabled: "HUD enabled", showFps: "Show FPS",
     showAvg: "Show 1 s average", showMode: "Show game mode", showGraph: "Performance graph", compact: "Compact mode",
     accent: "Accent", hud_opacity: "HUD opacity", hud_key: "HUD open key",
-    key_note: "Default key: K. To change it: Options → Controls → \"GRNFR CPM\".",
+    key_note: "Default key: K. To change it: Options → Controls → \"GRNFR CMP\".",
 
     spec_cpu: "Processor", spec_gpu: "Graphics card", spec_ram: "RAM", spec_vram: "Video memory",
     spec_os: "Operating system", spec_resolution: "Resolution", spec_gameVersion: "Game version",
@@ -74,7 +74,7 @@ export const STRINGS = {
     badge_dev: "IN DEVELOPMENT", mm_note: "Planned feature, not available in this version.",
     mode_garage: "Garage", mode_bus: "Bus", mode_rally: "Rally", mode_multiplayer: "Multiplayer", mode_localmp: "Local multiplayer", mode_startexp: "Starting experience",
     no_lua: "No answer from the in-game mod: the settings shown are defaults and may not be applied.",
-    game_settings_hint: "Settings (HUD, FPS counter, language): main menu or pause menu > Mods > GRNFR CPM.",
+    game_settings_hint: "Settings (HUD, FPS counter, language): main menu or pause menu > Mods > GRNFR CMP.",
     s_key: "Open key",
     refresh_rate: "HUD refresh rate", refresh_auto: "Auto (maximum)",
     hud_open: "HUD open", hud_closed: "HUD closed", hud_close: "Close", hud_openA: "Open", hud_pos: "HUD position", diag_wait: "Waiting for measurements",

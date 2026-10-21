@@ -1,17 +1,17 @@
-# GRNFR Host CPM
+# GRNFR Host CMP
 
-Serveur auto-hébergé pour GRNFR CPM : un relais WebSocket **sans limite de joueurs**, avec un nom et un
+Serveur auto-hébergé pour GRNFR CMP : un relais WebSocket **sans limite de joueurs**, avec un nom et un
 mot de passe facultatif, configuré par un assistant (terminal au premier lancement, puis une page web React
 à tout moment). Écrit en Rust (`host/`), interface de configuration en React (`host/ui/`).
 
 ## ⚠️ À lire avant d'utiliser ce dossier
 
-Ce code a été écrit **sans pouvoir être compilé ni testé** : l'environnement qui l'a produit n'a ni `cargo`
-ni `rustc` installés. Ce n'est pas le cas du reste du mod (SQL, Lua, JS), qui a pu être vérifié au moins
-partiellement — voir le README à la racine. Concrètement :
-- Le code Rust (`host/src/`) suit des schémas très standards et stables (`tokio` + `tokio-tungstenite` pour
-  le relais WebSocket, un parseur HTTP/1.1 fait main pour l'assistant web), mais **n'a jamais compilé**.
-  La première chose à faire est `cargo build` et corriger ce qui ne passe pas.
+Ce code a été écrit **sans pouvoir être compilé ni testé localement** : l'environnement qui l'a produit n'a
+ni `cargo` ni `rustc` installés. Depuis, `.github/workflows/host-release.yml` le compile réellement sur
+Windows, Linux et macOS à chaque tag `host-v*` (GitHub Actions, qui a un vrai toolchain Rust) et publie les
+binaires en Release GitHub — **ça compile sans erreur sur les 3 OS**. Ce qui reste vrai malgré ça :
+- La compilation réussit, mais **personne n'a lancé le binaire et vérifié qu'il marche en pratique**
+  (assistant, relais WebSocket, assistant web) : seule la compilation est vérifiée, pas le comportement.
 - L'interface React (`host/ui/`), elle, a été **construite et vérifiée** dans cette session (`npm install`
   && `npm run build` ont réussi) — c'est la partie la plus fiable de ce dossier.
 - **Ce host n'est PAS encore relié au mod BeamNG.** `mod/grnfr-mod/ui/ui-vue/mods/GRNFR/net.js` ne sait

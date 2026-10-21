@@ -1,4 +1,4 @@
-name: GRNFR Host CPM — build & release
+name: GRNFR Host CMP — build & release
 
 # Compile host/ (Rust) sur de vraies machines Windows/Linux/macOS avec un vrai toolchain Rust — nécessaire car
 # aucun cargo/rustc n'était disponible dans l'environnement qui a écrit ce code (voir host/README.md).
@@ -74,8 +74,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: "GRNFR Host CPM ${{ github.ref_name }}"
+          name: "GRNFR Host CMP ${{ github.ref_name }}"
           files: release/*
           body: |
-            Binaires de GRNFR Host CPM, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
+            Binaires de GRNFR Host CMP, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
             Voir host/README.md pour l'utilisation (premier lancement = assistant de configuration).

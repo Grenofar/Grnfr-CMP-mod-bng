@@ -1,4 +1,4 @@
-# GRNFR CPM — mod BeamNG « carrière multijoueur » + Supabase + site Vercel (+ host auto-hébergé)
+# GRNFR CMP — mod BeamNG « carrière multijoueur » + Supabase + site Vercel (+ host auto-hébergé)
 
 Mod BeamNG.drive (dossier `mod/grnfr-mod/`) relié à un backend **Supabase** (`supabase/`) et distribué par un site **Vercel** (`public/` + `scripts/build.mjs`). Un serveur auto-hébergé optionnel (`host/`, Rust + React) existe en plus, séparément — voir § Host auto-hébergé.
 
@@ -25,10 +25,10 @@ Fonctions : argent donné par un admin, classement des fortunes, garage personne
 ```
 SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... npm run release -- "Notes de version"
 ```
-Change `VERSION` dans `grnfr.lua` **et** `version` dans `mod_info/grnfr/info.json` avant de publier (refuse sinon : version déjà prise). Dans le jeu, la fenêtre GRNFR CPM affiche un bandeau « mise à jour disponible » en comparant à `get_latest_release()`.
+Change `VERSION` dans `grnfr.lua` **et** `version` dans `mod_info/grnfr/info.json` avant de publier (refuse sinon : version déjà prise). Dans le jeu, la fenêtre GRNFR CMP affiche un bandeau « mise à jour disponible » en comparant à `get_latest_release()`.
 
 ### 4. Les joueurs
-Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer « GRNFR CPM », lancer une carte en jeu libre.
+Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer « GRNFR CMP », lancer une carte en jeu libre.
 - **Menu principal → bouton « Rejoindre »** : une case par serveur (nom, joueurs connectés), ouvre directement l'onglet Serveurs, même sans carte chargée.
 - **Touche O** : fenêtre complète (compte, serveurs, garage, marché, taxi, bus).
 - **Touche J** : petite fenêtre rapide (chat, joueurs, courses de drag) — voir ci-dessous.
@@ -62,8 +62,8 @@ comprendre (pas de physique, pas d'argent) ; ce n'est pas un remplacement de la 
 | Lua (taxi, bus, taxi IA, fantômes) | **Simulé** (`texlua tests/lua_sim.lua`) la dernière fois qu'un interpréteur Lua était disponible ; **non ré-exécuté dans cette session** |
 | `garage.lua`, `convoy.lua`, `chat.lua`, `track.lua`, `drag.lua` (tout le nouveau Lua social/drag) | **Jamais exécutés, ni simulés, ni en jeu.** Mêmes précautions que le reste (`pcall` partout), mais sans aucune vérification automatisée pour l'instant |
 | `QuickPanel.vue` (chat/joueurs/drag, touche J) | **Compile pas vérifiée** (pas d'outil Vue dans cette session), jamais affichée dans le vrai jeu |
-| **`host/` (Rust + React)** | **Le React (`host/ui/`) a été construit et vérifié** (`npm run build` a réussi). **Le Rust (`host/src/`) n'a jamais compilé** : aucun `cargo`/`rustc` dans cette session. Voir `host/README.md` |
-| **Le mod dans BeamNG, le site Vercel déployé, un vrai projet Supabase, `npm run release` contre un vrai bucket Storage, `grnfr-host` en conditions réelles** | **Jamais essayés** |
+| **`host/` (Rust + React)** | **Compile réellement** sur Windows/Linux/macOS via `.github/workflows/host-release.yml` (GitHub Actions, un vrai toolchain Rust) ; binaires publiés en Release GitHub. Mais **jamais exécuté** : aucune vérification du comportement réel (assistant, relais, assistant web), seulement de la compilation. Voir `host/README.md` |
+| **Le mod dans BeamNG, le site Vercel déployé, un vrai projet Supabase, `npm run release` contre un vrai bucket Storage, `grnfr-host` lancé et utilisé en conditions réelles** | **Jamais essayés** |
 
 Les noms d'API BeamNG pour les fantômes, le trafic partagé et le blocage anti faux départ (`setPositionRotation`, `setGhostEnabled`, `ai.setMode('traffic')`, `input.event('parkingbrake'/'clutch', ...)`…) sont des hypothèses : la première session en jeu fera sortir des corrections (journal : `settings/grnfr/logs/`).
 
@@ -77,7 +77,7 @@ node scripts/build.mjs                                              # build du z
 npm run release -- "notes"                                           # publie une release (SUPABASE_SERVICE_ROLE_KEY requis)
 
 cd host/ui && npm install && npm run build && cd ..                 # assistant web du host (vérifié dans cette session)
-cd host && cargo build --release                                   # host lui-même (JAMAIS compilé dans cette session)
+cd host && cargo build --release                                   # host lui-même (compile via CI ; jamais exécuté)
 ```
 
 ## Architecture (pour reprendre le code)
@@ -89,7 +89,7 @@ cd host && cargo build --release                                   # host lui-m�
 
 ## Reste à faire / idées
 - Relier `net.js` au relais `host/` (en plus de, ou à la place de, Supabase) : non commencé.
-- Compiler et tester `host/` (aucun `cargo` disponible pendant son écriture).
+- Lancer `grnfr-host` pour de vrai et vérifier qu'il marche (compilé par CI, jamais exécuté).
 - Bouton « Rejoindre » dans le menu pause (aujourd'hui : menu principal seulement).
 - Limiter les courses de taxi entre joueurs à un même serveur de jeu (actuellement par carte) ; option `taxi_require_passenger_near`.
 - Couleur du véhicule sur les fantômes, réglage de la cadence selon la latence.

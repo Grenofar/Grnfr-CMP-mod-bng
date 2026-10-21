@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-GRNFR CPM (Career MultiPlayer): a BeamNG.drive mod for a shared career-style multiplayer economy, backed by Supabase, distributed through a Vercel site. A separate, unrelated self-hosted server program (Rust + React) lives in `host/`, named GRNFR Host CPM. Comments in the code are in French; session logs the mod writes for players are in English.
+GRNFR CMP (Career MultiPlayer): a BeamNG.drive mod for a shared career-style multiplayer economy, backed by Supabase, distributed through a Vercel site. A separate, unrelated self-hosted server program (Rust + React) lives in `host/`, named GRNFR Host CMP. Comments in the code are in French; session logs the mod writes for players are in English.
 
 Four independent pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit at the root of the distributed zip.

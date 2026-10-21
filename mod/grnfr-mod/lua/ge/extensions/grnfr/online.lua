@@ -20,7 +20,7 @@ local function lang() local ok, l = pcall(function() return grnfr_settings.get()
 function M.L(fr, en) return lang() == 'en' and en or fr end
 
 function M.toast(msg, kind)
-  pcall(function() guihooks.trigger('toastrMsg', { type = kind or 'info', title = 'GRNFR CPM', msg = msg, config = { timeOut = 6000 } }) end)
+  pcall(function() guihooks.trigger('toastrMsg', { type = kind or 'info', title = 'GRNFR CMP', msg = msg, config = { timeOut = 6000 } }) end)
 end
 
 function M.isAuthed() return authed end

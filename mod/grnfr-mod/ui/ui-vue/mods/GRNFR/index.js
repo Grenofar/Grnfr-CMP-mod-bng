@@ -24,7 +24,7 @@ let quickEl = null
 
 function addGrnfrButton(addButton) {
   addButton({
-    title: "GRNFR CPM",
+    title: "GRNFR CMP",
     iconId: "wrench",
     action: () => { getState().open = true },
   })
@@ -69,7 +69,7 @@ export async function onLoad() {
     await lua.extensions.ui_pause_actions.registerModButton({
       id: PAUSE_BUTTON_ID,
       tabId: "mods",
-      label: "GRNFR CPM",
+      label: "GRNFR CMP",
       icon: "wrench",
       componentName: "/ui/ui-vue/mods/GRNFR/GrnfrPanel.vue",
     })

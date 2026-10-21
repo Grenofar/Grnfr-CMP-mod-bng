@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-// Assistant web de configuration du GRNFR Host CPM : nom, mot de passe (facultatif), port. Pas de nombre de
+// Assistant web de configuration du GRNFR Host CMP : nom, mot de passe (facultatif), port. Pas de nombre de
 // joueurs maximum (volontaire : voir le message plus bas). Lit/écrit la config via la petite API intégrée au
 // binaire Rust (host/src/httpd.rs) : GET /api/config et POST /api/config.
 export default function App() {
@@ -45,8 +45,8 @@ export default function App() {
 
   return (
     <div className="wrap">
-      <h1>GRNFR Host CPM</h1>
-      <p className="sub">Serveur auto-hébergé pour GRNFR CPM — aucune limite de joueurs.</p>
+      <h1>GRNFR Host CMP</h1>
+      <p className="sub">Serveur auto-hébergé pour GRNFR CMP — aucune limite de joueurs.</p>
       {error && <p className="error">{error}</p>}
       <form onSubmit={save}>
         <label>

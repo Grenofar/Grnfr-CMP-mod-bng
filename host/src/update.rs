@@ -28,7 +28,7 @@ pub fn check_for_update(current: &str) {
         Some(v) if v != current => {
             println!("=== Mise à jour disponible : v{} (vous avez v{}) — voir le site GRNFR pour la télécharger ===", v, current);
         }
-        Some(_) => println!("GRNFR Host CPM : à jour (v{}).", current),
+        Some(_) => println!("GRNFR Host CMP : à jour (v{}).", current),
         None => println!("Vérification de mise à jour : réponse inattendue du site."),
     }
 }

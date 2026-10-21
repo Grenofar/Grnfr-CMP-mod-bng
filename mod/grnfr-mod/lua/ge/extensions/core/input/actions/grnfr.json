@@ -4,23 +4,23 @@
     "order": 900,
     "ctx": "tlua",
     "onDown": "if extensions.grnfr then extensions.grnfr.toggleHud() end",
-    "title": "GRNFR CPM : ouvrir / fermer",
-    "desc": "Ouvre ou ferme le GRNFR CPM"
+    "title": "GRNFR CMP : ouvrir / fermer",
+    "desc": "Ouvre ou ferme le GRNFR CMP"
   },
   "grnfr_online_toggle": {
     "cat": "general",
     "order": 901,
     "ctx": "tlua",
     "onDown": "if extensions.grnfr then extensions.grnfr.toggleOnline() end",
-    "title": "GRNFR CPM : ouvrir / fermer",
-    "desc": "Ouvre ou ferme la fenêtre GRNFR CPM (compte, serveurs, garage, marché, taxi, bus)"
+    "title": "GRNFR CMP : ouvrir / fermer",
+    "desc": "Ouvre ou ferme la fenêtre GRNFR CMP (compte, serveurs, garage, marché, taxi, bus)"
   },
   "grnfr_quick_toggle": {
     "cat": "general",
     "order": 902,
     "ctx": "tlua",
     "onDown": "if extensions.grnfr then extensions.grnfr.toggleQuick() end",
-    "title": "GRNFR CPM : fenêtre rapide (chat, joueurs, drag)",
+    "title": "GRNFR CMP : fenêtre rapide (chat, joueurs, drag)",
     "desc": "Ouvre ou ferme la petite fenêtre rapide : chat de serveur, liste des joueurs, repère, argent, échange, courses de drag"
   }
 }

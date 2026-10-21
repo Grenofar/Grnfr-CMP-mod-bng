@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GRNFR CPM — carrière multijoueur pour BeamNG.drive</title>
+<title>GRNFR CMP — carrière multijoueur pour BeamNG.drive</title>
 <meta name="description" content="Mod BeamNG.drive : économie partagée, garage, annonces, taxi, bus, serveurs de 4 joueurs.">
 <link rel="stylesheet" href="/style.css"></head><body>
-<header class="top"><b>GRNFR CPM</b><a href="/">Accueil</a><a href="/account.html">Mon compte</a><a href="/admin.html">Admin</a></header>
+<header class="top"><b>GRNFR CMP</b><a href="/">Accueil</a><a href="/account.html">Mon compte</a><a href="/admin.html">Admin</a></header>
 <main>
-  <h1>GRNFR CPM</h1>
+  <h1>GRNFR CMP</h1>
   <p class="mut">Un mod BeamNG.drive pour jouer à plusieurs avec une économie commune : argent, garage de 4 places, annonces entre joueurs, échanges, taxi, bus et serveurs de 4 joueurs où l'on voit les pseudos des autres.</p>
   <p id="dl"><a class="btn" href="/downloads/grnfr-online.zip" download>Télécharger le mod (.zip)</a></p>
   <p id="dl-notes" class="mut"></p>
@@ -13,12 +13,12 @@
   <h2>Installation</h2>
   <ol>
     <li>Ne dézippez pas : copiez <code>grnfr-online.zip</code> dans le dossier <code>mods</code> de votre dossier utilisateur BeamNG (<code>Documents/BeamNG/…/mods</code> ou <code>%LocalAppData%/BeamNG/…/current/mods</code>).</li>
-    <li>Lancez BeamNG.drive, activez <b>GRNFR CPM</b> dans le Gestionnaire de mods, puis lancez une carte en jeu libre.</li>
+    <li>Lancez BeamNG.drive, activez <b>GRNFR CMP</b> dans le Gestionnaire de mods, puis lancez une carte en jeu libre.</li>
     <li>Appuyez sur <b>O</b> : onglet <b>Compte</b>, créez un compte avec <b>un pseudo unique</b> (obligatoire), puis onglet <b>Serveurs</b> pour rejoindre un serveur (4 joueurs maximum).</li>
   </ol>
   <p class="mut">Les données envoyées au serveur : e-mail, pseudo, argent, véhicules du garage, carte et position pendant que vous êtes connecté. Rien d'autre.</p>
 
-  <h2>Héberger votre propre serveur (GRNFR Host CPM)</h2>
+  <h2>Héberger votre propre serveur (GRNFR Host CMP)</h2>
   <p class="mut">Un programme séparé (pas encore relié au mod) : relais réseau auto-hébergé, <b>sans limite de joueurs</b>, avec un nom et un mot de passe facultatif. Premier lancement = assistant de configuration ; une page web locale permet de la modifier ensuite. Compilé automatiquement à chaque version par GitHub Actions.</p>
   <p id="host-dl" class="mut">Chargement…</p>
 
@@ -59,7 +59,7 @@
   } catch (e) { hist.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
 })()
 
-// GRNFR Host CPM : binaires construits par GitHub Actions (host/, jamais compilé localement), publiés en
+// GRNFR Host CMP : binaires construits par GitHub Actions (host/, jamais compilé localement), publiés en
 // pièces jointes de la dernière GitHub Release du dépôt (tag "host-vX.Y.Z"). Lecture publique, sans jeton.
 ;(async () => {
   const el = document.getElementById("host-dl")

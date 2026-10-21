@@ -2,9 +2,9 @@
   <!-- Petit HUD (touche K) : même style que la fenêtre GRNFR. Monté dans <body>, sans app « HUD Apps ». -->
   <div v-if="shown && open && !big" class="ghud" :class="['acc-' + accent, 'pos-' + (s.hudPos || 'top-left'), { compact: s.compact }]" :style="{ opacity: s.opacity }">
     <header>
-      <span class="title">GRNFR CPM</span>
+      <span class="title">GRNFR CMP</span>
       <span class="hbtns">
-        <button type="button" class="hb" title="GRNFR CPM" @click="callLua('ui', 'window.open', '{}')">Online</button>
+        <button type="button" class="hb" title="GRNFR CMP" @click="callLua('ui', 'window.open', '{}')">Online</button>
         <button type="button" class="hb" title="Chat / joueurs / drag (J)" @click="callLua('ui', 'quick.open', '{}')">Chat</button>
         <button type="button" class="hb opt" @click="openBig">{{ t('hud_option') }}</button>
       </span>
@@ -25,7 +25,7 @@
     <div v-if="session && big" class="gwin">
       <div class="window">
         <header class="wh">
-          <span class="wt">GRNFR CPM</span>
+          <span class="wt">GRNFR CMP</span>
           <span class="wk">{{ keyLabel || 'K' }} : {{ t('hud_close') }}</span>
           <BngButton @click="closeBig">{{ t('hud_close') }}</BngButton>
         </header>
