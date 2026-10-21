@@ -8,6 +8,8 @@
 // tenté (trop spécifique à la plate-forme pour être fiable sans pouvoir le tester).
 use std::process::Command;
 
+use crate::logger::log;
+
 // À adapter à votre déploiement : un petit fichier JSON {"version":"x.y.z"} publié sur le site GRNFR (voir
 // public/host-version.json à la racine du dépôt, à servir tel quel par Vercel).
 const UPDATE_URL: &str = "https://example.invalid/host-version.json";
@@ -17,7 +19,7 @@ pub fn check_for_update(current: &str) {
     let body = match output {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
         _ => {
-            println!("Vérification de mise à jour ignorée (curl indisponible, ou site de mise à jour injoignable).");
+            log("Vérification de mise à jour ignorée (curl indisponible, ou site de mise à jour injoignable).");
             return;
         }
     };
@@ -26,9 +28,9 @@ pub fn check_for_update(current: &str) {
         .and_then(|v| v.get("version").and_then(|x| x.as_str()).map(|s| s.to_string()));
     match latest {
         Some(v) if v != current => {
-            println!("=== Mise à jour disponible : v{} (vous avez v{}) — voir le site GRNFR pour la télécharger ===", v, current);
+            log(&format!("=== Mise à jour disponible : v{} (vous avez v{}) — voir le site GRNFR pour la télécharger ===", v, current));
         }
-        Some(_) => println!("GRNFR Host CMP : à jour (v{}).", current),
-        None => println!("Vérification de mise à jour : réponse inattendue du site."),
+        Some(_) => log(&format!("GRNFR Host CMP : à jour (v{}).", current)),
+        None => log("Vérification de mise à jour : réponse inattendue du site."),
     }
 }

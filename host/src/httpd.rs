@@ -12,6 +12,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::config::{self, Config, DEFAULT_PORT};
+use crate::logger::log;
 use crate::relay::{self, ServerState};
 
 const INDEX_HTML: &str = include_str!("../ui/dist/index.html");
@@ -23,11 +24,11 @@ pub async fn run(port: u16, state: Arc<ServerState>) {
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("Assistant web indisponible sur {} : {}.", addr, e);
+            log(&format!("Tableau de bord indisponible sur {} : {}.", addr, e));
             return;
         }
     };
-    println!("Assistant web / tableau de bord : http://{}", addr);
+    log(&format!("Tableau de bord : http://{}", addr));
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(v) => v,
@@ -36,7 +37,7 @@ pub async fn run(port: u16, state: Arc<ServerState>) {
         let state = state.clone();
         tokio::spawn(async move {
             if let Err(e) = handle(stream, state).await {
-                eprintln!("Assistant web : requête échouée ({}).", e);
+                log(&format!("Tableau de bord : requête échouée ({}).", e));
             }
         });
     }

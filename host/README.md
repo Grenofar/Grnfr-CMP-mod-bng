@@ -49,15 +49,19 @@ Le binaire est `host/target/release/grnfr-host` (ou `.exe` sous Windows).
 ./grnfr-host
 ```
 
-- **Premier lancement** : assistant en ligne de commande (nom du serveur, mot de passe ou pas, port
-  d'écoute — 30814 par défaut). Écrit `grnfr-host.cfg` dans le dossier courant.
-- **Lancements suivants** : la configuration existante est reprise telle quelle.
-- **Tableau de bord** : ouvrez `http://127.0.0.1:<port+1>` dans un navigateur (il n'écoute que sur votre
-  propre machine — pas depuis l'extérieur). Vous y voyez qui est connecté, pouvez démarrer/arrêter le relais,
-  expulser un joueur, et changer nom/mot de passe/port (repris en cliquant Arrêter puis Démarrer, sans
-  fermer le programme).
+- **Pas de console** (depuis v0.2.1, Windows) : le programme n'ouvre plus de fenêtre noire. Au premier
+  lancement, une configuration par défaut est enregistrée dans `grnfr-host.cfg` (port 30814, pas de mot de
+  passe), et le tableau de bord s'ouvre tout seul dans votre navigateur par défaut. Tout se règle depuis là.
+- **Lancements suivants** : la configuration existante est reprise telle quelle, tableau de bord toujours
+  ouvert automatiquement.
+- **Tableau de bord** : `http://127.0.0.1:<port+1>` (il n'écoute que sur votre propre machine — pas depuis
+  l'extérieur). Vous y voyez qui est connecté, pouvez démarrer/arrêter le relais, expulser un joueur, et
+  changer nom/mot de passe/port (repris en cliquant Arrêter puis Démarrer, sans fermer le programme).
+- **Journal** : comme il n'y a plus de console, ce que le programme aurait affiché (démarrage, erreurs de
+  port déjà utilisé, connexions/déconnexions…) est écrit dans `grnfr-host.log` (même dossier), une ligne par
+  événement. À consulter si le tableau de bord ne s'ouvre pas tout seul ou qu'un problème survient.
 - **Mise à jour** : à chaque lancement, le programme essaie de lire `public/host-version.json` (voir plus
-  bas) via `curl` et affiche un message si une version plus récente existe. Il ne se remplace jamais
+  bas) via `curl` et note dans `grnfr-host.log` si une version plus récente existe. Il ne se remplace jamais
   lui-même : le téléchargement et le remplacement du binaire restent manuels (trop spécifique à chaque
   système pour être fiable sans pouvoir le tester ici).
 - **Aucune limite de joueurs** : contrairement aux serveurs créés dans Supabase (4 joueurs maximum), ce
@@ -87,5 +91,7 @@ mettez à jour `public/host-version.json` à chaque nouvelle release du host.
   `host/ui/dist/` (construit par Vite) et une petite API : `GET`/`POST /api/config`, `GET /api/status`,
   `POST /api/start`, `POST /api/stop`, `POST /api/kick`.
 - `src/update.rs` — vérification de version via `curl` (pas de dépendance HTTP/TLS supplémentaire).
+- `src/logger.rs` — écrit dans `grnfr-host.log` ce que la console aurait affiché (le binaire Windows n'en a
+  plus depuis v0.2.1 : `#![windows_subsystem = "windows"]` dans `main.rs`).
 - `ui/` — l'assistant web (React + Vite). Noms de fichiers de build fixes (`app.js`, `app.css`, pas de hash)
   pour que `httpd.rs` puisse les inclure à la compilation avec des chemins stables.

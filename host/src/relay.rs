@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::config::Config;
+use crate::logger::log;
 
 type Tx = mpsc::UnboundedSender<Message>;
 
@@ -101,12 +102,12 @@ pub async fn start(state: Arc<ServerState>) -> Result<(), String> {
     let cfg = state.config();
     let addr = format!("0.0.0.0:{}", cfg.port);
     let listener = TcpListener::bind(&addr).await.map_err(|e| e.to_string())?;
-    println!(
+    log(&format!(
         "Serveur \"{}\" en écoute sur le port {} ({} mot de passe). Aucune limite de joueurs.",
         cfg.name,
         cfg.port,
         if cfg.password.is_some() { "avec" } else { "sans" }
-    );
+    ));
     let shared = state.shared.clone();
     let handle = tokio::spawn(accept_loop(listener, shared, cfg));
     *state.listener_task.lock().unwrap() = Some(handle);
@@ -132,7 +133,7 @@ async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, cfg: Config) {
         let (stream, peer) = match listener.accept().await {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Connexion refusée : {}.", e);
+                log(&format!("Connexion refusée : {}.", e));
                 continue;
             }
         };
@@ -141,7 +142,7 @@ async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, cfg: Config) {
         tokio::spawn(async move {
             let peer_s = peer.to_string();
             if let Err(e) = handle_client(stream, &peer_s, shared, cfg).await {
-                eprintln!("Client {} déconnecté : {}.", peer_s, e);
+                log(&format!("Client {} déconnecté : {}.", peer_s, e));
             }
         });
     }
@@ -183,7 +184,7 @@ async fn handle_client(stream: TcpStream, peer: &str, shared: Arc<Shared>, cfg: 
         let mut clients = shared.clients.lock().unwrap();
         clients.insert(id, ClientInfo { username: username.clone(), peer: peer.to_string(), joined_at: Instant::now(), tx });
     }
-    println!("{} a rejoint depuis {}.", username, peer);
+    log(&format!("{} a rejoint depuis {}.", username, peer));
     broadcast(&shared, id, &format!(r#"{{"type":"join","username":"{}"}}"#, username));
 
     // Tâche d'écriture : relaie vers CE client ce que les autres (ou lui-même, ignoré côté lecture) envoient.
@@ -211,7 +212,7 @@ async fn handle_client(stream: TcpStream, peer: &str, shared: Arc<Shared>, cfg: 
         let mut clients = shared.clients.lock().unwrap();
         clients.remove(&id);
     }
-    println!("{} est parti.", username);
+    log(&format!("{} est parti.", username));
     broadcast(&shared, id, &format!(r#"{{"type":"leave","username":"{}"}}"#, username));
     Ok(())
 }
