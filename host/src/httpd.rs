@@ -1,20 +1,24 @@
-// GRNFR Host : petit serveur HTTP intégré, pour l'assistant web de configuration (React, voir host/ui/).
-// Lit/écrit directement le fichier de configuration (grnfr-host.cfg) : un redémarrage du programme est
-// nécessaire pour que les changements (port, mot de passe) soient repris par le relais WebSocket (relay.rs).
+// GRNFR Host : petit serveur HTTP intégré, pour l'assistant web de configuration ET le tableau de bord
+// (React, voir host/ui/) : qui est connecté, démarrer/arrêter le relais, expulser un joueur. Lit/écrit
+// directement le fichier de configuration (grnfr-host.cfg) ; un changement de port/mot de passe nécessite
+// un arrêt puis un redémarrage du relais (via /api/stop puis /api/start), pas du programme entier.
 // Écouté uniquement sur 127.0.0.1 (pas depuis l'extérieur : l'assistant n'a pas d'authentification).
 //
 // Pas de framework HTTP (axum/hyper...) : un parseur HTTP/1.1 minimal à la main, pour ne pas ajouter une
 // dépendance de plus que cette session n'a pas pu vérifier à la compilation (voir host/README.md).
+use std::sync::Arc;
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::config::{self, Config, DEFAULT_PORT};
+use crate::relay::{self, ServerState};
 
 const INDEX_HTML: &str = include_str!("../ui/dist/index.html");
 const APP_JS: &str = include_str!("../ui/dist/app.js");
 const APP_CSS: &str = include_str!("../ui/dist/app.css");
 
-pub async fn run(port: u16) {
+pub async fn run(port: u16, state: Arc<ServerState>) {
     let addr = format!("127.0.0.1:{}", port);
     let listener = match TcpListener::bind(&addr).await {
         Ok(l) => l,
@@ -23,14 +27,15 @@ pub async fn run(port: u16) {
             return;
         }
     };
-    println!("Assistant web de configuration : http://{}", addr);
+    println!("Assistant web / tableau de bord : http://{}", addr);
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(v) => v,
             Err(_) => continue,
         };
+        let state = state.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle(stream).await {
+            if let Err(e) = handle(stream, state).await {
                 eprintln!("Assistant web : requête échouée ({}).", e);
             }
         });
@@ -96,7 +101,7 @@ async fn read_request(stream: &mut TcpStream) -> Result<Request, String> {
     Ok(Request { method, path, body })
 }
 
-async fn handle(mut stream: TcpStream) -> Result<(), String> {
+async fn handle(mut stream: TcpStream, state: Arc<ServerState>) -> Result<(), String> {
     let req = read_request(&mut stream).await?;
     let (status, content_type, body): (&str, &str, Vec<u8>) = match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/") | ("GET", "/index.html") => ("200 OK", "text/html; charset=utf-8", INDEX_HTML.as_bytes().to_vec()),
@@ -121,8 +126,48 @@ async fn handle(mut stream: TcpStream) -> Result<(), String> {
                 let port = v.get("port").and_then(|x| x.as_u64()).unwrap_or(DEFAULT_PORT as u64) as u16;
                 let cfg = Config { name, password: if password.is_empty() { None } else { Some(password) }, port };
                 match config::save(&cfg) {
-                    Ok(_) => ("200 OK", "application/json", b"{\"ok\":true}".to_vec()),
+                    Ok(_) => {
+                        // Repris par le relais à son prochain démarrage (stop puis start) : pas besoin de
+                        // redémarrer tout le programme pour appliquer un nouveau port/mot de passe.
+                        state.set_config(cfg);
+                        ("200 OK", "application/json", b"{\"ok\":true}".to_vec())
+                    }
                     Err(e) => ("500 Internal Server Error", "application/json", format!("{{\"error\":\"{}\"}}", e).into_bytes()),
+                }
+            }
+            Err(_) => ("400 Bad Request", "application/json", b"{\"error\":\"bad_json\"}".to_vec()),
+        },
+        ("GET", "/api/status") => {
+            let cfg = state.config();
+            let players: Vec<_> = state
+                .players()
+                .into_iter()
+                .map(|p| serde_json::json!({ "id": p.id, "username": p.username, "peer": p.peer, "joined_secs": p.joined_secs }))
+                .collect();
+            let json = serde_json::json!({
+                "running": state.is_running(),
+                "name": cfg.name,
+                "port": cfg.port,
+                "hasPassword": cfg.password.is_some(),
+                "players": players,
+            });
+            ("200 OK", "application/json", json.to_string().into_bytes())
+        }
+        ("POST", "/api/start") => match relay::start(state.clone()).await {
+            Ok(_) => ("200 OK", "application/json", b"{\"ok\":true}".to_vec()),
+            Err(e) => ("409 Conflict", "application/json", format!("{{\"error\":\"{}\"}}", e).into_bytes()),
+        },
+        ("POST", "/api/stop") => {
+            relay::stop(&state);
+            ("200 OK", "application/json", b"{\"ok\":true}".to_vec())
+        }
+        ("POST", "/api/kick") => match serde_json::from_str::<serde_json::Value>(&req.body) {
+            Ok(v) => {
+                let id = v.get("id").and_then(|x| x.as_u64()).unwrap_or(0);
+                if state.kick(id) {
+                    ("200 OK", "application/json", b"{\"ok\":true}".to_vec())
+                } else {
+                    ("404 Not Found", "application/json", b"{\"error\":\"not_found\"}".to_vec())
                 }
             }
             Err(_) => ("400 Bad Request", "application/json", b"{\"error\":\"bad_json\"}".to_vec()),

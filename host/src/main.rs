@@ -7,7 +7,9 @@ mod httpd;
 mod relay;
 mod update;
 
-const VERSION: &str = "0.1.1";
+use relay::ServerState;
+
+const VERSION: &str = "0.2.0";
 
 #[tokio::main]
 async fn main() {
@@ -16,10 +18,12 @@ async fn main() {
     update::check_for_update(VERSION);
 
     let http_port = cfg.port.saturating_add(1);
-    let http_cfg_port = http_port;
-    tokio::spawn(async move {
-        httpd::run(http_cfg_port).await;
-    });
+    let state = ServerState::new(cfg);
+    // Démarré tout de suite (comme avant) ; le tableau de bord web peut ensuite l'arrêter/le relancer
+    // (par ex. après avoir changé le port) sans fermer ce programme.
+    if let Err(e) = relay::start(state.clone()).await {
+        eprintln!("Démarrage du relais impossible : {}.", e);
+    }
 
-    relay::run(cfg).await;
+    httpd::run(http_port, state).await;
 }

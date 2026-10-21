@@ -1,8 +1,16 @@
 # GRNFR Host CMP
 
 Serveur auto-hébergé pour GRNFR CMP : un relais WebSocket **sans limite de joueurs**, avec un nom et un
-mot de passe facultatif, configuré par un assistant (terminal au premier lancement, puis une page web React
-à tout moment). Écrit en Rust (`host/`), interface de configuration en React (`host/ui/`).
+mot de passe facultatif, configuré par un assistant (terminal au premier lancement, puis un tableau de bord
+web React à tout moment). Écrit en Rust (`host/`), interface en React (`host/ui/`).
+
+Le tableau de bord web (`http://127.0.0.1:<port+1>`) permet, sans quitter le programme :
+- de voir qui est connecté (pseudo, adresse, depuis combien de temps) ;
+- de démarrer / arrêter le relais ;
+- d'expulser un joueur connecté ;
+- de modifier nom / mot de passe / port (port 30814 par défaut) — un changement de port ou de mot de passe
+  n'est repris qu'au prochain démarrage du relais (bouton Arrêter puis Démarrer), pas besoin de fermer le
+  programme.
 
 ## ⚠️ À lire avant d'utiliser ce dossier
 
@@ -44,9 +52,10 @@ Le binaire est `host/target/release/grnfr-host` (ou `.exe` sous Windows).
 - **Premier lancement** : assistant en ligne de commande (nom du serveur, mot de passe ou pas, port
   d'écoute — 30814 par défaut). Écrit `grnfr-host.cfg` dans le dossier courant.
 - **Lancements suivants** : la configuration existante est reprise telle quelle.
-- **Modifier la configuration** : ouvrez `http://127.0.0.1:<port+1>` dans un navigateur (l'assistant web,
-  React, n'écoute que sur votre propre machine — pas depuis l'extérieur). Un redémarrage du programme est
-  nécessaire pour qu'un nouveau port ou mot de passe soit pris en compte par le relais.
+- **Tableau de bord** : ouvrez `http://127.0.0.1:<port+1>` dans un navigateur (il n'écoute que sur votre
+  propre machine — pas depuis l'extérieur). Vous y voyez qui est connecté, pouvez démarrer/arrêter le relais,
+  expulser un joueur, et changer nom/mot de passe/port (repris en cliquant Arrêter puis Démarrer, sans
+  fermer le programme).
 - **Mise à jour** : à chaque lancement, le programme essaie de lire `public/host-version.json` (voir plus
   bas) via `curl` et affiche un message si une version plus récente existe. Il ne se remplace jamais
   lui-même : le téléchargement et le remplacement du binaire restent manuels (trop spécifique à chaque
@@ -71,9 +80,12 @@ mettez à jour `public/host-version.json` à chaque nouvelle release du host.
 
 - `src/config.rs` — configuration (nom, mot de passe, port), assistant terminal, format texte simple
   (`clef=valeur`) volontairement choisi pour ne pas ajouter de dépendance (pas de crate TOML/YAML).
-- `src/relay.rs` — le relais WebSocket lui-même (une connexion = un client, diffusion à tous les autres).
-- `src/httpd.rs` — serveur HTTP minimal (fait main, sans framework) pour l'assistant web ; sert
-  `host/ui/dist/` (construit par Vite) et une petite API `GET`/`POST /api/config`.
+- `src/relay.rs` — le relais WebSocket (une connexion = un client, diffusion à tous les autres), via
+  `ServerState` : démarrage/arrêt à la demande, liste des clients connectés, expulsion — partagé avec
+  `httpd.rs` pour le tableau de bord.
+- `src/httpd.rs` — serveur HTTP minimal (fait main, sans framework) pour le tableau de bord web ; sert
+  `host/ui/dist/` (construit par Vite) et une petite API : `GET`/`POST /api/config`, `GET /api/status`,
+  `POST /api/start`, `POST /api/stop`, `POST /api/kick`.
 - `src/update.rs` — vérification de version via `curl` (pas de dépendance HTTP/TLS supplémentaire).
 - `ui/` — l'assistant web (React + Vite). Noms de fichiers de build fixes (`app.js`, `app.css`, pas de hash)
   pour que `httpd.rs` puisse les inclure à la compilation avec des chemins stables.

@@ -1,6 +1,6 @@
 [package]
 name = "grnfr-host"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "GRNFR Host CMP : serveur auto-hébergé (relais WebSocket, sans limite de joueurs) pour le mod GRNFR CMP."
 

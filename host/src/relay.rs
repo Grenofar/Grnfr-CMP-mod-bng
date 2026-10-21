@@ -3,41 +3,131 @@
 // tous les autres, comme le fait aujourd'hui Supabase (server_sync) pour les serveurs officiels, mais sans
 // base de données ni limite de joueurs. L'intégration du mod GRNFR (net.js) avec CE relais (plutôt que /
 // en complément de Supabase) n'a pas été faite dans cette session : voir host/README.md.
+//
+// État partagé avec l'assistant web (httpd.rs) : ServerState expose running/clients/cfg pour que la page
+// React puisse afficher qui est connecté, démarrer/arrêter le relais et expulser un joueur, sans redémarrer
+// le programme (seul le changement de port/mot de passe nécessite un arrêt puis un redémarrage du relais,
+// pas du processus entier).
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::config::Config;
 
 type Tx = mpsc::UnboundedSender<Message>;
 
+struct ClientInfo {
+    username: String,
+    peer: String,
+    joined_at: Instant,
+    tx: Tx,
+}
+
+pub struct ClientSummary {
+    pub id: u64,
+    pub username: String,
+    pub peer: String,
+    pub joined_secs: u64,
+}
+
 struct Shared {
-    clients: Mutex<HashMap<u64, (String, Tx)>>,
+    clients: Mutex<HashMap<u64, ClientInfo>>,
     next_id: Mutex<u64>,
 }
 
-pub async fn run(cfg: Config) {
-    let shared = Arc::new(Shared { clients: Mutex::new(HashMap::new()), next_id: Mutex::new(1) });
-    let addr = format!("0.0.0.0:{}", cfg.port);
-    let listener = match TcpListener::bind(&addr).await {
-        Ok(l) => l,
-        Err(e) => {
-            eprintln!("Impossible d'écouter sur {} : {}.", addr, e);
-            return;
+pub struct ServerState {
+    shared: Arc<Shared>,
+    listener_task: Mutex<Option<JoinHandle<()>>>,
+    running: Mutex<bool>,
+    cfg: Mutex<Config>,
+}
+
+impl ServerState {
+    pub fn new(cfg: Config) -> Arc<Self> {
+        Arc::new(ServerState {
+            shared: Arc::new(Shared { clients: Mutex::new(HashMap::new()), next_id: Mutex::new(1) }),
+            listener_task: Mutex::new(None),
+            running: Mutex::new(false),
+            cfg: Mutex::new(cfg),
+        })
+    }
+
+    pub fn is_running(&self) -> bool { *self.running.lock().unwrap() }
+    pub fn config(&self) -> Config { self.cfg.lock().unwrap().clone() }
+    pub fn set_config(&self, cfg: Config) { *self.cfg.lock().unwrap() = cfg; }
+
+    pub fn players(&self) -> Vec<ClientSummary> {
+        let clients = self.shared.clients.lock().unwrap();
+        let mut out: Vec<ClientSummary> = clients
+            .iter()
+            .map(|(id, c)| ClientSummary {
+                id: *id,
+                username: c.username.clone(),
+                peer: c.peer.clone(),
+                joined_secs: c.joined_at.elapsed().as_secs(),
+            })
+            .collect();
+        out.sort_by_key(|c| c.id);
+        out
+    }
+
+    // Expulsion : signale la fermeture au client puis le retire tout de suite de la liste (le socket se
+    // fermera de son côté dans l'instant qui suit, sans qu'on ait besoin de l'attendre ici).
+    pub fn kick(&self, id: u64) -> bool {
+        let mut clients = self.shared.clients.lock().unwrap();
+        if let Some(info) = clients.remove(&id) {
+            let _ = info.tx.send(Message::Text(r#"{"type":"kicked"}"#.to_string()));
+            let _ = info.tx.send(Message::Close(None));
+            true
+        } else {
+            false
         }
-    };
+    }
+}
+
+// Démarre le relais avec la config actuellement enregistrée dans l'état partagé. Sans effet si déjà démarré
+// (il faut d'abord stop() pour reprendre un port différent).
+pub async fn start(state: Arc<ServerState>) -> Result<(), String> {
+    if state.is_running() {
+        return Err("already_running".into());
+    }
+    let cfg = state.config();
+    let addr = format!("0.0.0.0:{}", cfg.port);
+    let listener = TcpListener::bind(&addr).await.map_err(|e| e.to_string())?;
     println!(
         "Serveur \"{}\" en écoute sur le port {} ({} mot de passe). Aucune limite de joueurs.",
         cfg.name,
         cfg.port,
         if cfg.password.is_some() { "avec" } else { "sans" }
     );
+    let shared = state.shared.clone();
+    let handle = tokio::spawn(accept_loop(listener, shared, cfg));
+    *state.listener_task.lock().unwrap() = Some(handle);
+    *state.running.lock().unwrap() = true;
+    Ok(())
+}
 
+// Arrête d'accepter de nouvelles connexions et expulse tout le monde. Le port est libéré immédiatement
+// (nécessaire pour pouvoir relancer avec un port différent sans redémarrer le programme).
+pub fn stop(state: &Arc<ServerState>) {
+    if let Some(h) = state.listener_task.lock().unwrap().take() {
+        h.abort();
+    }
+    let mut clients = state.shared.clients.lock().unwrap();
+    for (_, info) in clients.drain() {
+        let _ = info.tx.send(Message::Close(None));
+    }
+    *state.running.lock().unwrap() = false;
+}
+
+async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, cfg: Config) {
     loop {
         let (stream, peer) = match listener.accept().await {
             Ok(v) => v,
@@ -91,7 +181,7 @@ async fn handle_client(stream: TcpStream, peer: &str, shared: Arc<Shared>, cfg: 
     };
     {
         let mut clients = shared.clients.lock().unwrap();
-        clients.insert(id, (username.clone(), tx));
+        clients.insert(id, ClientInfo { username: username.clone(), peer: peer.to_string(), joined_at: Instant::now(), tx });
     }
     println!("{} a rejoint depuis {}.", username, peer);
     broadcast(&shared, id, &format!(r#"{{"type":"join","username":"{}"}}"#, username));
@@ -128,9 +218,9 @@ async fn handle_client(stream: TcpStream, peer: &str, shared: Arc<Shared>, cfg: 
 
 fn broadcast(shared: &Arc<Shared>, from_id: u64, text: &str) {
     let clients = shared.clients.lock().unwrap();
-    for (id, (_, tx)) in clients.iter() {
+    for (id, info) in clients.iter() {
         if *id != from_id {
-            let _ = tx.send(Message::Text(text.to_string()));
+            let _ = info.tx.send(Message::Text(text.to_string()));
         }
     }
 }
