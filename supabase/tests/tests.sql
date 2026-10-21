@@ -14,7 +14,8 @@ begin
 end $$;
 create function t.eq(a anyelement, b anyelement, what text) returns void language plpgsql as $$
 begin if a is distinct from b then raise exception 'ECHEC %: attendu %, obtenu %', what, b, a; end if; raise notice 'ok  %', what; end $$;
-create function t.cat(m text) returns uuid language sql security definer as $$ select id from public.dealership_catalog where model_key = m $$;
+-- config_key is null = la configuration par défaut du modèle (voir 0010 : plusieurs lignes par model_key depuis cette migration).
+create function t.cat(m text) returns uuid language sql security definer as $$ select id from public.dealership_catalog where model_key = m and config_key is null $$;
 create function t.vid(m text) returns uuid language sql security definer as $$ select id from public.garage_vehicles where model_key = m $$;
 create function t.lid() returns uuid language sql security definer as $$ select id from public.listings where status = 'open' limit 1 $$;
 create function t.trid() returns uuid language sql security definer as $$ select id from public.trades where status = 'pending' limit 1 $$;
@@ -466,9 +467,14 @@ select t.eq((select count(*) from profiles p where p.balance <> (select coalesce
 
 -- ---------- changement de pseudo (change_username) + prix du catalogue alignés sur le jeu de base
 select t.root();
-select t.eq((select price from dealership_catalog where model_key = 'covet'), 19000::bigint, 'prix covet = valeur par défaut du jeu');
-select t.eq((select price from dealership_catalog where model_key = 'scintilla'), 205000::bigint, 'prix scintilla = valeur par défaut du jeu');
-select t.eq((select price from dealership_catalog where model_key = 'citybus'), 450000::bigint, 'prix citybus = valeur par défaut du jeu');
+select t.eq((select price from dealership_catalog where model_key = 'covet' and config_key is null), 19000::bigint, 'prix covet (config par défaut) = valeur par défaut du jeu');
+select t.eq((select price from dealership_catalog where model_key = 'scintilla' and config_key is null), 205000::bigint, 'prix scintilla (config par défaut) = valeur par défaut du jeu');
+select t.eq((select price from dealership_catalog where model_key = 'citybus' and config_key is null), 450000::bigint, 'prix citybus (config par défaut) = valeur par défaut du jeu');
+
+-- 0010 : plusieurs finitions par véhicule, avec des prix très différents
+select t.eq((select count(*) from dealership_catalog where model_key = 'covet')::int, 4, 'covet : 4 configurations au catalogue (1 défaut + 3 finitions)');
+select t.eq((select count(distinct price) from dealership_catalog where model_key = 'pickup')::int, 4, 'pickup : 4 prix distincts (finitions différentes)');
+select t.eq((select price from dealership_catalog where model_key = 'citybus' and config_key = 'rambus'), 835000::bigint, 'citybus rambus = la finition la plus chère');
 
 select t.login('00000000-0000-0000-0000-0000000000a1');
 select public.change_username('newname');
