@@ -464,4 +464,22 @@ select t.root();
 select t.eq((select count(*) from profiles p where p.balance <> (select coalesce(sum(amount), 0) from transactions x where x.user_id = p.id))::int, 0,
             'INVARIANT toujours vrai après les profils portables');
 
+-- ---------- changement de pseudo (change_username) + prix du catalogue alignés sur le jeu de base
+select t.root();
+select t.eq((select price from dealership_catalog where model_key = 'covet'), 19000::bigint, 'prix covet = valeur par défaut du jeu');
+select t.eq((select price from dealership_catalog where model_key = 'scintilla'), 205000::bigint, 'prix scintilla = valeur par défaut du jeu');
+select t.eq((select price from dealership_catalog where model_key = 'citybus'), 450000::bigint, 'prix citybus = valeur par défaut du jeu');
+
+select t.login('00000000-0000-0000-0000-0000000000a1');
+select public.change_username('newname');
+select t.eq((public.get_me() -> 'profile' ->> 'username'), 'newname', 'change_username renomme le pseudo déjà confirmé');
+select t.fails($$select public.change_username('newname2')$$, 'username_change_cooldown');
+select t.root();
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000a2', null, '{"username":"otherplayer"}'::jsonb);
+select t.login('00000000-0000-0000-0000-0000000000a2');
+select t.fails($$select public.change_username('newname')$$, 'username_taken');
+select t.root();
+select t.eq((select count(*) from profiles p where p.balance <> (select coalesce(sum(amount), 0) from transactions x where x.user_id = p.id))::int, 0,
+            'INVARIANT toujours vrai après change_username');
+
 \echo === TOUS LES TESTS PASSENT ===

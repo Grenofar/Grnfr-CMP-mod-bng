@@ -8,14 +8,17 @@
         <button type="button" class="hb" @click="ui('window.close')">✕ {{ t('close') }}</button>
       </header>
       <div v-if="net.updateAvailable" class="bar upd">{{ t('update_available').replace('{v}', net.updateAvailable) }}</div>
-      <nav>
-        <button v-for="x in tabs" :key="x" type="button" :class="{ on: tab === x }" @click="tab = x">{{ t('t_' + x) }}</button>
-      </nav>
       <div v-if="logged && net.server" class="bar">
         🟢 {{ net.server.name }} — {{ net.players.length + 1 }}/{{ net.server.max_players }} :
         <b>{{ net.username }}</b><span v-for="p in net.players" :key="p.username">, {{ p.username }}</span>
         <span v-if="net.syncErr" class="warn"> · {{ t('srv_sync_bad') }}{{ net.syncErr }}</span>
       </div>
+      <div class="body">
+      <nav class="tabs">
+        <button v-for="x in tabs" :key="x" type="button" :class="{ on: tab === x }" @click="tab = x">
+          <svg viewBox="0 0 24 24"><path :d="icons[x]" /></svg><span>{{ t('t_' + x) }}</span>
+        </button>
+      </nav>
       <main>
         <p v-if="net.error" class="err">{{ net.error }}</p>
         <p v-if="net.info || msg" class="ok">{{ net.info || msg }}</p>
@@ -62,11 +65,18 @@
               <div class="card"><label>{{ t('balance') }}</label><div class="big">{{ money(profile.balance) }}</div></div>
               <div class="card"><label>{{ t('username') }}</label><div class="big sm">{{ net.username }}</div></div>
             </div>
+            <h4>{{ t('change_pseudo') }}</h4>
+            <div class="row">
+              <input v-model="f.newPseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkNewPseudo" />
+              <small :class="newPseudoState === 'free' ? 'good' : 'bad'">{{ newPseudoHint }}</small>
+              <button type="button" class="btn" :disabled="busy || newPseudoState !== 'free'" @click="net_changePseudo">{{ t('change_pseudo_do') }}</button>
+            </div>
             <h4>{{ t('your_profile') }}</h4>
             <p class="mut">{{ t('profile_hint') }}</p>
             <div class="row">
               <button type="button" class="btn dim" @click="exportProfile">{{ t('export_profile') }}</button>
               <span v-if="net.exportedPath" class="mut">{{ t('exported_to') }} {{ net.exportedPath }}</span>
+              <button type="button" class="btn dim" @click="switchProfile">{{ t('switch_profile') }}</button>
             </div>
             <h4>{{ t('send_money') }}</h4>
             <div class="row">
@@ -91,7 +101,11 @@
             <small :class="nameState === 'free' ? 'good' : 'bad'">{{ nameHint }}</small>
             <button type="button" class="btn" :disabled="nameState !== 'free'" @click="pickName">{{ t('choose') }}</button>
           </div>
-          <div v-for="s in d.servers" :key="s.id" class="card srv" :class="{ me: net.server && net.server.id === s.id }">
+          <div class="row">
+            <input v-model="f.srvSearch" type="text" :placeholder="t('srv_search')" autocomplete="off" />
+          </div>
+          <p v-if="f.srvSearch && !filteredServers.length" class="mut">{{ t('srv_search_none') }}</p>
+          <div v-for="s in filteredServers" :key="s.id" class="card srv" :class="{ me: net.server && net.server.id === s.id }">
             <div class="row">
               <b>{{ s.name }}</b><span class="cnt">{{ s.count }}/{{ s.max_players }}</span>
               <button v-if="net.server && net.server.id === s.id" type="button" class="btn dim" @click="leave">{{ t('srv_leave') }}</button>
@@ -228,6 +242,7 @@
           <div class="row"><input v-model="f.sn" :placeholder="t('adm_name')" /><button type="button" class="btn dim" @click="act(() => rpc('admin_create_server', { p_name: f.sn, p_max: 4 }))">{{ t('adm_do') }}</button></div>
         </section>
       </main>
+      </div>
     </div>
   </div>
 </template>
@@ -235,7 +250,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
 import {
-  net, ui, rpc, errText, signIn, signUp, signUpAnonymous, signOut, refreshMe, usernameAvailable, chooseUsername,
+  net, ui, rpc, errText, signIn, signUp, signUpAnonymous, signOut, refreshMe, usernameAvailable, chooseUsername, changeUsername,
   listServers, joinServer, leaveServer, exportProfile as netExportProfile, requestProfiles, importProfile as netImportProfile,
 } from "./net.js"
 import { tr } from "./onlineI18n.js"
@@ -245,8 +260,8 @@ const t = k => tr(net.lang, k)
 const tab = ref("account")
 const reg = ref(false), busy = ref(false), msg = ref(""), needPseudo = ref(false)
 const showEmail = ref(false), showImport = ref(false)
-const pseudoState = ref("")
-const nameState = ref(""), f = reactive({ email: "", password: "", username: "", pseudo: "", place: 0, offer: "", want: "", cash: 0 })
+const pseudoState = ref(""), newPseudoState = ref("")
+const nameState = ref(""), f = reactive({ email: "", password: "", username: "", pseudo: "", newPseudo: "", srvSearch: "", place: 0, offer: "", want: "", cash: 0 })
 const d = reactive({ tx: [], servers: [], catalog: [], market: [], trades: [], theirs: [], board: [], reqs: [] })
 
 const logged = computed(() => net.status === "in")
@@ -257,9 +272,28 @@ const garageNear = computed(() => !!net.game.garage?.near)
 const garageDist = computed(() => (typeof net.game.garage?.dist === "number" ? net.game.garage.dist : null))
 const place = computed(() => net.places[f.place] || null)
 const tabs = computed(() => ["account", "servers", "garage", "dealer", "market", "trades", "board", "taxi", "bus", "settings"].concat(profile.value.is_admin ? ["admin"] : []))
+const icons = {
+  account: "M12 8a4 4 0 100-8 4 4 0 000 8zM4 20c0-4 4-6 8-6s8 2 8 6",
+  servers: "M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4z",
+  garage: "M3 11l9-7 9 7M5 10v10h14V10",
+  dealer: "M6 7h12l-1 13H7L6 7zM9 7V5a3 3 0 016 0v2",
+  market: "M4 4h10l6 6-10 10-6-6V4zM8.5 8.5h.01",
+  trades: "M4 7h13M13 3l4 4-4 4M20 17H7M11 21l-4-4 4-4",
+  board: "M4 14h4v6H4zM10 10h4v10h-4zM16 6h4v14h-4z",
+  taxi: "M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11M4 11h16v6H4z",
+  bus: "M4 5h16v12H4zM4 17v2M20 17v2",
+  settings: "M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6",
+  admin: "M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z",
+}
 const money = n => "$" + Number(n || 0).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
 const nameHint = computed(() => nameState.value === "free" ? t("free") : nameState.value === "taken" ? t("taken") : nameState.value === "bad" ? t("badname") : nameState.value === "wait" ? t("checking") : t("badname"))
 const pseudoHint = computed(() => pseudoState.value === "free" ? t("free") : pseudoState.value === "taken" ? t("taken") : pseudoState.value === "wait" ? t("checking") : t("badname"))
+const newPseudoHint = computed(() => newPseudoState.value === "free" ? t("free") : newPseudoState.value === "taken" ? t("taken") : newPseudoState.value === "wait" ? t("checking") : t("badname"))
+const filteredServers = computed(() => {
+  const q = (f.srvSearch || "").trim().toLowerCase()
+  if (!q) return d.servers
+  return d.servers.filter(s => (s.name || "").toLowerCase().includes(q))
+})
 
 // pendant la saisie dans un champ texte, les touches ne doivent pas piloter la voiture
 function focus(e, on) { const tg = e.target?.tagName; if (tg === "INPUT" || tg === "SELECT" || tg === "TEXTAREA") ui("typing", { on }) }
@@ -282,15 +316,26 @@ function checkPseudo() {
   pseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.pseudo) pseudoState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
 }
 
+let newPseudoTimer = null
+function checkNewPseudo() {
+  clearTimeout(newPseudoTimer)
+  const n = f.newPseudo
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(n)) { newPseudoState.value = "bad"; return }
+  newPseudoState.value = "wait"
+  newPseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.newPseudo) newPseudoState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
+}
+
 async function wrap(fn) { busy.value = true; try { await fn() } finally { busy.value = false } }
 const net_signIn = () => wrap(() => signIn(f.email, f.password))
 const net_signUp = () => wrap(() => signUp(f.email, f.password, f.username))
 const net_signOut = () => signOut()
 const net_createProfile = () => wrap(() => signUpAnonymous(f.pseudo))
+const net_changePseudo = () => wrap(async () => { if (await changeUsername(f.newPseudo)) { f.newPseudo = ""; newPseudoState.value = ""; msg.value = t("ok") } })
 
 function exportProfile() { netExportProfile() }
 function toggleImport() { showImport.value = !showImport.value; if (showImport.value) requestProfiles() }
 function importProfile(path) { netImportProfile(path) }
+async function switchProfile() { await signOut(); showImport.value = true; await requestProfiles() }
 
 // Action quelconque : message d'erreur lisible, puis rafraîchissement du profil / de la liste.
 async function act(fn, after) {
@@ -346,25 +391,38 @@ onBeforeUnmount(() => clearInterval(poll))
 
 <style lang="scss" scoped>
 .onw { position: fixed; inset: 0; z-index: 2147482500; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
-.win { --ac: #ff6600; width: 760px; max-width: 96vw; height: 560px; max-height: 92vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.95); border: 1px solid var(--ac); border-radius: 6px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7); color: #fff; font: 14px/1.35 "Overpass", "Segoe UI", sans-serif; * { box-sizing: border-box; } }
-header { display: flex; align-items: center; gap: 12px; padding: 6px 12px; background: rgba(0, 0, 0, 0.5); border-bottom: 2px solid var(--ac); .title { font: 600 18px "Overpass", sans-serif; color: var(--ac); } .who { flex: 1; text-align: right; color: rgba(255, 255, 255, 0.8); } }
-nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(255, 102, 0, 0.3);
-  button { padding: 3px 10px; color: #fff; cursor: pointer; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 102, 0, 0.4); border-radius: 4px; &.on, &:hover { background: var(--ac); } } }
+.win { --ac: #ff6600; width: 900px; max-width: 96vw; height: 600px; max-height: 92vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.97); border: 1px solid var(--ac); border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 102, 0, 0.15); color: #fff; font: 14px/1.35 "Overpass", "Segoe UI", sans-serif; overflow: hidden; * { box-sizing: border-box; } }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.55); border-bottom: 2px solid var(--ac);
+  .title { font: 700 19px "Overpass", sans-serif; color: var(--ac); letter-spacing: 0.02em; } .who { flex: 1; text-align: right; color: rgba(255, 255, 255, 0.75); font-size: 13px; } }
+.body { flex: 1; display: flex; min-height: 0; }
+.tabs { display: flex; flex-direction: column; gap: 3px; padding: 10px; width: 170px; flex: none; border-right: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.4); overflow-y: auto;
+  button { display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 6px; color: rgba(255, 255, 255, 0.6); padding: 9px 10px; font: inherit; cursor: pointer; text-align: left;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    &:hover { background: rgba(255, 102, 0, 0.16); color: #fff; transform: translateX(3px); }
+    &.on { background: var(--ac); color: #fff; box-shadow: 0 2px 10px rgba(255, 102, 0, 0.4); } }
+  svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; } }
 .bar { padding: 4px 12px; font-size: 12px; background: rgba(74, 222, 128, 0.1); border-bottom: 1px solid rgba(74, 222, 128, 0.3); }
 .bar.upd { background: rgba(245, 185, 66, 0.15); border-bottom: 1px solid rgba(245, 185, 66, 0.4); color: #f5b942; font-weight: 600; }
-main { flex: 1; overflow-y: auto; padding: 10px 14px; }
+main { flex: 1; overflow-y: auto; padding: 18px 24px; }
 h4 { margin: 12px 0 6px; color: var(--ac); font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
 .form { display: flex; flex-direction: column; gap: 6px; max-width: 420px; }
-.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.card { background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 102, 0, 0.35); border-radius: 4px; padding: 8px 10px; margin: 6px 0; &.me { border-color: #4ade80; } label { color: rgba(255, 255, 255, 0.6); font-size: 11px; text-transform: uppercase; } }
-.big { font-size: 26px; font-weight: 700; color: var(--ac); &.sm { font-size: 16px; } }
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card { background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 102, 0, 0.35); border-radius: 8px; padding: 10px 12px; margin: 6px 0; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  &:hover { border-color: var(--ac); background: rgba(255, 102, 0, 0.08); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4); }
+  &.me { border-color: #4ade80; } label { color: rgba(255, 255, 255, 0.6); font-size: 11px; text-transform: uppercase; } }
+.big { font-size: 28px; font-weight: 800; color: var(--ac); &.sm { font-size: 16px; } }
 .cnt { margin-left: auto; font-weight: 700; color: var(--ac); }
 .tb { width: 100%; border-collapse: collapse; td { padding: 2px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); } tr.me td { color: #4ade80; } }
 .tag { padding: 0 6px; font-size: 11px; border: 1px solid var(--ac); border-radius: 8px; }
 input, select { padding: 5px 8px; color: #fff; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 102, 0, 0.5); border-radius: 4px; font: inherit; &.sm { width: 90px; } }
-.btn, .hb { padding: 4px 12px; color: #fff; font: 600 13px "Overpass", sans-serif; cursor: pointer; background: rgba(255, 102, 0, 0.25); border: 1px solid var(--ac); border-radius: 4px; &:hover:not(:disabled) { background: var(--ac); } &:disabled { opacity: 0.4; cursor: default; } &.dim { background: rgba(0, 0, 0, 0.5); } }
+.btn, .hb { padding: 7px 16px; color: #fff; font: 600 13px "Overpass", sans-serif; cursor: pointer; background: rgba(255, 102, 0, 0.22); border: 1px solid var(--ac); border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  &:hover:not(:disabled) { background: var(--ac); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(255, 102, 0, 0.4); }
+  &:active:not(:disabled) { transform: translateY(0); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35); }
+  &:disabled { opacity: 0.4; cursor: default; } &.dim { background: rgba(255, 255, 255, 0.06); &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); } } }
 .hb { margin-left: auto; }
 .lnk { color: rgba(255, 255, 255, 0.7); background: none; border: none; text-decoration: underline; cursor: pointer; }
 .err { color: #ff6b6b; margin: 0 0 6px; } .ok, .good { color: #4ade80; } .bad { color: #ff6b6b; } .warn { color: #f5b942; } .mut { color: rgba(255, 255, 255, 0.6); }

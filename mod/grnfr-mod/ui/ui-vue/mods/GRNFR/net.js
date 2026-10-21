@@ -123,6 +123,7 @@ const ERR = {
     anonymous_provider_disabled: "Création de profil indisponible (connexions anonymes désactivées sur le serveur).",
     session_replaced: "Votre profil a été utilisé ailleurs : vous avez été déconnecté ici.",
     bad_profile: "Fichier de profil invalide ou illisible.",
+    username_change_cooldown: "Vous avez déjà changé de pseudo récemment : réessayez plus tard.",
   },
   en: {
     network: "Cannot reach the server (network).", not_configured: "This mod is not linked to a server (see the website).",
@@ -137,6 +138,7 @@ const ERR = {
     anonymous_provider_disabled: "Cannot create a profile (anonymous sign-ins are disabled on the server).",
     session_replaced: "Your profile was used somewhere else: you were disconnected here.",
     bad_profile: "Invalid or unreadable profile file.",
+    username_change_cooldown: "You already changed your username recently: try again later.",
   },
 }
 export function errText(e) {
@@ -210,6 +212,18 @@ export async function chooseUsername(name) {
   net.error = ""
   try { await rpc("set_username", { p_username: name }); await refreshMe(); await ui("auth", { loggedIn: true, username: net.username }); return true }
   catch (e) { net.error = errText(e); return false }
+}
+
+// Renommage d'un pseudo déjà confirmé (contrairement à set_username, utilisable une fois le compte créé).
+export async function changeUsername(name) {
+  net.error = ""; net.info = ""
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(name || "")) { net.error = errText({ code: "username_invalid" }); return false }
+  try {
+    await rpc("change_username", { p_username: name })
+    await refreshMe()
+    await ui("auth", { loggedIn: true, username: net.username })
+    return true
+  } catch (e) { net.error = errText(e); return false }
 }
 
 export async function signOut() {
