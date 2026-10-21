@@ -1,0 +1,101 @@
+-- =====================================================================================
+-- GRNFR Online - REMET LES DONNÉES DE DÉPART (réglages du serveur + catalogue du concessionnaire).
+-- À utiliser après wipe_all.sql, ou n'importe quand : tout ici utilise "on conflict do nothing" /
+-- "where not exists", donc ça ne touche jamais une ligne déjà présente (sans danger sur une base
+-- qui a déjà des joueurs). Ce n'est PAS une migration numérotée : ne la mettez pas dans
+-- supabase/migrations/. Suppose que le schéma existe déjà (0001 à 0011 déjà appliquées une fois).
+-- =====================================================================================
+
+-- ------------------------------------------------------------------ réglages (0001, 0002, 0007)
+insert into public.server_config (key, value, description) values
+  ('starting_money',            '25000',  'Argent donné à l''inscription'),
+  ('garage_slots',              '4',      'Places de garage par joueur (défaut)'),
+  ('market_fee_percent',        '5',      'Commission prélevée sur les ventes privées (%)'),
+  ('dealer_buyback_percent',    '50',     'Rachat d''un véhicule par le concessionnaire (% de sa valeur)'),
+  ('max_transfer',              '1000000','Plafond d''un envoi d''argent entre joueurs'),
+  ('max_listing_price',         '5000000','Prix maximum d''une annonce'),
+  ('taxi_base_fare',            '8',      'Taxi : prise en charge'),
+  ('taxi_per_km',               '3',      'Taxi : prix au km'),
+  ('taxi_fee_percent',          '0',      'Taxi : commission du serveur sur les courses entre joueurs (%)'),
+  ('taxi_request_ttl_seconds',  '180',    'Durée de vie d''une demande de taxi sans chauffeur'),
+  ('bot_taxi_multiplier',       '1.5',    'Taxi IA : multiplicateur de prix'),
+  ('bus_base_per_passenger',    '3',      'Bus : prix de base par passager'),
+  ('bus_per_passenger_per_km',  '2',      'Bus : prix au km par passager'),
+  ('npc_income_cap_per_hour',   '6000',   'Plafond de gains/heure venant du serveur (taxi PNJ, bus) : limite la triche'),
+  ('max_speed_mps',             '60',     'Vitesse max crédible (m/s) pour valider la durée d''une course'),
+  ('member_timeout_seconds',    '30',     'Un joueur sans signal depuis ce délai (s) libère sa place sur le serveur de jeu'),
+  ('sync_interval_ms',          '300',    'Cadence d''envoi de la position au serveur (ms). Mini 150.'),
+  ('drag_min_distance_m',       '100',    'Longueur minimum d''une course de drag (m)'),
+  ('drag_max_distance_m',       '3000',   'Longueur maximum d''une course de drag (m)'),
+  ('drag_max_speed_mps',        '100',    'Vitesse moyenne max crédible pour valider un temps de drag (m/s)'),
+  ('drag_min_stake',            '100',    'Mise minimum pour une course de drag'),
+  ('drag_max_stake',            '50000',  'Mise maximum pour une course de drag')
+on conflict (key) do nothing;
+
+-- ------------------------------------------------------------------ catalogue de base (0001)
+insert into public.dealership_catalog (model_key, config_key, name, price)
+select * from (values
+  ('covet',     null::text, 'Ibishu Covet',          19000::bigint),
+  ('pessima',   null,       'Ibishu Pessima',        27700),
+  ('sunburst2', null,       'Hirochi Sunburst',      25500),
+  ('vivace',    null,       'Cherrier Vivace',       74400),
+  ('miramar',   null,       'Ibishu Miramar',        24500),
+  ('pickup',    null,       'Gavril D-Series',       44500),
+  ('etk800',    null,       'ETK 800 Series',        43000),
+  ('bastion',   null,       'Bruckell Bastion',      34500),
+  ('barstow',   null,       'Gavril Barstow',        45000),
+  ('moonhawk',  null,       'Bruckell Moonhawk',     48000),
+  ('bolide',    null,       'Civetta Bolide',        180000),
+  ('scintilla', null,       'Civetta Scintilla',     205000),
+  ('fullsize',  null,       'Gavril Grand Marshal',  43000),
+  ('citybus',   null,       'Wentward DT40L (bus)',  450000)
+) as v(model_key, config_key, name, price)
+where not exists (select 1 from public.dealership_catalog c where c.model_key = v.model_key and c.config_key is null);
+
+-- ------------------------------------------------------------------ finitions du catalogue (0010)
+insert into public.dealership_catalog (model_key, config_key, name, price)
+select * from (values
+  ('covet',     'covet_tutorial',                'Ibishu Covet — covet_tutorial',                 12000::bigint),
+  ('covet',     '15zxi_M',                        'Ibishu Covet — 15zxi_M',                        27500),
+  ('covet',     'turbo_rally',                    'Ibishu Covet — turbo_rally',                    145000),
+  ('pessima',   'DX_A',                           'Ibishu Pessima — DX_A',                         24300),
+  ('pessima',   'GTz',                            'Ibishu Pessima — GTz',                          49000),
+  ('pessima',   'hillclimb',                      'Ibishu Pessima — hillclimb',                    204500),
+  ('sunburst2', 'base_EU_M',                      'Hirochi Sunburst — base_EU_M',                  25500),
+  ('sunburst2', 'sport_S_wagon_DCT',              'Hirochi Sunburst — sport_S_wagon_DCT',          38300),
+  ('sunburst2', 'track_attack',                   'Hirochi Sunburst — track_attack',               120000),
+  ('vivace',    'vivace_110_M',                   'Cherrier Vivace — vivace_110_M',                23500),
+  ('vivace',    'vivace_S_270_DCT',               'Cherrier Vivace — vivace_S_270_DCT',            46000),
+  ('vivace',    'ardente_rally',                  'Cherrier Vivace — ardente_rally',                203600),
+  ('miramar',   'base_facelift_M',                'Ibishu Miramar — base_facelift_M',              25500),
+  ('miramar',   'luxe_coupe_export_early_A',      'Ibishu Miramar — luxe_coupe_export_early_A',    30500),
+  ('miramar',   'miramighty',                     'Ibishu Miramar — miramighty',                   135000),
+  ('pickup',    'd15_fleet_M_facelift',           'Gavril D-Series — d15_fleet_M_facelift',        31000),
+  ('pickup',    'd25_ext_longbed_4wd_A_facelift', 'Gavril D-Series — d25_ext_longbed_4wd_A_facelift', 57500),
+  ('pickup',    'deserttruck_prerunner_A',        'Gavril D-Series — deserttruck_prerunner_A',     230000),
+  ('etk800',    '844_150_M',                      'ETK 800 Series — 844_150_M',                    34000),
+  ('etk800',    '856xc_300_A',                    'ETK 800 Series — 856xc_300_A',                  58500),
+  ('etk800',    '846_ttSport_custom_DCT',         'ETK 800 Series — 846_ttSport_custom_DCT',       198000),
+  ('bastion',   'base_v6_awd_A',                  'Bruckell Bastion — base_v6_awd_A',              37500),
+  ('bastion',   'police_v8_awd_A',                'Bruckell Bastion — police_v8_awd_A',            50500),
+  ('bastion',   'drag',                           'Bruckell Bastion — drag',                       138500),
+  ('barstow',   'i6a',                            'Gavril Barstow — i6a',                          34000),
+  ('barstow',   '423a',                           'Gavril Barstow — 423a',                         48000),
+  ('barstow',   'drag',                           'Gavril Barstow — drag',                         165000),
+  ('moonhawk',  'i6m',                            'Bruckell Moonhawk — i6m',                       36000),
+  ('moonhawk',  'detective',                      'Bruckell Moonhawk — detective',                 52000),
+  ('moonhawk',  'drag',                           'Bruckell Moonhawk — drag',                      142000),
+  ('bolide',    'polizia',                        'Civetta Bolide — polizia',                      181000),
+  ('bolide',    '320gtt_us',                      'Civetta Bolide — 320gtt_us',                    295000),
+  ('bolide',    'race',                           'Civetta Bolide — race',                         490000),
+  ('scintilla', 'gt',                             'Civetta Scintilla — gt',                        180000),
+  ('scintilla', 'custom',                         'Civetta Scintilla — custom',                    304000),
+  ('scintilla', 'race',                           'Civetta Scintilla — race',                      615000),
+  ('fullsize',  'fleet',                          'Gavril Grand Marshal — fleet',                  39900),
+  ('fullsize',  'drift',                          'Gavril Grand Marshal — drift',                  77000),
+  ('fullsize',  'track',                          'Gavril Grand Marshal — track',                  165000),
+  ('citybus',   'base',                           'Wentward DT40L (bus) — base',                   400000),
+  ('citybus',   'highway',                        'Wentward DT40L (bus) — highway',                460000),
+  ('citybus',   'rambus',                         'Wentward DT40L (bus) — rambus',                  835000)
+) as v(model_key, config_key, name, price)
+where not exists (select 1 from public.dealership_catalog c where c.model_key = v.model_key and c.config_key = v.config_key);
