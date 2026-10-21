@@ -1,4 +1,4 @@
-// GRNFR CMP Host : serveur auto-hébergé pour GRNFR Online (relais WebSocket, sans limite de joueurs),
+// GRNFR Host CPM : serveur auto-hébergé pour GRNFR CPM (relais WebSocket, sans limite de joueurs),
 // avec un assistant de configuration (terminal au premier lancement, puis page web React à tout moment).
 // Voir host/README.md : ce module n'a pas pu être compilé ni testé dans la session qui l'a écrit.
 mod config;
@@ -10,7 +10,7 @@ const VERSION: &str = "0.1.0";
 
 #[tokio::main]
 async fn main() {
-    println!("=== GRNFR CMP Host v{} ===", VERSION);
+    println!("=== GRNFR Host CPM v{} ===", VERSION);
     let cfg = config::load_or_wizard();
     update::check_for_update(VERSION);
 

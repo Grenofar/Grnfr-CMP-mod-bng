@@ -1,4 +1,4 @@
-# GRNFR Online — mod BeamNG « carrière multijoueur » + Supabase + site Vercel (+ host auto-hébergé)
+# GRNFR CPM — mod BeamNG « carrière multijoueur » + Supabase + site Vercel (+ host auto-hébergé)
 
 Mod BeamNG.drive (dossier `mod/grnfr-mod/`) relié à un backend **Supabase** (`supabase/`) et distribué par un site **Vercel** (`public/` + `scripts/build.mjs`). Un serveur auto-hébergé optionnel (`host/`, Rust + React) existe en plus, séparément — voir § Host auto-hébergé.
 
@@ -25,10 +25,10 @@ Fonctions : argent donné par un admin, classement des fortunes, garage personne
 ```
 SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... npm run release -- "Notes de version"
 ```
-Change `VERSION` dans `grnfr.lua` **et** `version` dans `mod_info/grnfr/info.json` avant de publier (refuse sinon : version déjà prise). Dans le jeu, la fenêtre GRNFR Online affiche un bandeau « mise à jour disponible » en comparant à `get_latest_release()`.
+Change `VERSION` dans `grnfr.lua` **et** `version` dans `mod_info/grnfr/info.json` avant de publier (refuse sinon : version déjà prise). Dans le jeu, la fenêtre GRNFR CPM affiche un bandeau « mise à jour disponible » en comparant à `get_latest_release()`.
 
 ### 4. Les joueurs
-Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer « GRNFR Mod », lancer une carte en jeu libre.
+Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer « GRNFR CPM », lancer une carte en jeu libre.
 - **Menu principal → bouton « Rejoindre »** : une case par serveur (nom, joueurs connectés), ouvre directement l'onglet Serveurs, même sans carte chargée.
 - **Touche O** : fenêtre complète (compte, serveurs, garage, marché, taxi, bus).
 - **Touche J** : petite fenêtre rapide (chat, joueurs, courses de drag) — voir ci-dessous.

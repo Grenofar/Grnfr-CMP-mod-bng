@@ -4,7 +4,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_places', 'grnfr_nav', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag' }
 
-local VERSION = '2.0.0'
+local VERSION = '2.0.1'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -116,7 +116,7 @@ local function pushStatic(force) guihooks.trigger('GRNFRStatic', buildStatic()) 
 
 -- Appelé par l'action clavier "grnfr_toggle" (système d'actions officiel).
 local function toast(msg)
-  pcall(function() guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR Mod', msg = msg }) end)
+  pcall(function() guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CPM', msg = msg }) end)
 end
 
 function M.toggleHud()
@@ -127,7 +127,7 @@ function M.toggleHud()
   end
   if not grnfr_settings.get().hudEnabled then
     slog('info', 'You pressed ' .. grnfr_keys.getDisplay() .. ' but the HUD is turned off in Settings.')
-    toast(L('HUD désactivé : activez-le dans GRNFR Mod > Paramètres.', 'HUD disabled: enable it in GRNFR Mod > Settings.'))
+    toast(L('HUD désactivé : activez-le dans GRNFR CPM > Paramètres.', 'HUD disabled: enable it in GRNFR CPM > Settings.'))
     return
   end
   if bigOpen then -- la grande fenêtre est ouverte : K la ferme (et le petit HUD ne revient pas)
@@ -146,7 +146,7 @@ local function setOnlineOpen(on)
   if on and not isOnlineAllowed() then
     refreshMode()
     if not isOnlineAllowed() then
-      toast(L('GRNFR Online : disponible en jeu libre ou en multijoueur (pas en carrière / scénario).', 'GRNFR Online: available in free roam or multiplayer (not in career / scenario).'))
+      toast(L('GRNFR CPM : disponible en jeu libre ou en multijoueur (pas en carrière / scénario).', 'GRNFR CPM: available in free roam or multiplayer (not in career / scenario).'))
       return false
     end
   end
@@ -336,7 +336,7 @@ function M.showInfo()
   local msg = 'v' .. VERSION .. ' | ' .. L('Touche du HUD : ', 'HUD key: ') .. grnfr_keys.getDisplay()
     .. ' | ' .. L('HUD App : Pause > System > HUD Apps', 'HUD App: Pause > System > HUD Apps')
   pcall(function()
-    guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR Mod', msg = msg })
+    guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CPM', msg = msg })
   end)
 end
 
@@ -402,9 +402,9 @@ end
 local function notifyStart()
   local key = grnfr_keys.getDisplay()
   local msg = L('Appuyez sur ', 'Press ') .. key .. L(' pour ouvrir / fermer le HUD GRNFR.', ' to open / close the GRNFR HUD.')
-    .. L(' (modifiable : Options > Contrôles > « GRNFR Mod »)', ' (changeable: Options > Controls > "GRNFR Mod")')
+    .. L(' (modifiable : Options > Contrôles > « GRNFR CPM »)', ' (changeable: Options > Controls > "GRNFR CPM")')
   pcall(function()
-    guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR Mod', msg = msg })
+    guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CPM', msg = msg })
   end)
   grnfr_settings.set('introShown', true)
   slog('info', 'Showed the one-time tip about the HUD key.')

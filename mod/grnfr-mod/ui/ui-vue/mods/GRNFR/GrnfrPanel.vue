@@ -7,7 +7,7 @@
     </nav>
 
     <section v-if="tab === 'dashboard'">
-      <div class="head"><b>GRNFR Mod</b><span class="ver">v{{ st.version }}</span></div>
+      <div class="head"><b>GRNFR CPM</b><span class="ver">v{{ st.version }}</span></div>
       <p class="tagline">{{ t('subtitle') }}</p>
       <p class="note">{{ t('desc') }}</p>
       <p v-if="isGame" class="note">{{ t('game_settings_hint') }}</p>
@@ -143,7 +143,7 @@
     <!-- Premier lancement : choix de la langue (mémorisé ensuite) -->
     <div v-if="needsLang" class="welcome">
       <div class="w-box">
-        <div class="w-title">GRNFR Mod</div>
+        <div class="w-title">GRNFR CPM</div>
         <p class="w-sub">{{ STRINGS.fr.subtitle }}<br /><span>{{ STRINGS.en.subtitle }}</span></p>
         <p class="note">{{ STRINGS.fr.desc }}</p>
         <p class="note">{{ STRINGS.en.desc }}</p>

@@ -1,6 +1,6 @@
-# GRNFR CMP Host
+# GRNFR Host CPM
 
-Serveur auto-hébergé pour GRNFR Online : un relais WebSocket **sans limite de joueurs**, avec un nom et un
+Serveur auto-hébergé pour GRNFR CPM : un relais WebSocket **sans limite de joueurs**, avec un nom et un
 mot de passe facultatif, configuré par un assistant (terminal au premier lancement, puis une page web React
 à tout moment). Écrit en Rust (`host/`), interface de configuration en React (`host/ui/`).
 

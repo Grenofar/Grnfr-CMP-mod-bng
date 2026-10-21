@@ -4,7 +4,7 @@
     <div v-if="state.open" class="grnfr-screen" id="grnfr-screen-root" @click.self="close">
       <div class="window">
         <header>
-          <span class="title">GRNFR Mod</span>
+          <span class="title">GRNFR CPM</span>
           <BngButton @click="close">Retour</BngButton>
         </header>
         <GrnfrPanel class="body lg" />

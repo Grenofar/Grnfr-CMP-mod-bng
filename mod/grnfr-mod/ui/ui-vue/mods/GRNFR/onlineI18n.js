@@ -1,7 +1,7 @@
 // Textes de la fenêtre GRNFR Online (français / anglais). Sans effet de bord au chargement.
 export const ON = {
   fr: {
-    title: "GRNFR Online", close: "Fermer", back: "Retour", refresh: "Actualiser", cancel: "Annuler", yes: "Oui", none: "Rien à afficher.",
+    title: "GRNFR CPM", close: "Fermer", back: "Retour", refresh: "Actualiser", cancel: "Annuler", yes: "Oui", none: "Rien à afficher.",
     t_account: "Compte", t_servers: "Serveurs", t_garage: "Garage", t_dealer: "Concession", t_market: "Annonces", t_trades: "Échanges",
     t_board: "Classement", t_taxi: "Taxi", t_bus: "Bus", t_admin: "Admin",
     email: "E-mail", password: "Mot de passe (6 caractères min.)", username: "Pseudo (visible par les autres joueurs)",
@@ -44,7 +44,7 @@ export const ON = {
     drag_host: "Hôte", drag_dnf: "pas de temps",
   },
   en: {
-    title: "GRNFR Online", close: "Close", back: "Back", refresh: "Refresh", cancel: "Cancel", yes: "Yes", none: "Nothing to show.",
+    title: "GRNFR CPM", close: "Close", back: "Back", refresh: "Refresh", cancel: "Cancel", yes: "Yes", none: "Nothing to show.",
     t_account: "Account", t_servers: "Servers", t_garage: "Garage", t_dealer: "Dealership", t_market: "Listings", t_trades: "Trades",
     t_board: "Leaderboard", t_taxi: "Taxi", t_bus: "Bus", t_admin: "Admin",
     email: "E-mail", password: "Password (6 characters min.)", username: "Username (visible to other players)",

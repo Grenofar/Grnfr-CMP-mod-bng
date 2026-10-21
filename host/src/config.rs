@@ -60,7 +60,7 @@ pub fn parse(content: &str) -> Config {
 
 pub fn to_string(cfg: &Config) -> String {
     format!(
-        "# Config GRNFR Host — modifiable à la main, ou via l'assistant web (voir README).\nname={}\npassword={}\nport={}\n",
+        "# Config GRNFR Host CPM — modifiable à la main, ou via l'assistant web (voir README).\nname={}\npassword={}\nport={}\n",
         cfg.name,
         cfg.password.clone().unwrap_or_default(),
         cfg.port
@@ -85,7 +85,7 @@ pub fn load_or_wizard() -> Config {
         println!("Configuration existante trouvée dans {} : \"{}\" (port {}).", CONFIG_PATH, cfg.name, cfg.port);
         return cfg;
     }
-    println!("=== GRNFR CMP Host : premier lancement — assistant de configuration ===");
+    println!("=== GRNFR Host CPM : premier lancement — assistant de configuration ===");
     let name = prompt("Nom du serveur", &Config::default().name);
     let has_password = prompt_yes_no("Protéger le serveur par un mot de passe ?", false);
     let password = if has_password {
