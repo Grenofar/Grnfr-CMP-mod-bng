@@ -409,7 +409,7 @@ onBeforeUnmount(() => clearInterval(poll))
 
 <style lang="scss" scoped>
 .onw { position: fixed; inset: 0; z-index: 2147482500; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
-.win { --ac: #ff6600; width: 1180px; max-width: 97vw; height: 780px; max-height: 94vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.62); backdrop-filter: blur(6px); border: 1px solid var(--ac); border-radius: 8px;
+.win { --ac: #ff6600; width: 1260px; max-width: 98vw; height: 830px; max-height: 95vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.62); backdrop-filter: blur(6px); border: 1px solid var(--ac); border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 102, 0, 0.15); color: #fff; font: 14px/1.35 "Overpass", "Segoe UI", sans-serif; overflow: hidden; * { box-sizing: border-box; } }
 header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.3); border-bottom: 2px solid var(--ac);
   .title { font: 700 19px "Overpass", sans-serif; color: var(--ac); letter-spacing: 0.02em; } .who { flex: 1; text-align: right; color: rgba(255, 255, 255, 0.75); font-size: 13px; } }
