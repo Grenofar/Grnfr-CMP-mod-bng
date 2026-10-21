@@ -23,6 +23,7 @@ const ASSET_NAME: &str = "grnfr-host-macos";
 #[cfg(all(unix, not(target_os = "macos")))]
 const ASSET_NAME: &str = "grnfr-host-linux";
 
+#[derive(Clone)]
 pub struct LatestRelease {
     pub tag: String,
     pub download_url: String,
