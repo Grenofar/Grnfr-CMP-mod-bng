@@ -18,6 +18,10 @@
   </ol>
   <p class="mut">Les données envoyées au serveur : e-mail, pseudo, argent, véhicules du garage, carte et position pendant que vous êtes connecté. Rien d'autre.</p>
 
+  <h2>Héberger votre propre serveur (GRNFR Host CPM)</h2>
+  <p class="mut">Un programme séparé (pas encore relié au mod) : relais réseau auto-hébergé, <b>sans limite de joueurs</b>, avec un nom et un mot de passe facultatif. Premier lancement = assistant de configuration ; une page web locale permet de la modifier ensuite. Compilé automatiquement à chaque version par GitHub Actions.</p>
+  <p id="host-dl" class="mut">Chargement…</p>
+
   <h2>Classement des fortunes</h2>
   <div class="card"><table id="lb"><tr><td class="mut">Chargement…</td></tr></table></div>
 
@@ -53,5 +57,21 @@
       (rows.length ? rows.map(r => `<tr><td>${GRNFR.esc(r.version)}${r.is_latest ? " ✓" : ""}</td><td>${GRNFR.esc(String(r.created_at).slice(0, 10))}</td><td>${GRNFR.esc(r.notes || "")}</td></tr>`).join("")
         : "<tr><td class='mut' colspan='3'>Aucune release publiée pour l'instant.</td></tr>")
   } catch (e) { hist.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
+})()
+
+// GRNFR Host CPM : binaires construits par GitHub Actions (host/, jamais compilé localement), publiés en
+// pièces jointes de la dernière GitHub Release du dépôt (tag "host-vX.Y.Z"). Lecture publique, sans jeton.
+;(async () => {
+  const el = document.getElementById("host-dl")
+  const LABELS = { "grnfr-host-windows.exe": "Windows (.exe)", "grnfr-host-linux": "Linux", "grnfr-host-macos": "macOS" }
+  try {
+    const res = await fetch("https://api.github.com/repos/Grenofar/Grnfr-CMP-mod-bng/releases/latest")
+    if (!res.ok) throw new Error("http_" + res.status)
+    const rel = await res.json()
+    const assets = (rel.assets || []).filter(a => LABELS[a.name])
+    if (!assets.length) { el.textContent = "Aucun binaire publié pour l'instant."; return }
+    el.innerHTML = `<span class="mut">${GRNFR.esc(rel.tag_name)} : </span>` +
+      assets.map(a => `<a class="btn" href="${GRNFR.esc(a.browser_download_url)}" download>${GRNFR.esc(LABELS[a.name])}</a>`).join(" ")
+  } catch (e) { el.textContent = "Binaires indisponibles pour l'instant (voir le dépôt GitHub, dossier host/)." }
 })()
 </script></body></html>
