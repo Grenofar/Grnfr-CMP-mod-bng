@@ -1,0 +1,63 @@
+<div class="bph" ng-show="st.session && st.settings.hudEnabled" ng-class="['acc-' + st.settings.accent, {compact: st.settings.compact}]" ng-style="{opacity: st.settings.opacity}">
+
+  <div class="bph-panel" ng-if="st.hudOpen">
+    <nav class="tabs">
+      <button ng-repeat="tb in tabs" ng-class="{on: tab === tb.id}" ng-click="tab = tb.id" title="{{t('tab_' + tb.id)}}">
+        <svg viewBox="0 0 24 24"><path ng-attr-d="{{tb.icon}}"/></svg><span>{{t('tab_' + tb.id)}}</span>
+      </button>
+    </nav>
+
+    <section ng-if="tab === 'dashboard'">
+      <div class="head"><b>GRNFR Mod</b><span class="ver">v{{st.version}}</span></div>
+      <div class="grid">
+        <div class="card" ng-if="st.settings.showFps"><label>FPS</label><div class="big">{{fmt(perf.fps)}}</div></div>
+        <div class="card" ng-if="st.settings.showAvg"><label>{{t('avg')}}</label><div class="big">{{fmt(perf.avg)}}</div></div>
+        <div class="card wide" ng-if="st.settings.showMode"><label>{{t('mode')}}</label><div class="val">{{modeLabel()}}</div></div>
+        <div class="card wide"><label>{{t('hudState')}}</label><div class="val">{{st.settings.hudEnabled ? t('on') : t('off')}}</div></div>
+      </div>
+      <button class="btn" ng-click="tab = 'settings'">{{t('hudSettings')}}</button>
+      <p class="note" ng-if="!perf.valid">{{t('noMeasure')}}</p>
+    </section>
+
+    <section class="perfsec" ng-if="tab === 'performance'">
+      <div class="grid">
+        <div class="card"><label>{{t('inst')}}</label><div class="big">{{fmt(perf.fps)}}</div></div>
+        <div class="card"><label>{{t('avg2')}}</label><div class="big">{{fmt(perf.avg)}}</div></div>
+      </div>
+      <div class="card wide graph" ng-if="st.settings.showGraph" ng-mousemove="graphHover($event)" ng-mouseleave="graphLeave()">
+        <svg viewBox="0 0 1000 300" preserveAspectRatio="none"><polyline ng-attr-points="{{graphPoints}}"/></svg>
+        <i class="hline" ng-if="hover" ng-style="{left: hover.x + '%'}"></i>
+        <i class="hdot" ng-if="hover" ng-style="{left: hover.x + '%', top: hover.y + '%'}"></i>
+        <span class="htip" ng-if="hover" ng-class="{flip: hover.x > 80}" ng-style="{left: hover.x + '%'}">{{hover.v}} FPS</span>
+      </div>
+      <p class="note">{{t('perfNote')}}</p>
+    </section>
+
+    <section ng-if="tab === 'settings'">
+      <div class="row tg" ng-repeat="k in hudToggles" ng-click="toggle(k)">
+        <span>{{t(k)}}</span><i class="sw" ng-class="{on: st.settings[k]}"></i>
+      </div>
+      <div class="row"><span>{{t('refresh')}}</span>
+        <div class="seg"><button ng-repeat="r in rates" ng-class="{on: st.settings.refreshRate === r}" ng-click="setSetting('refreshRate', r)">{{rateLabel(r)}}</button></div>
+      </div>
+      <div class="row"><span>{{t('accent')}}</span>
+        <div class="seg"><button ng-repeat="a in accents" ng-class="{on: st.settings.accent === a}" ng-click="setSetting('accent', a)">{{a}}</button></div>
+      </div>
+      <div class="row"><span>{{t('opacity')}}</span>
+        <input type="range" min="0.5" max="1" step="0.05" ng-model="st.settings.opacity" ng-change="setSetting('opacity', st.settings.opacity)">
+      </div>
+      <div class="row"><span>{{t('key')}}</span><b>{{st.keyLabel || t('na')}}</b></div>
+      <p class="note">{{t('keyNote')}}</p>
+      <button class="btn danger" ng-click="resetDefaults()">{{t('reset')}}</button>
+    </section>
+
+    <section ng-if="tab === 'mods'">
+      <div class="card wide soon">
+        <span class="badge">{{t('dev')}}</span>
+        <div class="val">Mod Manager</div>
+        <p>{{t('mmText')}}</p>
+        <button class="btn" disabled>{{t('soon')}}</button>
+      </div>
+    </section>
+  </div>
+</div>

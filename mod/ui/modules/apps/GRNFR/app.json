@@ -1,0 +1,9 @@
+{
+  "name": "GRNFR Mod",
+  "author": "GRNFR",
+  "description": "HUD de performance : FPS et mode de jeu. Se contrôle avec le raccourci configurable.",
+  "version": 1,
+  "directive": "grnfrApp",
+  "domElement": "<grnfr-app></grnfr-app>",
+  "css": { "width": "820px", "height": "580px" }
+}

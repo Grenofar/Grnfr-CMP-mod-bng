@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRNFR Online — carrière multijoueur pour BeamNG.drive</title>
+<meta name="description" content="Mod BeamNG.drive : économie partagée, garage, annonces, taxi, bus, serveurs de 4 joueurs.">
+<link rel="stylesheet" href="/style.css"></head><body>
+<header class="top"><b>GRNFR Online</b><a href="/">Accueil</a><a href="/account.html">Mon compte</a><a href="/admin.html">Admin</a></header>
+<main>
+  <h1>GRNFR Online</h1>
+  <p class="mut">Un mod BeamNG.drive pour jouer à plusieurs avec une économie commune : argent, garage de 4 places, annonces entre joueurs, échanges, taxi, bus et serveurs de 4 joueurs où l'on voit les pseudos des autres.</p>
+  <p><a class="btn" href="/downloads/grnfr-online.zip" download>Télécharger le mod (.zip)</a></p>
+
+  <h2>Installation</h2>
+  <ol>
+    <li>Ne dézippez pas : copiez <code>grnfr-online.zip</code> dans le dossier <code>mods</code> de votre dossier utilisateur BeamNG (<code>Documents/BeamNG/…/mods</code> ou <code>%LocalAppData%/BeamNG/…/current/mods</code>).</li>
+    <li>Lancez BeamNG.drive, activez <b>GRNFR Mod</b> dans le Gestionnaire de mods, puis lancez une carte en jeu libre.</li>
+    <li>Appuyez sur <b>O</b> : onglet <b>Compte</b>, créez un compte avec <b>un pseudo unique</b> (obligatoire), puis onglet <b>Serveurs</b> pour rejoindre un serveur (4 joueurs maximum).</li>
+  </ol>
+  <p class="mut">Les données envoyées au serveur : e-mail, pseudo, argent, véhicules du garage, carte et position pendant que vous êtes connecté. Rien d'autre.</p>
+
+  <h2>Classement des fortunes</h2>
+  <div class="card"><table id="lb"><tr><td class="mut">Chargement…</td></tr></table></div>
+</main>
+<script src="/config.js"></script><script src="/site.js"></script>
+<script>
+(async () => {
+  const t = document.getElementById("lb")
+  try {
+    const rows = await GRNFR.rpcPublic("get_leaderboard", { p_limit: 25 })
+    t.innerHTML = "<tr><th>#</th><th>Joueur</th><th class='n'>Fortune</th><th class='n'>Véhicules</th></tr>" +
+      (rows.length ? rows.map((r, i) => `<tr><td>${i + 1}</td><td>${GRNFR.esc(r.username)}</td><td class="n">${GRNFR.money(r.wealth)}</td><td class="n">${r.vehicles}</td></tr>`).join("") : "<tr><td class='mut' colspan='4'>Aucun joueur pour l'instant.</td></tr>")
+  } catch (e) { t.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
+})()
+</script></body></html>

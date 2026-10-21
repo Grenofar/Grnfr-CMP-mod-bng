@@ -1,0 +1,16 @@
+{
+  "bindings": [
+    {
+      "action": "grnfr_toggle",
+      "control": "k"
+    },
+    {
+      "action": "grnfr_chase_go",
+      "control": "j"
+    },
+    {
+      "action": "grnfr_online_toggle",
+      "control": "o"
+    }
+  ]
+}

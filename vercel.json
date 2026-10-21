@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node scripts/build.mjs",
+  "outputDirectory": "public",
+  "framework": null,
+  "cleanUrls": false,
+  "headers": [
+    { "source": "/downloads/(.*)\\.zip", "headers": [
+      { "key": "Content-Type", "value": "application/zip" },
+      { "key": "Content-Disposition", "value": "attachment; filename=\"grnfr-online.zip\"" },
+      { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" } ] },
+    { "source": "/(.*)", "headers": [
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Referrer-Policy", "value": "same-origin" },
+      { "key": "X-Frame-Options", "value": "DENY" } ] }
+  ]
+}
