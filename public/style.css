@@ -34,6 +34,7 @@ input, select { padding: 9px 11px; color: var(--tx); background: #000; border: 1
 .form { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
 table { width: 100%; border-collapse: collapse; } td, th { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; } td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .mut { color: var(--mut); } .good { color: var(--good); } .bad { color: var(--bad); } .err { color: var(--bad); } .ok { color: var(--good); }
+.small { font-size: 13px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0; } .tabs button { padding: 7px 14px; color: var(--tx); background: var(--card); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; } .tabs button.on { background: var(--ac); border-color: var(--ac); }
 .big { font-size: 30px; font-weight: 700; color: var(--ac); }
 ol li { margin: 6px 0; } code { background: #1d1d20; padding: 1px 6px; border-radius: 4px; }

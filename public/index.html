@@ -2,10 +2,12 @@
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GRNFR CMP — carrière multijoueur pour BeamNG.drive</title>
 <meta name="description" content="Mod BeamNG.drive : économie partagée, garage, annonces, taxi, bus, serveurs de 4 joueurs.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/style.css"></head><body>
 <header class="top"><b>GRNFR CMP</b><a href="/">Accueil</a><a href="/account.html">Mon compte</a><a href="/admin.html">Admin</a></header>
 <main>
   <h1>GRNFR CMP</h1>
+  <p id="versions" class="mut small">Mod : <span id="ver-mod">—</span> · Host : <span id="ver-host">—</span></p>
   <p class="mut">Un mod BeamNG.drive pour jouer à plusieurs avec une économie commune : argent, garage de 4 places, annonces entre joueurs, échanges, taxi, bus et serveurs de 4 joueurs où l'on voit les pseudos des autres.</p>
   <p id="dl"><a class="btn" href="/downloads/grnfr-online.zip" download>Télécharger le mod (.zip)</a></p>
   <p id="dl-notes" class="mut"></p>
@@ -43,14 +45,15 @@
 // Repli propre sur le zip statique (celui construit par scripts/build.mjs à chaque déploiement) si aucune
 // release n'a encore été publiée, ou si le serveur ne répond pas.
 ;(async () => {
-  const dl = document.getElementById("dl"), notes = document.getElementById("dl-notes"), hist = document.getElementById("releases")
+  const dl = document.getElementById("dl"), notes = document.getElementById("dl-notes"), hist = document.getElementById("releases"), verMod = document.getElementById("ver-mod")
   try {
     const latest = await GRNFR.rpcPublic("get_latest_release", {})
     if (latest) {
       dl.innerHTML = `<a class="btn" href="${GRNFR.esc(GRNFR.releaseUrl(latest.file_path))}" download>Télécharger le mod v${GRNFR.esc(latest.version)} (.zip)</a>`
       if (latest.notes) notes.textContent = latest.notes
+      if (verMod) verMod.textContent = "v" + latest.version
     }
-  } catch (e) { /* repli sur le lien statique déjà présent dans la page */ }
+  } catch (e) { if (verMod) verMod.textContent = "?" /* repli sur le lien statique déjà présent dans la page */ }
   try {
     const rows = await GRNFR.rpcPublic("get_releases", { p_limit: 20 })
     hist.innerHTML = "<tr><th>Version</th><th>Date</th><th>Notes</th></tr>" +
@@ -62,16 +65,17 @@
 // GRNFR Host CMP : binaires construits par GitHub Actions (host/, jamais compilé localement), publiés en
 // pièces jointes de la dernière GitHub Release du dépôt (tag "host-vX.Y.Z"). Lecture publique, sans jeton.
 ;(async () => {
-  const el = document.getElementById("host-dl")
+  const el = document.getElementById("host-dl"), verHost = document.getElementById("ver-host")
   const LABELS = { "grnfr-host-windows.exe": "Windows (.exe)", "grnfr-host-linux": "Linux", "grnfr-host-macos": "macOS" }
   try {
     const res = await fetch("https://api.github.com/repos/Grenofar/Grnfr-CMP-mod-bng/releases/latest")
     if (!res.ok) throw new Error("http_" + res.status)
     const rel = await res.json()
+    if (verHost) verHost.textContent = rel.tag_name || "?"
     const assets = (rel.assets || []).filter(a => LABELS[a.name])
     if (!assets.length) { el.textContent = "Aucun binaire publié pour l'instant."; return }
     el.innerHTML = `<span class="mut">${GRNFR.esc(rel.tag_name)} : </span>` +
       assets.map(a => `<a class="btn" href="${GRNFR.esc(a.browser_download_url)}" download>${GRNFR.esc(LABELS[a.name])}</a>`).join(" ")
-  } catch (e) { el.textContent = "Binaires indisponibles pour l'instant (voir le dépôt GitHub, dossier host/)." }
+  } catch (e) { el.textContent = "Binaires indisponibles pour l'instant (voir le dépôt GitHub, dossier host/)."; if (verHost) verHost.textContent = "?" }
 })()
 </script></body></html>

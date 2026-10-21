@@ -75,7 +75,15 @@ async function main() {
     body: JSON.stringify({ version, notes: NOTES, file_path: fileName, size: zip.length, sha256 }),
   })
 
-  console.log("[release] v" + version + " publiée : " + fileName + " (sha256 " + sha256.slice(0, 12) + "...)")
+  // Vérification : le POST ci-dessus peut répondre 2xx sans que la ligne soit lisible ensuite (déjà arrivé :
+  // zip bien envoyé dans Storage, mais rien dans la table malgré un succès affiché) — on ne fait plus
+  // confiance à un simple statut HTTP, on relit la ligne pour de vrai avant d'annoncer une réussite.
+  const check = await rest("/rest/v1/mod_releases?version=eq." + encodeURIComponent(version) + "&select=version,sha256")
+  if (!Array.isArray(check) || check.length !== 1 || check[0].sha256 !== sha256) {
+    fail("la ligne mod_releases ne s'est PAS enregistrée correctement malgré une réponse OK du serveur (relecture : " + JSON.stringify(check) + "). Le zip est bien dans Storage (" + fileName + ") ; réessayez l'enregistrement, ou insérez la ligne à la main.")
+  }
+
+  console.log("[release] v" + version + " publiée et vérifiée : " + fileName + " (sha256 " + sha256.slice(0, 12) + "...)")
 }
 
 main().catch(e => fail(e.message || String(e)))
