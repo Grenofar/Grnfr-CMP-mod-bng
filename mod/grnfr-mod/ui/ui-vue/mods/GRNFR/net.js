@@ -13,10 +13,9 @@ export const net = reactive({
   status: "out",          // out | busy | in
   username: "", email: "", me: null,
   error: "", info: "",
-  open: false, lang: "fr",
+  open: false, lang: "fr", langChosen: true,
   quickOpen: false,       // petite fenêtre rapide (touche J) : chat, joueurs, drag
   dragCount: null,        // compte à rebours de départ d'une course de drag (3,2,1, puis 0 = TOP), null = masqué
-  wantTab: null,          // onglet à afficher à la prochaine ouverture (bouton "Rejoindre" du menu principal)
   game: {},               // état poussé par le Lua (GRNFROnline) : taxi, bus, véhicules sortis, destination
   places: [],
   server: null,           // { id, name, max_players } si on est dans un serveur de jeu
@@ -108,12 +107,6 @@ function engineLua(code) { const a = api(); if (a) { try { a.engineLua(code) } c
 function sendResult(id, ok, obj) { engineLua("extensions.grnfr_online.onNetResult(" + Number(id) + "," + (ok ? "true" : "false") + "," + luaStr(JSON.stringify(obj)) + ")") }
 
 export const ui = (name, args) => callLua("ui", name, JSON.stringify(args || {}))
-
-// Ouvre la fenêtre GRNFR Online directement sur un onglet donné (bouton "Rejoindre" du menu principal / menu pause).
-export function openOnlineAt(tab) {
-  net.wantTab = tab || null
-  return ui("window.open")
-}
 
 // ------------------------------------------------------------------ messages d'erreur lisibles
 const ERR = {
@@ -370,6 +363,7 @@ export async function initNet() {
   on("GRNFRStatic", d => {
     const g = unwrapObj(d)
     if (g?.settings?.lang) net.lang = g.settings.lang
+    if (g?.settings && "langChosen" in g.settings) net.langChosen = g.settings.langChosen !== false
     if (g?.version && g.version !== net.modVersion) { net.modVersion = g.version; checkUpdate() }
   })
   loadAuth()

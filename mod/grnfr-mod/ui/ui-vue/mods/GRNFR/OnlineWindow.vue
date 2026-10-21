@@ -25,23 +25,48 @@
           <p v-if="!net.configured" class="err">{{ t('conf_server') }}</p>
           <template v-else-if="!logged">
             <div class="form">
-              <input v-model="f.email" type="email" :placeholder="t('email')" autocomplete="off" />
-              <input v-model="f.password" type="password" :placeholder="t('password')" autocomplete="off" />
-              <template v-if="reg">
-                <input v-model="f.username" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkName" />
-                <small :class="nameState === 'free' ? 'good' : 'bad'">{{ nameHint }}</small>
-              </template>
+              <h4>{{ t('quick_create') }}</h4>
+              <input v-model="f.pseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkPseudo" />
+              <small :class="pseudoState === 'free' ? 'good' : 'bad'">{{ pseudoHint }}</small>
+              <button type="button" class="btn" :disabled="busy || pseudoState !== 'free'" @click="net_createProfile">{{ t('create_profile') }}</button>
+
               <div class="row">
-                <button v-if="!reg" type="button" class="btn" :disabled="busy" @click="net_signIn">{{ t('signin') }}</button>
-                <button v-else type="button" class="btn" :disabled="busy || nameState !== 'free'" @click="net_signUp">{{ t('signup') }}</button>
-                <button type="button" class="lnk" @click="reg = !reg; net.error = ''; net.info = ''">{{ reg ? t('have_account') : t('no_account') }}</button>
+                <button type="button" class="lnk" @click="toggleImport">{{ t('import_profile') }}</button>
               </div>
+              <template v-if="showImport">
+                <p v-if="!net.profiles.length" class="mut">{{ t('no_profiles_found') }}</p>
+                <div v-for="p in net.profiles" :key="p.path" class="row">
+                  <span>{{ p.username }}</span>
+                  <button type="button" class="btn dim" @click="importProfile(p.path)">{{ t('use_this') }}</button>
+                </div>
+              </template>
+
+              <button type="button" class="lnk" @click="showEmail = !showEmail">{{ t('have_email_account') }}</button>
+              <template v-if="showEmail">
+                <input v-model="f.email" type="email" :placeholder="t('email')" autocomplete="off" />
+                <input v-model="f.password" type="password" :placeholder="t('password')" autocomplete="off" />
+                <template v-if="reg">
+                  <input v-model="f.username" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkName" />
+                  <small :class="nameState === 'free' ? 'good' : 'bad'">{{ nameHint }}</small>
+                </template>
+                <div class="row">
+                  <button v-if="!reg" type="button" class="btn" :disabled="busy" @click="net_signIn">{{ t('signin') }}</button>
+                  <button v-else type="button" class="btn" :disabled="busy || nameState !== 'free'" @click="net_signUp">{{ t('signup') }}</button>
+                  <button type="button" class="lnk" @click="reg = !reg; net.error = ''; net.info = ''">{{ reg ? t('have_account') : t('no_account') }}</button>
+                </div>
+              </template>
             </div>
           </template>
           <template v-else>
             <div class="cards">
               <div class="card"><label>{{ t('balance') }}</label><div class="big">{{ money(profile.balance) }}</div></div>
               <div class="card"><label>{{ t('username') }}</label><div class="big sm">{{ net.username }}</div></div>
+            </div>
+            <h4>{{ t('your_profile') }}</h4>
+            <p class="mut">{{ t('profile_hint') }}</p>
+            <div class="row">
+              <button type="button" class="btn dim" @click="exportProfile">{{ t('export_profile') }}</button>
+              <span v-if="net.exportedPath" class="mut">{{ t('exported_to') }} {{ net.exportedPath }}</span>
             </div>
             <h4>{{ t('send_money') }}</h4>
             <div class="row">
@@ -184,6 +209,12 @@
           <div v-if="net.game.bus && net.game.bus.active" class="mut">{{ t('bus_state') }} · {{ net.game.bus.legs || 0 }} {{ t('legs') }} · {{ money(net.game.bus.earned || 0) }} {{ t('earned') }}</div>
         </section>
 
+        <!-- RÉGLAGES (HUD, compteur FPS, langue, mods) : le même panneau que le menu principal, réutilisé ici
+             pour qu'il n'y ait plus qu'une seule fenêtre GRNFR CMP au lieu de deux. -->
+        <section v-else-if="tab === 'settings'" class="embed-panel">
+          <GrnfrPanel />
+        </section>
+
         <!-- ADMIN -->
         <section v-else-if="tab === 'admin'">
           <h4>{{ t('adm_give') }}</h4>
@@ -203,13 +234,19 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
-import { net, ui, rpc, errText, signIn, signUp, signOut, refreshMe, usernameAvailable, chooseUsername, listServers, joinServer, leaveServer } from "./net.js"
+import {
+  net, ui, rpc, errText, signIn, signUp, signUpAnonymous, signOut, refreshMe, usernameAvailable, chooseUsername,
+  listServers, joinServer, leaveServer, exportProfile as netExportProfile, requestProfiles, importProfile as netImportProfile,
+} from "./net.js"
 import { tr } from "./onlineI18n.js"
+import GrnfrPanel from "./GrnfrPanel.vue"
 
 const t = k => tr(net.lang, k)
 const tab = ref("account")
 const reg = ref(false), busy = ref(false), msg = ref(""), needPseudo = ref(false)
-const nameState = ref(""), f = reactive({ email: "", password: "", username: "", place: 0, offer: "", want: "", cash: 0 })
+const showEmail = ref(false), showImport = ref(false)
+const pseudoState = ref("")
+const nameState = ref(""), f = reactive({ email: "", password: "", username: "", pseudo: "", place: 0, offer: "", want: "", cash: 0 })
 const d = reactive({ tx: [], servers: [], catalog: [], market: [], trades: [], theirs: [], board: [], reqs: [] })
 
 const logged = computed(() => net.status === "in")
@@ -219,9 +256,10 @@ const taxi = computed(() => net.game.taxi || {})
 const garageNear = computed(() => !!net.game.garage?.near)
 const garageDist = computed(() => (typeof net.game.garage?.dist === "number" ? net.game.garage.dist : null))
 const place = computed(() => net.places[f.place] || null)
-const tabs = computed(() => ["account", "servers", "garage", "dealer", "market", "trades", "board", "taxi", "bus"].concat(profile.value.is_admin ? ["admin"] : []))
+const tabs = computed(() => ["account", "servers", "garage", "dealer", "market", "trades", "board", "taxi", "bus", "settings"].concat(profile.value.is_admin ? ["admin"] : []))
 const money = n => "$" + Number(n || 0).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
 const nameHint = computed(() => nameState.value === "free" ? t("free") : nameState.value === "taken" ? t("taken") : nameState.value === "bad" ? t("badname") : nameState.value === "wait" ? t("checking") : t("badname"))
+const pseudoHint = computed(() => pseudoState.value === "free" ? t("free") : pseudoState.value === "taken" ? t("taken") : pseudoState.value === "wait" ? t("checking") : t("badname"))
 
 // pendant la saisie dans un champ texte, les touches ne doivent pas piloter la voiture
 function focus(e, on) { const tg = e.target?.tagName; if (tg === "INPUT" || tg === "SELECT" || tg === "TEXTAREA") ui("typing", { on }) }
@@ -235,10 +273,24 @@ function checkName() {
   nameTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.username) nameState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
 }
 
+let pseudoTimer = null
+function checkPseudo() {
+  clearTimeout(pseudoTimer)
+  const n = f.pseudo
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(n)) { pseudoState.value = "bad"; return }
+  pseudoState.value = "wait"
+  pseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.pseudo) pseudoState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
+}
+
 async function wrap(fn) { busy.value = true; try { await fn() } finally { busy.value = false } }
 const net_signIn = () => wrap(() => signIn(f.email, f.password))
 const net_signUp = () => wrap(() => signUp(f.email, f.password, f.username))
 const net_signOut = () => signOut()
+const net_createProfile = () => wrap(() => signUpAnonymous(f.pseudo))
+
+function exportProfile() { netExportProfile() }
+function toggleImport() { showImport.value = !showImport.value; if (showImport.value) requestProfiles() }
+function importProfile(path) { netImportProfile(path) }
 
 // Action quelconque : message d'erreur lisible, puis rafraîchissement du profil / de la liste.
 async function act(fn, after) {
@@ -265,8 +317,15 @@ async function askTaxi() {
   await act(() => rpc("request_taxi", { p_level: net.game.level || null, p_pickup: net.game.pos, p_dropoff: { x: p.x, y: p.y, z: p.z, name: p.name }, p_distance_m: null }))
 }
 
-// Bouton "Rejoindre" du menu principal : force l'onglet Serveurs à l'ouverture.
-watch(() => net.open, open => { if (open && net.wantTab) { tab.value = net.wantTab; net.wantTab = null } })
+// À la première ouverture : un onglet de départ raisonnable (langue pas encore choisie -> Réglages ; pas
+// connecté -> Compte), sans gêner ensuite les clics de l'utilisateur sur les autres onglets.
+let autoTabDone = false
+watch(() => net.open, open => {
+  if (!open || autoTabDone) return
+  autoTabDone = true
+  if (!net.langChosen) tab.value = "settings"
+  else if (!logged.value) tab.value = "account"
+})
 
 let poll = null
 function loadTab() {
@@ -310,4 +369,5 @@ input, select { padding: 5px 8px; color: #fff; background: rgba(0, 0, 0, 0.6); b
 .lnk { color: rgba(255, 255, 255, 0.7); background: none; border: none; text-decoration: underline; cursor: pointer; }
 .err { color: #ff6b6b; margin: 0 0 6px; } .ok, .good { color: #4ade80; } .bad { color: #ff6b6b; } .warn { color: #f5b942; } .mut { color: rgba(255, 255, 255, 0.6); }
 small { font-size: 12px; }
+.embed-panel { margin: -10px -14px; padding: 0; :deep(.grnfr) { width: 100%; height: 440px; max-width: none; } }
 </style>

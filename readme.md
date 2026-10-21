@@ -29,7 +29,7 @@ Change `VERSION` dans `grnfr.lua` **et** `version` dans `mod_info/grnfr/info.jso
 
 ### 4. Les joueurs
 Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer « GRNFR CMP », lancer une carte en jeu libre.
-- **Menu principal → bouton « Rejoindre »** : une case par serveur (nom, joueurs connectés), ouvre directement l'onglet Serveurs, même sans carte chargée.
+- **Menu principal → bouton « GRNFR CMP »** : un seul bouton, qui ouvre la fenêtre complète (compte, serveurs — une case par serveur avec nom et joueurs connectés —, garage, réglages...), même sans carte chargée.
 - **Touche O** : fenêtre complète (compte, serveurs, garage, marché, taxi, bus).
 - **Touche J** : petite fenêtre rapide (chat, joueurs, courses de drag) — voir ci-dessous.
 
@@ -56,12 +56,13 @@ comprendre (pas de physique, pas d'argent) ; ce n'est pas un remplacement de la 
 ## ⚠️ Ce qui est testé et ce qui ne l'est pas
 | Partie | Statut |
 |---|---|
-| SQL (schéma, RPC, droits, serveurs, trafic partagé, releases, chat, garages, drag) | **Testé** sur Postgres 16 avec un faux Supabase (`supabase/tests/run.sh`) la dernière fois qu'un Postgres était disponible ; les nouvelles vérifications (chat, garages, drag) ont été écrites avec le même soin mais **jamais exécutées, aucun Postgres dans cette session** — à relancer avant de livrer |
+| SQL (schéma, RPC, droits, serveurs, trafic partagé, releases, chat, garages, drag, profils portables) | **Testé** sur Postgres 16 avec un faux Supabase (`supabase/tests/run.sh`) la dernière fois qu'un Postgres était disponible ; les vérifications ajoutées depuis (chat, garages, drag, 0008 profils/anti-partage) ont été écrites avec le même soin mais **jamais exécutées, aucun Postgres dans cette session** — à relancer avant de livrer. L'endpoint de connexion anonyme a été testé en direct contre le vrai projet Supabase (réponse `anonymous_provider_disabled` confirmée : il manque juste l'activer dans le tableau de bord) |
 | Client réseau `net.js` | **Testé** (`node tests/net_test.mjs`, 18 vérifications). Deux bugs de chemin pré-existants corrigés (le test ne s'exécutait pas du tout avant) |
 | `scripts/build.mjs` (racine du zip, garde-fous) | **Testé** (`unzip -l`, échec sans variables, échec avec une clé `service_role`) |
 | Lua (taxi, bus, taxi IA, fantômes) | **Simulé** (`texlua tests/lua_sim.lua`) la dernière fois qu'un interpréteur Lua était disponible ; **non ré-exécuté dans cette session** |
-| `garage.lua`, `convoy.lua`, `chat.lua`, `track.lua`, `drag.lua` (tout le nouveau Lua social/drag) | **Jamais exécutés, ni simulés, ni en jeu.** Mêmes précautions que le reste (`pcall` partout), mais sans aucune vérification automatisée pour l'instant |
-| `QuickPanel.vue` (chat/joueurs/drag, touche J) | **Compile pas vérifiée** (pas d'outil Vue dans cette session), jamais affichée dans le vrai jeu |
+| `garage.lua`, `convoy.lua`, `chat.lua`, `track.lua`, `drag.lua`, `profile.lua` (tout le nouveau Lua social/drag/profil) | **Jamais exécutés, ni simulés, ni en jeu.** Mêmes précautions que le reste (`pcall` partout), mais sans aucune vérification automatisée pour l'instant |
+| `QuickPanel.vue`, fusion `OnlineWindow.vue`/`GrnfrPanel.vue` (un seul bouton, onglet Réglages embarqué, compte pseudo seul) | **Syntaxe JS vérifiée** (`node --check` sur chaque `<script setup>`), zip reconstruit sans erreur. **Jamais affichée dans le vrai jeu** : la mise en page de l'onglet Réglages embarqué (dimensions fixes de `GrnfrPanel` forcées à s'adapter) n'a pas pu être vue en vrai |
+| Site (`public/`) : habillage visuel (arrière-plan animé CSS) | **Vérifié dans un navigateur** (serveur statique local), rendu correct. Pas de vraie image BeamNG (aucune disponible légitimement ici) : juste des lueurs CSS dans les couleurs du mod |
 | **`host/` (Rust + React)** | **Compile réellement** sur Windows/Linux/macOS via `.github/workflows/host-release.yml` (GitHub Actions, un vrai toolchain Rust) ; binaires publiés en Release GitHub. Mais **jamais exécuté** : aucune vérification du comportement réel (assistant, relais, assistant web), seulement de la compilation. Voir `host/README.md` |
 | **Le mod dans BeamNG, le site Vercel déployé, un vrai projet Supabase, `npm run release` contre un vrai bucket Storage, `grnfr-host` lancé et utilisé en conditions réelles** | **Jamais essayés** |
 
@@ -83,14 +84,15 @@ cd host && cargo build --release                                   # host lui-m�
 ## Architecture (pour reprendre le code)
 - **Lua = logique de jeu, JS = transport HTTP** (BeamNG ne fait pas de HTTPS côté Lua). `online.lua` ↔ `net.js` via `GRNFRNetReq`/`onNetResult` ; `grnfr_online.call(fn, args, cb)` est le pont RPC générique réutilisé par `garage.lua`, `chat.lua` et `drag.lua` (aucune plomberie réseau supplémentaire nécessaire pour ces trois-là).
 - `ghosts.lua` : position des joueurs (`GRNFRSelf`/`onSync`), et prévient `track.lua` à chaque réception pour le repérage. `convoy.lua` : même principe pour les 2 voitures de trafic (`GRNFRConvoySelf`), bascule hôte/invité décidée par `server_sync` (`is_host`). `garage.lua` : garage attribué par `claim_garage_spot`/`get_server_garage_spots`. `chat.lua` : `send_chat_message`/`get_chat_messages`, sondé toutes les 2 s. `drag.lua` : `propose_drag_race` → `join_drag_race` → `start_drag_race` → `report_drag_finish`, verrouillage frein+embrayage pendant le compte à rebours.
-- `grnfr.lua` : `M.ui(nom, json)` = liste blanche des appels interface → jeu (`ROUTES`) ; touche **O** = fenêtre complète (`grnfr_online_toggle`), touche **J** = fenêtre rapide (`grnfr_quick_toggle`, `QuickPanel.vue`) ; bouton « Rejoindre » du menu principal = `openOnlineAt('servers')`.
+- `grnfr.lua` : `M.ui(nom, json)` = liste blanche des appels interface → jeu (`ROUTES`) ; touche **O** = fenêtre complète (`grnfr_online_toggle`, `OnlineWindow.vue` — aussi ouverte par l'unique bouton du menu principal), touche **J** = fenêtre rapide (`grnfr_quick_toggle`, `QuickPanel.vue`). Les réglages (HUD, FPS, langue, mods) sont un onglet de `OnlineWindow.vue` (`GrnfrPanel.vue` embarqué) : il n'y a plus de fenêtre séparée pour ça depuis le menu principal.
 - Toute règle d'argent = fonction SQL `security definer` + test dans `supabase/tests/tests.sql`, invariant « solde = somme du journal » revérifié après chaque nouveau groupe de fonctionnalités. Clé `service_role` : jamais dans le mod ni le site, seulement dans l'environnement local de `scripts/release.mjs`.
 - `host/` est un programme à part (Rust + React), sans dépendance au reste du dépôt ; voir `host/README.md`.
 
 ## Reste à faire / idées
 - Relier `net.js` au relais `host/` (en plus de, ou à la place de, Supabase) : non commencé.
 - Lancer `grnfr-host` pour de vrai et vérifier qu'il marche (compilé par CI, jamais exécuté).
-- Bouton « Rejoindre » dans le menu pause (aujourd'hui : menu principal seulement).
+- Même bouton unique dans le menu pause (aujourd'hui, le menu pause garde l'ancien onglet Mods > GrnfrPanel seul, sans compte/serveurs).
+- Habillage visuel du site : pas d'image BeamNG réelle utilisée (aucune disponible légitimement ici) — juste des lueurs animées en CSS dans les couleurs du mod. À remplacer par de vraies captures si vous en avez le droit.
 - Limiter les courses de taxi entre joueurs à un même serveur de jeu (actuellement par carte) ; option `taxi_require_passenger_near`.
 - Couleur du véhicule sur les fantômes, réglage de la cadence selon la latence.
 - Première session en jeu : vérifier toutes les hypothèses d'API listées ci-dessus, en particulier le verrouillage anti faux départ des courses de drag et `ai.setMode('traffic')`.

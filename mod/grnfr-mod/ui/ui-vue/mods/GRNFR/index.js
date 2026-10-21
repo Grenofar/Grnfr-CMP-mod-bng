@@ -1,14 +1,13 @@
-// GRNFR Mod : bouton du menu principal + carte dans l'onglet "Mods" du menu pause.
-// La fenêtre du menu principal est montée par GrnfrScreen.vue (slot "mainmenu.top") :
-// aucun changement de route/d'écran, donc la souris et le clavier restent actifs.
+// GRNFR CMP : un seul bouton dans le menu principal + une carte dans l'onglet "Mods" du menu pause.
+// Un seul point d'entrée : le bouton ouvre directement la fenêtre GRNFR CMP (OnlineWindow, la même qu'avec
+// la touche O), qui a maintenant son propre onglet Réglages (GrnfrPanel, embarqué).
 import { useBridge } from "@/bridge"
 import { createApp } from "vue"
 import FpsOverlay from "./FpsOverlay.vue"
 import HudOverlay from "./HudOverlay.vue"
 import OnlineWindow from "./OnlineWindow.vue"
 import QuickPanel from "./QuickPanel.vue"
-import { initNet, stopNet, openOnlineAt } from "./net.js"
-import { getState } from "./state.js"
+import { initNet, stopNet, ui } from "./net.js"
 import { startPerfStore, stopPerfStore } from "./perfStore.js"
 
 const { events, lua } = useBridge()
@@ -23,17 +22,13 @@ let quickApp = null
 let quickEl = null
 
 function addGrnfrButton(addButton) {
+  // Un seul bouton : ouvre la fenêtre GRNFR CMP (comptes, serveurs, garage... et réglages). Fonctionne depuis
+  // le menu principal, avant même de charger une carte. La fenêtre choisit elle-même un onglet de départ
+  // raisonnable (langue si jamais choisie, sinon compte si pas connecté, sinon serveurs).
   addButton({
     title: "GRNFR CMP",
     iconId: "wrench",
-    action: () => { getState().open = true },
-  })
-  // Case par serveur (nom, joueurs connectés, bouton Rejoindre) : ouvre directement l'onglet Serveurs,
-  // sans passer par le tableau de bord. Fonctionne depuis le menu principal, avant même de charger une carte.
-  addButton({
-    title: "Rejoindre",
-    iconId: "wrench",
-    action: () => { openOnlineAt("servers") },
+    action: () => { ui("window.open") },
   })
 }
 
@@ -81,7 +76,6 @@ export async function onLoad() {
 export async function onUnload() {
   events.off("MainMenuButtons", addGrnfrButton)
   stopPerfStore()
-  getState().open = false
   overlayApp?.unmount()
   overlayEl?.remove()
   hudApp?.unmount()
