@@ -1,0 +1,81 @@
+name: GRNFR Host CPM — build & release
+
+# Compile host/ (Rust) sur de vraies machines Windows/Linux/macOS avec un vrai toolchain Rust — nécessaire car
+# aucun cargo/rustc n'était disponible dans l'environnement qui a écrit ce code (voir host/README.md).
+# Déclenché par un tag "host-vX.Y.Z" : construit host/ui/ (React) puis host/ (Rust) sur chaque OS, et publie
+# les binaires en pièces jointes d'une GitHub Release du même nom.
+on:
+  push:
+    tags:
+      - "host-v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bin_name: grnfr-host.exe
+            asset_name: grnfr-host-windows.exe
+          - os: ubuntu-latest
+            bin_name: grnfr-host
+            asset_name: grnfr-host-linux
+          - os: macos-latest
+            bin_name: grnfr-host
+            asset_name: grnfr-host-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build de l'assistant web (host/ui, React/Vite)
+        working-directory: host/ui
+        run: |
+          npm ci
+          npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build du serveur (host/, Rust)
+        working-directory: host
+        run: cargo build --release
+
+      - name: Renomme le binaire pour la release
+        shell: bash
+        run: cp "host/target/release/${{ matrix.bin_name }}" "${{ matrix.asset_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/host-v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Rassemble les binaires
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          ls -la release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: "GRNFR Host CPM ${{ github.ref_name }}"
+          files: release/*
+          body: |
+            Binaires de GRNFR Host CPM, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
+            Voir host/README.md pour l'utilisation (premier lancement = assistant de configuration).
