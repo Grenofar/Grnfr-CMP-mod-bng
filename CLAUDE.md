@@ -10,7 +10,7 @@ Four independent pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
-- `host/` — a standalone Rust WebSocket relay + React setup wizard for self-hosted servers (no player cap, optional password). Architecturally separate from the rest; `net.js` does not talk to it (yet).
+- `host/` — a standalone Rust WebSocket relay with a native egui/eframe GUI (no HTML, no local web server) for self-hosted servers (no player cap, optional password); its config lives in Supabase (`0011_host_config.sql`), keyed by a locally-generated id, no account. Architecturally separate from the rest; `net.js` does not talk to it (yet).
 
 ## Commands
 
@@ -32,8 +32,10 @@ PGHOST=/tmp PGPORT=54329 PGUSER=postgres supabase/tests/run.sh
 texlua scripts/check-lua.lua $(find mod/grnfr-mod/lua mod/grnfr-mod/scripts -name '*.lua')
 texlua tests/lua_sim.lua
 
-# host/ — React wizard builds with plain npm/vite; the Rust side needs cargo (not always available)
-cd host/ui && npm install && npm run build   # must run before `cargo build`: httpd.rs embeds dist/ via include_str!
+# host/ — native egui/eframe GUI (no web build step); needs cargo (not always available) and, on Linux,
+# system GUI dev packages (see .github/workflows/host-release.yml for the exact apt-get list)
+# SUPABASE_URL / SUPABASE_ANON_KEY must be set at compile time (option_env!, see host/src/supabase.rs) or
+# the binary builds but can't read/write its config
 cd host && cargo build --release
 ```
 

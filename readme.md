@@ -47,11 +47,13 @@ Copier le zip **sans le dézipper** dans le dossier `mods` de BeamNG, activer «
 - L'argent reste 100 % côté serveur (fonctions RPC `security definer`, jamais d'écriture directe cliente).
 
 ## Host auto-hébergé (`host/`, séparé du reste)
-Un programme Rust (`host/`) + une petite page de configuration React (`host/ui/`) pour héberger **son propre
-serveur**, sans limite de joueurs, avec un nom et un mot de passe facultatif. **Indépendant de Supabase** et
-**pas encore relié au mod** (`net.js` ne lui parle pas aujourd'hui) : voir `host/README.md` pour le détail,
-l'état d'avancement réel et comment le construire. Son relais WebSocket transporte des messages sans les
-comprendre (pas de physique, pas d'argent) ; ce n'est pas un remplacement de la partie Supabase du mod.
+Un programme Rust natif (`host/`, fenêtre egui/eframe — pas de HTML, pas de serveur web local) pour héberger
+**son propre serveur**, sans limite de joueurs, avec un nom et un mot de passe facultatif. Sa configuration
+est stockée dans Supabase (table/fonctions dédiées, `0011_host_config.sql`), sans compte joueur — un
+identifiant généré localement sert de clé. **Pas encore relié au mod** (`net.js` ne lui parle pas
+aujourd'hui) : voir `host/README.md` pour le détail, l'état d'avancement réel et comment le construire. Son
+relais WebSocket transporte des messages sans les comprendre (pas de physique, pas d'argent) ; ce n'est pas
+un remplacement de la partie Supabase du mod.
 
 ## ⚠️ Ce qui est testé et ce qui ne l'est pas
 | Partie | Statut |
@@ -63,7 +65,7 @@ comprendre (pas de physique, pas d'argent) ; ce n'est pas un remplacement de la 
 | `garage.lua`, `convoy.lua`, `chat.lua`, `track.lua`, `drag.lua`, `profile.lua` (tout le nouveau Lua social/drag/profil) | **Jamais exécutés, ni simulés, ni en jeu.** Mêmes précautions que le reste (`pcall` partout), mais sans aucune vérification automatisée pour l'instant |
 | `QuickPanel.vue`, fusion `OnlineWindow.vue`/`GrnfrPanel.vue` (un seul bouton, onglet Réglages embarqué, compte pseudo seul) | **Syntaxe JS vérifiée** (`node --check` sur chaque `<script setup>`), zip reconstruit sans erreur. **Jamais affichée dans le vrai jeu** : la mise en page de l'onglet Réglages embarqué (dimensions fixes de `GrnfrPanel` forcées à s'adapter) n'a pas pu être vue en vrai |
 | Site (`public/`) : habillage visuel (arrière-plan animé CSS) | **Vérifié dans un navigateur** (serveur statique local), rendu correct. Pas de vraie image BeamNG (aucune disponible légitimement ici) : juste des lueurs CSS dans les couleurs du mod |
-| **`host/` (Rust + React)** | **Compile réellement** sur Windows/Linux/macOS via `.github/workflows/host-release.yml` (GitHub Actions, un vrai toolchain Rust) ; binaires publiés en Release GitHub. Mais **jamais exécuté** : aucune vérification du comportement réel (assistant, relais, assistant web), seulement de la compilation. Voir `host/README.md` |
+| **`host/` (Rust, fenêtre native egui/eframe)** | **Compile réellement** sur Windows/Linux/macOS via `.github/workflows/host-release.yml` (GitHub Actions, un vrai toolchain Rust) ; binaires publiés en Release GitHub. Mais **jamais exécuté** : aucune vérification du comportement réel (fenêtre, relais, lecture/écriture Supabase, mise à jour qui remplace le binaire en cours d'exécution), seulement de la compilation. Voir `host/README.md` |
 | **Le mod dans BeamNG, le site Vercel déployé, un vrai projet Supabase, `npm run release` contre un vrai bucket Storage, `grnfr-host` lancé et utilisé en conditions réelles** | **Jamais essayés** |
 
 Les noms d'API BeamNG pour les fantômes, le trafic partagé et le blocage anti faux départ (`setPositionRotation`, `setGhostEnabled`, `ai.setMode('traffic')`, `input.event('parkingbrake'/'clutch', ...)`…) sont des hypothèses : la première session en jeu fera sortir des corrections (journal : `settings/grnfr/logs/`).
@@ -77,8 +79,8 @@ node tests/net_test.mjs                                             # client ré
 node scripts/build.mjs                                              # build du zip (variables SUPABASE_* à définir)
 npm run release -- "notes"                                           # publie une release (SUPABASE_SERVICE_ROLE_KEY requis)
 
-cd host/ui && npm install && npm run build && cd ..                 # assistant web du host (vérifié dans cette session)
 cd host && cargo build --release                                   # host lui-même (compile via CI ; jamais exécuté)
+                                                                     # requiert SUPABASE_URL/SUPABASE_ANON_KEY en env à la compilation
 ```
 
 ## Architecture (pour reprendre le code)
@@ -86,7 +88,7 @@ cd host && cargo build --release                                   # host lui-m�
 - `ghosts.lua` : position des joueurs (`GRNFRSelf`/`onSync`), et prévient `track.lua` à chaque réception pour le repérage. `convoy.lua` : même principe pour les 2 voitures de trafic (`GRNFRConvoySelf`), bascule hôte/invité décidée par `server_sync` (`is_host`). `garage.lua` : garage attribué par `claim_garage_spot`/`get_server_garage_spots`. `chat.lua` : `send_chat_message`/`get_chat_messages`, sondé toutes les 2 s. `drag.lua` : `propose_drag_race` → `join_drag_race` → `start_drag_race` → `report_drag_finish`, verrouillage frein+embrayage pendant le compte à rebours.
 - `grnfr.lua` : `M.ui(nom, json)` = liste blanche des appels interface → jeu (`ROUTES`) ; touche **O** = fenêtre complète (`grnfr_online_toggle`, `OnlineWindow.vue` — aussi ouverte par l'unique bouton du menu principal), touche **J** = fenêtre rapide (`grnfr_quick_toggle`, `QuickPanel.vue`). Les réglages (HUD, FPS, langue, mods) sont un onglet de `OnlineWindow.vue` (`GrnfrPanel.vue` embarqué) : il n'y a plus de fenêtre séparée pour ça depuis le menu principal.
 - Toute règle d'argent = fonction SQL `security definer` + test dans `supabase/tests/tests.sql`, invariant « solde = somme du journal » revérifié après chaque nouveau groupe de fonctionnalités. Clé `service_role` : jamais dans le mod ni le site, seulement dans l'environnement local de `scripts/release.mjs`.
-- `host/` est un programme à part (Rust + React), sans dépendance au reste du dépôt ; voir `host/README.md`.
+- `host/` est un programme à part (Rust, fenêtre native egui/eframe), sans dépendance au reste du dépôt sauf Supabase (config seulement) ; voir `host/README.md`.
 
 ## Reste à faire / idées
 - Relier `net.js` au relais `host/` (en plus de, ou à la place de, Supabase) : non commencé.

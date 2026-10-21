@@ -391,12 +391,12 @@ onBeforeUnmount(() => clearInterval(poll))
 
 <style lang="scss" scoped>
 .onw { position: fixed; inset: 0; z-index: 2147482500; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
-.win { --ac: #ff6600; width: 900px; max-width: 96vw; height: 600px; max-height: 92vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.97); border: 1px solid var(--ac); border-radius: 8px;
+.win { --ac: #ff6600; width: 1020px; max-width: 96vw; height: 680px; max-height: 92vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.82); border: 1px solid var(--ac); border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 102, 0, 0.15); color: #fff; font: 14px/1.35 "Overpass", "Segoe UI", sans-serif; overflow: hidden; * { box-sizing: border-box; } }
-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.55); border-bottom: 2px solid var(--ac);
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.42); border-bottom: 2px solid var(--ac);
   .title { font: 700 19px "Overpass", sans-serif; color: var(--ac); letter-spacing: 0.02em; } .who { flex: 1; text-align: right; color: rgba(255, 255, 255, 0.75); font-size: 13px; } }
 .body { flex: 1; display: flex; min-height: 0; }
-.tabs { display: flex; flex-direction: column; gap: 3px; padding: 10px; width: 170px; flex: none; border-right: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.4); overflow-y: auto;
+.tabs { display: flex; flex-direction: column; gap: 3px; padding: 10px; width: 180px; flex: none; border-right: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.28); overflow-y: auto;
   button { display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 6px; color: rgba(255, 255, 255, 0.6); padding: 9px 10px; font: inherit; cursor: pointer; text-align: left;
     transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
     &:hover { background: rgba(255, 102, 0, 0.16); color: #fff; transform: translateX(3px); }

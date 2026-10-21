@@ -1,22 +1,22 @@
 // Configuration du host : nom, mot de passe (facultatif), port. Pas de nombre de joueurs maximum.
 //
-// Plus d'assistant en ligne de commande (il demandait une console, que le binaire Windows n'ouvre plus
-// depuis v0.2.0 — voir main.rs) : au premier lancement, les valeurs par défaut sont enregistrées tout de
-// suite, et tout se règle depuis le tableau de bord web (voir httpd.rs) à l'adresse affichée dans le log.
-//
-// Format de fichier volontairement simple ("clef=valeur", une par ligne) plutôt qu'un format standard
-// (TOML/YAML) : ça évite une dépendance de plus dans un projet qui n'a déjà pas pu être compilé pour être
-// vérifié (voir host/README.md).
+// Depuis v0.3.0, la config vit dans Supabase (voir supabase.rs et supabase/migrations/0011_host_config.sql),
+// pas dans un fichier local. Pas de compte joueur requis : au premier lancement, un identifiant aléatoire
+// (UUID v4) est généré et gardé dans grnfr-host.id, à côté de l'exécutable — connaître cet identifiant
+// suffit à lire/écrire CETTE config (sécurité "limitée, pas infaillible", voir le commentaire de la
+// migration 0011). Un petit cache local (grnfr-host.cache) garde la dernière config connue pour pouvoir
+// démarrer même hors ligne (Supabase injoignable) ; toujours écrasé par ce qui vient de Supabase quand
+// c'est possible.
 use std::fs;
-use std::io;
 use std::path::Path;
 
-use crate::logger::log;
+use uuid::Uuid;
 
-pub const CONFIG_PATH: &str = "grnfr-host.cfg";
+pub const HOST_ID_PATH: &str = "grnfr-host.id";
+const CACHE_PATH: &str = "grnfr-host.cache";
 pub const DEFAULT_PORT: u16 = 30814;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub name: String,
     pub password: Option<String>,
@@ -29,11 +29,27 @@ impl Default for Config {
     }
 }
 
-pub fn parse(content: &str) -> Config {
+// Identifiant stable de ce host : généré une seule fois, puis toujours relu (jamais régénéré tant que le
+// fichier existe), pour toujours retrouver la même ligne dans Supabase entre deux lancements.
+pub fn load_or_create_host_id() -> Uuid {
+    if let Ok(s) = fs::read_to_string(HOST_ID_PATH) {
+        if let Ok(id) = Uuid::parse_str(s.trim()) {
+            return id;
+        }
+    }
+    let id = Uuid::new_v4();
+    let _ = fs::write(HOST_ID_PATH, id.to_string());
+    id
+}
+
+pub fn cache_load() -> Option<Config> {
+    if !Path::new(CACHE_PATH).exists() {
+        return None;
+    }
+    let content = fs::read_to_string(CACHE_PATH).ok()?;
     let mut cfg = Config::default();
     for line in content.lines() {
         let line = line.trim();
-        if line.is_empty() || line.starts_with('#') { continue; }
         if let Some((k, v)) = line.split_once('=') {
             let v = v.trim();
             match k.trim() {
@@ -44,41 +60,15 @@ pub fn parse(content: &str) -> Config {
             }
         }
     }
-    cfg
+    Some(cfg)
 }
 
-pub fn to_string(cfg: &Config) -> String {
-    format!(
-        "# Config GRNFR Host CMP — modifiable à la main, ou via le tableau de bord web (voir README).\nname={}\npassword={}\nport={}\n",
+pub fn cache_save(cfg: &Config) {
+    let content = format!(
+        "# Copie locale de la config (voir Supabase pour la source de vérité) — utilisée si hors ligne.\nname={}\npassword={}\nport={}\n",
         cfg.name,
         cfg.password.clone().unwrap_or_default(),
         cfg.port
-    )
-}
-
-pub fn save(cfg: &Config) -> io::Result<()> {
-    fs::write(CONFIG_PATH, to_string(cfg))
-}
-
-pub fn load() -> Option<Config> {
-    if !Path::new(CONFIG_PATH).exists() {
-        return None;
-    }
-    fs::read_to_string(CONFIG_PATH).ok().map(|s| parse(&s))
-}
-
-// Premier lancement : valeurs par défaut, enregistrées tout de suite (modifiables depuis le tableau de bord
-// web — voir httpd.rs — sans jamais avoir besoin d'un terminal).
-pub fn load_or_wizard() -> Config {
-    if let Some(cfg) = load() {
-        log(&format!("Configuration existante trouvée dans {} : \"{}\" (port {}).", CONFIG_PATH, cfg.name, cfg.port));
-        return cfg;
-    }
-    let cfg = Config::default();
-    if let Err(e) = save(&cfg) {
-        log(&format!("Avertissement : configuration non enregistrée ({}). Valeurs par défaut utilisées pour cette fois.", e));
-    } else {
-        log(&format!("Première exécution : configuration par défaut enregistrée dans {} (port {}). Modifiable depuis le tableau de bord web.", CONFIG_PATH, cfg.port));
-    }
-    cfg
+    );
+    let _ = fs::write(CACHE_PATH, content);
 }
