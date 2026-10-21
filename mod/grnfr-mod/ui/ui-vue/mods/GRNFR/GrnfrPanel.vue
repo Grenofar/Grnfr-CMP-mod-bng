@@ -28,32 +28,6 @@
       <p class="note">{{ t('graph_hint') }}</p>
     </section>
 
-    <section v-if="tab === 'gameplay'">
-      <div class="card wide"><label>{{ t('gp_mode_now') }}</label><div class="val">{{ modeLabel }}</div></div>
-      <p v-if="!st.connected || !st.session" class="note">Link: {{ st.connected ? 'connected' : 'NOT connected' }} (calls: {{ luaStats.ok }} ok, {{ luaStats.fail }} failed, route: {{ luaStats.via || 'none' }}) - in a map: {{ String(!!st.session) }}{{ luaStats.last ? ' - last error: ' + luaStats.last : '' }}</p>
-      <p v-if="!st.session" class="note">{{ t('gp_need_game') }}</p>
-      <template v-else-if="isFreeroam">
-        <h3>{{ t('gp_configs') }} <span class="badge">{{ t('badge_dev') }}</span></h3>
-        <!-- Deux types de chase : la police vous poursuit / vous êtes la police. Un seul peut être actif à la fois. -->
-        <div v-for="r in chaseRoles" v-show="chasePhase === 'idle' || chaseRole === r" :key="r" class="card wide">
-          <div class="val">{{ t(r === 'pursue' ? 'chase_pursue_title' : 'chase_flee_title') }}</div>
-          <p class="note">{{ t(r === 'pursue' ? 'chase_desc_pursue' : 'chase_desc') }}</p>
-          <template v-if="chaseRole === r">
-            <p v-if="chasePhase === 'countdown'" class="note ok">{{ t('chase_countdown') }}</p>
-            <p v-else-if="chasePhase === 'running'" class="note ok">{{ t('chase_running') }}</p>
-          </template>
-          <div class="btns">
-            <BngButton v-if="chasePhase === 'idle'" @click="chaseStart(r)">{{ t('chase_start') }}</BngButton>
-            <template v-else-if="chaseRole === r">
-              <BngButton @click="emit('chase-started'); act('chaseRestart')">{{ t('chase_restart') }}</BngButton>
-              <BngButton @click="act('chaseStop')">{{ t('chase_stop') }}</BngButton>
-            </template>
-          </div>
-        </div>
-      </template>
-      <p v-else class="note">{{ t('gp_none') }}</p>
-    </section>
-
     <section v-if="tab === 'optim'">
       <h3>{{ t('opt_title') }}</h3>
       <div class="row tg" @click="setSetting('antiStutter', !st.settings.antiStutter)">
@@ -200,20 +174,17 @@ import { getPerf } from "./perfStore.js"
 const { events } = useBridge()
 
 // Deux versions de la même interface :
-//  - « menu » (menu principal + onglet Mods du menu pause) : tableau de bord, performances, RÉGLAGES, mods. Pas de gameplay,
-//    ni trafic adaptatif, ni anti-stutter.
-//  - « game » (grande fenêtre en partie, ouverte par le bouton Option du HUD) : tableau de bord, performances, GAMEPLAY
-//    (chase), optimisation (trafic adaptatif, anti-stutter). Aucun réglage.
+//  - « menu » (menu principal + onglet Mods du menu pause) : tableau de bord, performances, RÉGLAGES, mods. Pas d'optimisation.
+//  - « game » (grande fenêtre en partie, ouverte par le bouton Option du HUD) : tableau de bord, performances,
+//    optimisation (trafic adaptatif, anti-stutter). Aucun réglage.
 const props = defineProps({ variant: { type: String, default: "menu" } })
-const emit = defineEmits(["chase-started"]) // la grande fenêtre se ferme quand un chase démarre
 const isGame = computed(() => props.variant === "game")
 const tabIds = computed(() => isGame.value
-  ? ["dashboard", "performance", "gameplay", "optim"]
+  ? ["dashboard", "performance", "optim"]
   : ["dashboard", "performance", "settings", "mods"])
 const icons = {
   dashboard: "M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z",
   performance: "M3 17l5-6 4 4 8-10",
-  gameplay: "M5 4v17M5 4h11l-2 4 2 4H5",
   optim: "M13 2L4 14h7l-1 8 9-12h-7z",
   settings: "M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6",
   mods: "M12 3l8 4v10l-8 4-8-4V7z",
@@ -272,17 +243,6 @@ const modeLabel = computed(() => {
 })
 
 const graphLabels = computed(() => ({ avg: t("avg_1s"), inst: t("perf_inst"), empty: t("graph_empty") }))
-// Décision prise côté Lua (chaseAllowed) ; repli sur l'id « freeroam » si le champ est absent (ancien Lua en cache)
-const isFreeroam = computed(() => {
-  if (typeof st.chaseAllowed === "boolean") return st.chaseAllowed
-  const raw = st.modeIds
-  const ids = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? Object.values(raw) : []
-  return ids.includes("freeroam")
-})
-const chasePhase = computed(() => st.chase?.phase || "idle")
-const chaseRole = computed(() => st.chase?.role || "flee")
-const chaseRoles = ["flee", "pursue"]
-function chaseStart(r) { emit("chase-started"); act("chaseStart", r) }
 
 // Trafic adaptatif : FPS minimum voulu (curseur + zone de texte synchronisés)
 const minDraft = ref(60)

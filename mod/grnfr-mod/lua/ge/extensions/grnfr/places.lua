@@ -133,6 +133,8 @@ local function gamePois()
   return out
 end
 
+M.pois = gamePois -- lieux nommés du jeu (garages, stations...), réutilisé par grnfr_garage pour trouver un point de garage
+
 -- Destinations proposées au joueur : lieux nommés les plus proches, complétés par des points de route.
 function M.list(origin, count)
   count = count or 8

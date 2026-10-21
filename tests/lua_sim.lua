@@ -1,7 +1,7 @@
 -- Simulation hors jeu : fausse API BeamNG + faux serveur, pour dérouler taxi PNJ, bus et taxi IA de bout en bout.
 -- Usage : texlua tests/lua_sim.lua   (depuis la racine du dépôt)
 math.randomseed(42)
-local ROOT = 'mod/lua/ge/extensions/grnfr/'
+local ROOT = 'mod/grnfr-mod/lua/ge/extensions/grnfr/'
 
 -- ---------- JSON minimal
 local function enc(v)

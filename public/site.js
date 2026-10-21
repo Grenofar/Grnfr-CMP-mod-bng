@@ -45,5 +45,7 @@
     signOut() { S.auth = null; save() },
     money: n => "$" + Number(n || 0).toLocaleString("fr-FR"),
     esc: s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])),
+    // URL publique d'un fichier du bucket Storage "releases" (bucket public : pas besoin de jeton).
+    releaseUrl: file_path => cfg.url + "/storage/v1/object/public/releases/" + encodeURIComponent(file_path),
   }
 })()

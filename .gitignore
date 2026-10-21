@@ -3,3 +3,8 @@ public/downloads/
 node_modules/
 .env
 .vercel
+
+# GRNFR CMP Host (host/) : artefacts de build et configuration locale (peut contenir un mot de passe en clair)
+host/target/
+host/ui/dist/
+grnfr-host.cfg

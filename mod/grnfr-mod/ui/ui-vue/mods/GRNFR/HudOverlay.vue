@@ -4,9 +4,8 @@
     <header>
       <span class="title">GRNFR Mod</span>
       <span class="hbtns">
-        <button v-if="chase !== 'idle'" type="button" class="hb" @click="chaseRestart">⟳ {{ t('chase_restart') }}</button>
-        <button v-if="chase !== 'idle'" type="button" class="hb" :title="t('chase_stop')" @click="callLua('chaseStop')">✕</button>
         <button type="button" class="hb" title="GRNFR Online" @click="callLua('ui', 'window.open', '{}')">Online</button>
+        <button type="button" class="hb" title="Chat / joueurs / drag (J)" @click="callLua('ui', 'quick.open', '{}')">Chat</button>
         <button type="button" class="hb opt" @click="openBig">{{ t('hud_option') }}</button>
       </span>
     </header>
@@ -18,26 +17,8 @@
       </div>
       <p v-if="!perf.valid" class="diag">{{ t('diag_wait') }} · ticks {{ perf.nTicks }} · hooks {{ perf.hooks }} · Lua {{ stats.ok }}/{{ stats.fail }}</p>
       <div v-if="s.showGraph" class="card graph"><FpsGraph :hist="perf.hist" :window="90" :labels="graphLabels" /></div>
-      <p v-if="chase === 'countdown'" class="chase">{{ t('chase_countdown') }}</p>
     </div>
   </div>
-
-  <!-- Compte à rebours du chase : 3 - 2 - 1 - TOP (orange et noir, transition entre les chiffres) -->
-  <Teleport to="body">
-    <Transition name="cd-fade">
-      <div v-if="cd.visible" class="cdwrap">
-        <div class="cdplate" :class="{ go: cd.value === 0 }">
-          <div class="cdtag">{{ cd.role === 'pursue' ? t('cd_pursue') : t('cd_flee') }}</div>
-          <div class="cdstage">
-            <Transition name="cd-digit" mode="out-in">
-              <div :key="cd.value" class="cdnum">{{ cd.value === 0 ? t('cd_go') : cd.value }}</div>
-            </Transition>
-          </div>
-          <div class="cdbar"><i :key="cd.value" class="cdfill" :class="{ full: cd.value === 0 }"></i></div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
 
   <!-- Grande fenêtre (bouton Option) : même taille que la fenêtre du menu. K pour la fermer. -->
   <Teleport to="body">
@@ -48,7 +29,7 @@
           <span class="wk">{{ keyLabel || 'K' }} : {{ t('hud_close') }}</span>
           <BngButton @click="closeBig">{{ t('hud_close') }}</BngButton>
         </header>
-        <GrnfrPanel variant="game" class="body lg" @chase-started="onChaseStarted" />
+        <GrnfrPanel variant="game" class="body lg" />
       </div>
     </div>
   </Teleport>
@@ -73,7 +54,6 @@ const session = ref(false)
 const open = ref(false)
 const big = ref(false)
 const angular = ref(false)
-const chase = ref("idle")
 const keyLabel = ref(null)
 const mode = reactive({ label: "—", ids: [], raw: null })
 const s = reactive({ ...DEFAULTS })
@@ -93,23 +73,10 @@ const modeLabel = computed(() => {
 
 function openBig() { big.value = true; open.value = false; callLua("openBig") }
 function closeBig() { big.value = false; callLua("closeBig") }
-function chaseRestart() { callLua("chaseRestart") }
 
 let lastEvt = 0
 let lastLuaBig = null, lastLuaHud = null
 
-// --- Compte à rebours du chase (événement GRNFRChaseCount envoyé par Lua : 3, 2, 1, puis 0 = TOP)
-const cd = reactive({ visible: false, value: 3, role: "flee" })
-let cdHide = null
-function onCount(d) {
-  d = unwrapObj(d)
-  if (!d || typeof d.value !== "number") return
-  if (cdHide) { clearTimeout(cdHide); cdHide = null }
-  cd.value = d.value; cd.role = d.role || "flee"; cd.visible = true
-  if (d.value === 0) cdHide = setTimeout(() => { cd.visible = false }, 1100) // « TOP ! » reste un instant puis disparaît
-}
-// Le chase démarre : la grande fenêtre disparaît et le petit HUD apparaît.
-function onChaseStarted() { big.value = false; open.value = true }
 function onStatic(d) {
   d = unwrapObj(d)
   if (!d) return
@@ -126,10 +93,6 @@ function onStatic(d) {
   }
   lastLuaBig = lb; lastLuaHud = lh
   angular.value = !!d.angular
-  const cp = d.chase?.phase || "idle"
-  if (cp !== "idle" && chase.value === "idle") { big.value = false; open.value = sess && s.hudEnabled !== false } // chase lancé : fenêtre fermée, HUD affiché
-  if (cp === "idle" && cd.visible && cd.value !== 0) cd.visible = false // chase arrêté pendant le compte à rebours
-  chase.value = cp
   if ("keyLabel" in d) keyLabel.value = d.keyLabel
   mode.label = d.mode || "—"; mode.ids = d.modeIds || []; mode.raw = d.modeRaw || null
   if (d.settings) Object.assign(s, DEFAULTS, d.settings)
@@ -141,11 +104,10 @@ async function pollState() {
   const r = await callLua("getState")
   if (r && typeof r === "object") onStatic(r)
 }
-onMounted(() => { events.on("GRNFRStatic", onStatic); events.on("GRNFRChaseCount", onCount); pollT = setInterval(pollState, 2000) })
+onMounted(() => { events.on("GRNFRStatic", onStatic); pollT = setInterval(pollState, 2000) })
 onBeforeUnmount(() => {
   if (pollT) clearInterval(pollT)
-  if (cdHide) clearTimeout(cdHide)
-  events.off("GRNFRStatic", onStatic); events.off("GRNFRChaseCount", onCount)
+  events.off("GRNFRStatic", onStatic)
 })
 </script>
 
@@ -174,31 +136,6 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 .val { font-size: 14px; }
 .diag { margin: 0 0 8px; font-size: 11px; color: var(--mut); }
 .graph { height: 150px; padding: 0; margin-bottom: 4px; }
-.chase { margin: 4px 0 0; padding: 4px 8px; font-size: 12px; border: 1px solid var(--ac); border-radius: 4px; background: rgba(255, 102, 0, 0.12); }
-
-/* Compte à rebours du chase : plaque noire, chiffres orange, transition douce entre les chiffres */
-.cdwrap { position: fixed; top: 16%; left: 0; right: 0; z-index: 2147482000; display: flex; justify-content: center; pointer-events: none; user-select: none; }
-.cdplate {
-  min-width: 300px; padding: 14px 34px 16px; text-align: center; color: #fff;
-  background: rgba(8, 8, 8, 0.88); border: 2px solid #ff6600; border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8), 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 36px rgba(255, 102, 0, 0.35);
-  font-family: "Overpass", "Segoe UI", sans-serif;
-  transition: box-shadow 0.3s, background 0.3s;
-  &.go { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8), 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 70px rgba(255, 102, 0, 0.75); background: rgba(24, 10, 0, 0.9); }
-}
-.cdtag { font-size: 15px; font-weight: 600; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255, 255, 255, 0.7); }
-.cdstage { height: 150px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.cdnum { font-size: 128px; line-height: 1; font-weight: 800; color: #ff6600; font-variant-numeric: tabular-nums; text-shadow: 0 0 22px rgba(255, 102, 0, 0.55); }
-.cdplate.go .cdnum { font-size: 96px; letter-spacing: 0.04em; color: #fff; text-shadow: 0 0 26px rgba(255, 102, 0, 0.95); }
-.cdbar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
-.cdfill { display: block; height: 100%; width: 100%; background: #ff6600; transform-origin: left center; animation: cd-drain 1s linear forwards; &.full { animation: none; } }
-@keyframes cd-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-.cd-digit-enter-active { transition: opacity 0.22s ease-out, transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-.cd-digit-leave-active { transition: opacity 0.16s ease-in, transform 0.16s ease-in; }
-.cd-digit-enter-from { opacity: 0; transform: scale(0.55); }
-.cd-digit-leave-to { opacity: 0; transform: scale(1.45); }
-.cd-fade-enter-active, .cd-fade-leave-active { transition: opacity 0.25s; }
-.cd-fade-enter-from, .cd-fade-leave-to { opacity: 0; }
 
 /* Grande fenêtre : mêmes dimensions que la fenêtre du menu */
 .gwin { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.35); pointer-events: auto; }

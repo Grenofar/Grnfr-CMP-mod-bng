@@ -90,6 +90,7 @@ function M.onSync(payload)
     end
   end
   for name in pairs(remote) do if not seen[name] then despawn(name) end end -- le joueur est parti
+  pcall(grnfr_track.onPlayers, d.players)
   return true
 end
 

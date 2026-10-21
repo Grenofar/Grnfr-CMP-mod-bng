@@ -1,14 +1,16 @@
 -- GRNFR Mod : extension GE principale (orchestration uniquement).
 local M = {}
-M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic', 'grnfr_chase',
-  'grnfr_places', 'grnfr_nav', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts' }
+M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
+  'grnfr_places', 'grnfr_nav', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag' }
 
-local VERSION = '1.1.0'
+local VERSION = '2.0.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
 local bigOpen = false -- grande fenêtre en jeu (bouton Option du HUD)
 local onlineOpen = false -- fenêtre GRNFR Online (touche O)
+local quickOpen = false -- petite fenêtre rapide : chat, joueurs, drag (touche J)
 local acc = 0
 local cntPre, cntUpd, cntPoll, cntSent = 0, 0, 0, 0 -- compteurs de diagnostic (log toutes les 5 s + affichés dans le HUD)
 local modeInfo = { id = 'menu', label = 'Menu principal', session = false }
@@ -79,18 +81,12 @@ local function refreshMode()
   end
 end
 
--- Chase autorisé en jeu libre, mais aussi quand le mode est inconnu (session / raw / localmp / startexp) :
--- seuls les modes exclusifs (carrière, scénario, mission, bus, rallye, garage, multijoueur en ligne) le bloquent.
-local BLOCKING = { career = true, scenario = true, mission = true, bus = true, rally = true, garage = true, multiplayer = true }
-local function isFreeroam()
-  if not modeInfo.session then return false end
-  for _, id in ipairs(modeInfo.ids or {}) do if BLOCKING[id] then return false end end
-  return true
-end
--- GRNFR Online (taxi, bus, garage) : actif en jeu libre et en multijoueur BeamMP. Jamais dans la carrière / les scénarios / missions du jeu.
+-- GRNFR Online (comptes, serveurs, garage) : toujours accessible depuis le menu principal (choisir/rejoindre un
+-- serveur avant même de charger une carte), et en jeu libre ou multijoueur BeamMP. Jamais dans la carrière /
+-- les scénarios / missions du jeu.
 local ONLINE_BLOCKING = { career = true, scenario = true, mission = true, bus = true, rally = true, garage = true }
 local function isOnlineAllowed()
-  if not modeInfo.session then return false end
+  if not modeInfo.session then return true end -- menu principal : aucune carte chargée, aucun mode à bloquer
   for _, id in ipairs(modeInfo.ids or {}) do if ONLINE_BLOCKING[id] then return false end end
   return true
 end
@@ -104,13 +100,12 @@ local function buildStatic()
     modeId = modeInfo.id,
     modeIds = modeInfo.ids,
     modeRaw = modeInfo.raw,
-    chaseAllowed = isFreeroam(),
     onlineAllowed = isOnlineAllowed(),
     onlineOpen = onlineOpen,
+    quickOpen = quickOpen,
     hudOpen = hudOpen,
     bigOpen = bigOpen,
     traffic = grnfr_traffic.status(),
-    chase = grnfr_chase.status(),
     hooks = cntPre + cntUpd,
     angular = consumers.angular == true, -- app HUD AngularJS placée par le joueur : le HUD Vue s'efface alors
     keyLabel = grnfr_keys.getDisplay(),
@@ -164,16 +159,64 @@ local function setOnlineOpen(on)
 end
 function M.toggleOnline() return setOnlineOpen(not onlineOpen) end
 
+-- Petite fenêtre rapide (touche J) : chat, liste des joueurs, repère, argent, échange, courses de drag.
+-- Mêmes règles d'ouverture que GRNFR Online (jeu libre / multijoueur, pas en carrière / scénario).
+local function setQuickOpen(on)
+  on = on == true
+  if on and not isOnlineAllowed() then
+    refreshMode()
+    if not isOnlineAllowed() then
+      toast(L('Fenêtre rapide : disponible en jeu libre ou en multijoueur (pas en carrière / scénario).', 'Quick window: available in free roam or multiplayer (not in career / scenario).'))
+      return false
+    end
+  end
+  quickOpen = on
+  grnfr_online.setFocus(on or onlineOpen)
+  if not on and not onlineOpen then grnfr_online.setTyping(false) end
+  guihooks.trigger('GRNFRQuickWin', { open = quickOpen })
+  pushStatic(true)
+  return true
+end
+function M.toggleQuick() return setQuickOpen(not quickOpen) end
+
 -- Appels de l'interface vers le jeu : un seul point d'entrée, liste blanche, arguments en JSON.
 local ROUTES = {
   ['window.open']     = function() setOnlineOpen(true) end,
   ['window.close']    = function() setOnlineOpen(false) end,
-  ['auth']            = function(a) grnfr_online.setAuth(a.loggedIn, a.username); if a.loggedIn ~= true then grnfr_ghosts.setServer(false) end end,
-  ['server.state']    = function(a) grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs) end,
+  ['quick.open']      = function() setQuickOpen(true) end,
+  ['quick.close']     = function() setQuickOpen(false) end,
+  ['chat.send']       = function(a) grnfr_chat.send(a.text) end,
+  ['track.set']       = function(a) grnfr_track.set(a.username) end,
+  ['track.clear']     = function() grnfr_track.clear() end,
+  ['drag.markStart']  = function() grnfr_drag.markStart() end,
+  ['drag.markFinish'] = function() grnfr_drag.markFinish() end,
+  ['drag.propose']    = function() grnfr_drag.propose() end,
+  ['drag.join']       = function(a) grnfr_drag.join(a.stake) end,
+  ['drag.leave']      = function() grnfr_drag.leave() end,
+  ['drag.start']      = function() grnfr_drag.start() end,
+  ['drag.forceFinish'] = function() grnfr_drag.forceFinish() end,
+  ['auth']            = function(a)
+    grnfr_online.setAuth(a.loggedIn, a.username)
+    if a.loggedIn ~= true then
+      grnfr_ghosts.setServer(false); grnfr_convoy.setServer(false); grnfr_garage.setServer(false)
+      grnfr_chat.setServer(false); grnfr_drag.setServer(false); grnfr_track.clear()
+    end
+  end,
+  ['server.state']    = function(a)
+    grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs); grnfr_convoy.setServer(a.joined); grnfr_garage.setServer(a.joined)
+    grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
+    if not a.joined then grnfr_track.clear() end
+  end,
   ['typing']          = function(a) grnfr_online.setTyping(a.on) end,
   ['places.refresh']  = function() grnfr_online.requestPlaces() end,
-  ['garage.spawn']    = function(a) grnfr_online.spawnVehicle(a) end,
-  ['garage.store']    = function(a) grnfr_online.storeVehicle(a.id) end,
+  ['garage.spawn']    = function(a)
+    if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
+    grnfr_online.spawnVehicle(a)
+  end,
+  ['garage.store']    = function(a)
+    if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
+    grnfr_online.storeVehicle(a.id)
+  end,
   ['taxi.duty']       = function(a) grnfr_taxi.setDuty(a.on) end,
   ['taxi.accept']     = function(a) grnfr_taxi.acceptRequest(a) end,
   ['taxi.cancel']     = function() grnfr_taxi.cancel() end,
@@ -207,23 +250,6 @@ function M.openBig()
   return true
 end
 function M.closeBig() bigOpen = false; slog('info', 'You closed the big window.'); pushStatic(true); return true end
-
--- Configs de jeu (section Gameplay). Chase : uniquement en jeu libre.
-function M.chaseStart(role)
-  refreshMode()
-  if not modeInfo.session or not isFreeroam() then
-    slog('warn', 'Chase was not started: it is not available in the current game mode (' .. modeLabelEn() .. ').')
-    toast(L('Chase : disponible uniquement en jeu libre.', 'Chase: free roam only.'))
-    return false
-  end
-  bigOpen, hudOpen = false, true -- le petit HUD (avec le bouton Relancer) reste visible pendant le chase
-  grnfr_chase.start(role)
-  pushStatic(true)
-  return true
-end
-function M.chaseRestart() grnfr_chase.restart(); pushStatic(true); return true end
-function M.chaseStop() grnfr_chase.stop(); pushStatic(true); return true end
-function M.chaseGo() grnfr_chase.go(); pushStatic(true); return true end
 
 -- Appelé par l'UI au chargement de l'application.
 local function onlyOverlay()
@@ -319,13 +345,14 @@ local function onStateEvent()
   pushStatic()
 end
 
--- Changement de carte : l'état en cours (chase, trafic) est réinitialisé, mais le RÉGLAGE « trafic adaptatif »
+-- Changement de carte : l'état en cours (trafic) est réinitialisé, mais le RÉGLAGE « trafic adaptatif »
 -- reste enregistré tel que le joueur l'a choisi (il est réarmé automatiquement dans tick).
 local function resetGameplayFeatures()
-  grnfr_chase.stop()
   grnfr_traffic.reset()
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
   if onlineOpen then onlineOpen = false; guihooks.trigger('GRNFROnlineWin', { open = false }) end
+  if quickOpen then quickOpen = false; guihooks.trigger('GRNFRQuickWin', { open = false }) end
   sessionAge = 0
 end
 function M.onClientStartMission() notified, notifyAcc = false, 0; resetGameplayFeatures(); onStateEvent() end
@@ -402,24 +429,24 @@ function M.tick(dtReal)
     pcall(function() timer:stopAndReset() end) -- garde le chronomètre synchronisé
   end
   grnfr_perf.sample(dtReal)
-  do -- options en développement : trafic adaptatif et chase
+  do -- option en développement : trafic adaptatif
     local cfg0 = grnfr_settings.get()
     local pm = grnfr_perf.get()
     if cfg0.traffic then
       grnfr_traffic.update(tonumber(dtReal) or 0, pm and pm.avg or nil, cfg0.trafficMinFps)
       -- état « impossible » : on le laisse affiché (le réglage reste coché), le changement d'état est poussé à l'UI par la signature
     end
-    grnfr_chase.update(tonumber(dtReal) or 0)
   end
   do -- GRNFR Online : actif seulement dans une partie où il est autorisé
     local d0 = tonumber(dtReal) or 0
     if d0 > 0.5 then d0 = 0.5 end
     if modeInfo.session and grnfr_online.isAuthed() then
-      grnfr_taxi.update(d0); grnfr_taxibot.update(d0); grnfr_bus.update(d0)
+      grnfr_taxi.update(d0); grnfr_taxibot.update(d0); grnfr_bus.update(d0); grnfr_garage.update(d0)
+      grnfr_chat.update(d0); grnfr_drag.update(d0)
     end
     grnfr_nav.update()
     grnfr_online.update(d0)
-    if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0) end
+    if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_convoy.update(d0); grnfr_track.update() end
   end
   if wasSession then grnfr_sessionlog.update(tonumber(dtReal) or 0, (grnfr_perf.get() or {}).avg) end
   if modeInfo.session then
@@ -450,7 +477,7 @@ function M.tick(dtReal)
     end
     local tr = grnfr_traffic.status()
     local sig = table.concat(modeInfo.ids or {}, '+') .. tostring(modeInfo.raw) .. tostring(modeInfo.session)
-      .. '|' .. tr.state .. tr.active .. '/' .. tr.parked .. '|' .. grnfr_chase.status().phase
+      .. '|' .. tr.state .. tr.active .. '/' .. tr.parked
     staticAcc = staticAcc + 1
     if sig ~= lastSig or staticAcc >= 1 then lastSig = sig; staticAcc = 0; pushStatic() end
   end
@@ -476,8 +503,8 @@ function M.onExtensionUnloaded()
   pcall(grnfr_settings.flush)
   wasSession = false
   pcall(grnfr_sessionlog.finish, 'The mod was unloaded.')
-  pcall(grnfr_chase.stop)
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
   pcall(grnfr_stutter.apply, false)
   if guihooks then guihooks.trigger('GRNFRStatic', { session = false, hudOpen = false }) end
   grnfr_perf.reset()

@@ -7,7 +7,8 @@
 <main>
   <h1>GRNFR Online</h1>
   <p class="mut">Un mod BeamNG.drive pour jouer à plusieurs avec une économie commune : argent, garage de 4 places, annonces entre joueurs, échanges, taxi, bus et serveurs de 4 joueurs où l'on voit les pseudos des autres.</p>
-  <p><a class="btn" href="/downloads/grnfr-online.zip" download>Télécharger le mod (.zip)</a></p>
+  <p id="dl"><a class="btn" href="/downloads/grnfr-online.zip" download>Télécharger le mod (.zip)</a></p>
+  <p id="dl-notes" class="mut"></p>
 
   <h2>Installation</h2>
   <ol>
@@ -19,6 +20,9 @@
 
   <h2>Classement des fortunes</h2>
   <div class="card"><table id="lb"><tr><td class="mut">Chargement…</td></tr></table></div>
+
+  <h2>Historique des versions</h2>
+  <div class="card"><table id="releases"><tr><td class="mut">Chargement…</td></tr></table></div>
 </main>
 <script src="/config.js"></script><script src="/site.js"></script>
 <script>
@@ -29,5 +33,25 @@
     t.innerHTML = "<tr><th>#</th><th>Joueur</th><th class='n'>Fortune</th><th class='n'>Véhicules</th></tr>" +
       (rows.length ? rows.map((r, i) => `<tr><td>${i + 1}</td><td>${GRNFR.esc(r.username)}</td><td class="n">${GRNFR.money(r.wealth)}</td><td class="n">${r.vehicles}</td></tr>`).join("") : "<tr><td class='mut' colspan='4'>Aucun joueur pour l'instant.</td></tr>")
   } catch (e) { t.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
+})()
+
+// Bouton de téléchargement : pointe vers la dernière release publiée sur Supabase Storage (npm run release).
+// Repli propre sur le zip statique (celui construit par scripts/build.mjs à chaque déploiement) si aucune
+// release n'a encore été publiée, ou si le serveur ne répond pas.
+;(async () => {
+  const dl = document.getElementById("dl"), notes = document.getElementById("dl-notes"), hist = document.getElementById("releases")
+  try {
+    const latest = await GRNFR.rpcPublic("get_latest_release", {})
+    if (latest) {
+      dl.innerHTML = `<a class="btn" href="${GRNFR.esc(GRNFR.releaseUrl(latest.file_path))}" download>Télécharger le mod v${GRNFR.esc(latest.version)} (.zip)</a>`
+      if (latest.notes) notes.textContent = latest.notes
+    }
+  } catch (e) { /* repli sur le lien statique déjà présent dans la page */ }
+  try {
+    const rows = await GRNFR.rpcPublic("get_releases", { p_limit: 20 })
+    hist.innerHTML = "<tr><th>Version</th><th>Date</th><th>Notes</th></tr>" +
+      (rows.length ? rows.map(r => `<tr><td>${GRNFR.esc(r.version)}${r.is_latest ? " ✓" : ""}</td><td>${GRNFR.esc(String(r.created_at).slice(0, 10))}</td><td>${GRNFR.esc(r.notes || "")}</td></tr>`).join("")
+        : "<tr><td class='mut' colspan='3'>Aucune release publiée pour l'instant.</td></tr>")
+  } catch (e) { hist.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
 })()
 </script></body></html>

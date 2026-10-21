@@ -62,6 +62,22 @@ local ERR = {
   timeout = { 'Le serveur ne répond pas.', 'The server is not answering.' },
   already_active = { 'Une course est déjà en cours.', 'A ride is already in progress.' },
   too_short = { 'Trajet trop court.', 'Trip too short.' },
+  too_long = { 'Trajet trop long.', 'Trip too long.' },
+  not_in_server = { 'Vous n\'êtes plus dans le serveur.', 'You are no longer in the server.' },
+  garage_full = { 'Plus de place de garage sur ce serveur.', 'No garage spot left on this server.' },
+  bad_position = { 'Position invalide.', 'Invalid position.' },
+  bad_message = { 'Message vide ou trop long.', 'Empty or too long message.' },
+  race_active = { 'Une course de drag est déjà en cours sur ce serveur.', 'A drag race is already active on this server.' },
+  betting_closed = { 'Les mises sont closes pour cette course.', 'Betting is closed for this race.' },
+  already_in = { 'Vous êtes déjà dans cette course.', 'You are already in this race.' },
+  bad_stake = { 'Mise invalide.', 'Invalid stake.' },
+  race_not_found = { 'Course introuvable.', 'Race not found.' },
+  not_entered = { 'Vous n\'êtes pas inscrit à cette course.', 'You are not entered in this race.' },
+  already_finished = { 'Temps déjà enregistré.', 'Time already recorded.' },
+  bad_time = { 'Temps invalide.', 'Invalid time.' },
+  race_not_running = { 'La course n\'est pas en cours.', 'The race is not running.' },
+  not_enough_players = { 'Pas assez de joueurs inscrits (2 minimum).', 'Not enough entrants (2 minimum).' },
+  forbidden = { 'Réservé à l\'hôte de la course.', 'Host only.' },
 }
 function M.errText(code)
   local e = ERR[tostring(code)]
@@ -150,6 +166,10 @@ local function buildState()
     taxi = status('grnfr_taxi'),
     bot = status('grnfr_taxibot'),
     bus = status('grnfr_bus'),
+    garage = status('grnfr_garage'),
+    chat = status('grnfr_chat'),
+    drag = status('grnfr_drag'),
+    track = status('grnfr_track'),
     nav = (function()
       local t = grnfr_nav.get()
       if not t then return nil end

@@ -6,7 +6,8 @@ import { createApp } from "vue"
 import FpsOverlay from "./FpsOverlay.vue"
 import HudOverlay from "./HudOverlay.vue"
 import OnlineWindow from "./OnlineWindow.vue"
-import { initNet, stopNet } from "./net.js"
+import QuickPanel from "./QuickPanel.vue"
+import { initNet, stopNet, openOnlineAt } from "./net.js"
 import { getState } from "./state.js"
 import { startPerfStore, stopPerfStore } from "./perfStore.js"
 
@@ -18,12 +19,21 @@ let hudApp = null
 let hudEl = null
 let onlineApp = null
 let onlineEl = null
+let quickApp = null
+let quickEl = null
 
 function addGrnfrButton(addButton) {
   addButton({
     title: "GRNFR Mod",
     iconId: "wrench",
     action: () => { getState().open = true },
+  })
+  // Case par serveur (nom, joueurs connectés, bouton Rejoindre) : ouvre directement l'onglet Serveurs,
+  // sans passer par le tableau de bord. Fonctionne depuis le menu principal, avant même de charger une carte.
+  addButton({
+    title: "Rejoindre",
+    iconId: "wrench",
+    action: () => { openOnlineAt("servers") },
   })
 }
 
@@ -48,6 +58,12 @@ export async function onLoad() {
   document.body.appendChild(onlineEl)
   onlineApp = createApp(OnlineWindow)
   onlineApp.mount(onlineEl)
+  // Fenêtre rapide (touche J) : chat de serveur, joueurs, repère, argent, échange, courses de drag
+  quickEl = document.createElement("div")
+  quickEl.id = "grnfr-quick-root"
+  document.body.appendChild(quickEl)
+  quickApp = createApp(QuickPanel)
+  quickApp.mount(quickEl)
   initNet().catch(e => console.error("[GRNFR] online", e))
   try {
     await lua.extensions.ui_pause_actions.registerModButton({
@@ -73,6 +89,8 @@ export async function onUnload() {
   stopNet()
   onlineApp?.unmount()
   onlineEl?.remove()
-  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = null
+  quickApp?.unmount()
+  quickEl?.remove()
+  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = null
   try { await lua.extensions.ui_pause_actions.unregisterModButton(PAUSE_BUTTON_ID) } catch (e) { /* ignoré */ }
 }

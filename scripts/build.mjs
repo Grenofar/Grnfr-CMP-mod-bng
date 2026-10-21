@@ -9,16 +9,24 @@ import zlib from "node:zlib"
 import { fileURLToPath } from "node:url"
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const MOD = path.join(ROOT, "mod")
+// Le dossier du mod est mod/grnfr-mod/ : son CONTENU (lua/, ui/, mod_info/, scripts/, settings/) doit être
+// à la racine du zip, sans dossier "grnfr-mod" autour (sinon BeamNG ne charge pas le mod).
+const MOD = path.join(ROOT, "mod", "grnfr-mod")
 const OUT = path.join(ROOT, "public")
 const URL_ = (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "")
 const KEY = (process.env.SUPABASE_ANON_KEY || "").trim()
 
 function fail(msg) { console.error("\n[build] ERREUR : " + msg + "\n"); process.exit(1) }
+if (!fs.existsSync(MOD)) fail("Dossier introuvable : " + MOD)
+// Le mod doit TOUJOURS être relié à un serveur Supabase : un zip construit sans URL/clé ne doit jamais être
+// distribué. Pour un essai local volontairement non relié : GRNFR_ALLOW_UNLINKED=1 node scripts/build.mjs
 const missing = !URL_ || !KEY
 if (missing) {
-  if (process.env.VERCEL_ENV === "production") fail("SUPABASE_URL et SUPABASE_ANON_KEY doivent être définies dans Vercel (Settings > Environment Variables).")
-  console.warn("[build] ATTENTION : SUPABASE_URL / SUPABASE_ANON_KEY absentes : le mod construit ne sera relié à aucun serveur (OK pour un test local).")
+  if (process.env.GRNFR_ALLOW_UNLINKED === "1") {
+    console.warn("[build] ATTENTION : SUPABASE_URL / SUPABASE_ANON_KEY absentes : le mod construit ne sera relié à aucun serveur (GRNFR_ALLOW_UNLINKED=1, build de test local uniquement).")
+  } else {
+    fail("SUPABASE_URL et SUPABASE_ANON_KEY doivent être définies (Vercel > Settings > Environment Variables, ou dans l'environnement avant de lancer le build). Le mod livré doit toujours être relié au serveur. Pour un build de test local volontairement non relié : GRNFR_ALLOW_UNLINKED=1 node scripts/build.mjs")
+  }
 }
 if (!missing) {
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)$/i.test(URL_)) console.warn("[build] L'URL Supabase ne ressemble pas à https://xxxx.supabase.co : vérifiez-la.")

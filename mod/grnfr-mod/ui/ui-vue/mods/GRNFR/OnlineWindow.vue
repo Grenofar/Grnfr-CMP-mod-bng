@@ -7,6 +7,7 @@
         <span v-if="logged" class="who">{{ net.username }} · {{ money(profile.balance) }}</span>
         <button type="button" class="hb" @click="ui('window.close')">✕ {{ t('close') }}</button>
       </header>
+      <div v-if="net.updateAvailable" class="bar upd">{{ t('update_available').replace('{v}', net.updateAvailable) }}</div>
       <nav>
         <button v-for="x in tabs" :key="x" type="button" :class="{ on: tab === x }" @click="tab = x">{{ t('t_' + x) }}</button>
       </nav>
@@ -84,8 +85,10 @@
           <p v-else class="mut">{{ t('srv_off') }}</p>
         </section>
 
-        <!-- GARAGE -->
+        <!-- GARAGE : la tablette ne s'ouvre qu'à proximité de VOTRE point de garage (un par carte) -->
         <section v-else-if="tab === 'garage'">
+          <p v-if="!garageNear" class="warn">{{ t('garage_far') }}{{ garageDist !== null ? ' (' + garageDist + ' m)' : '' }}</p>
+          <template v-else>
           <p class="mut">{{ (me.vehicles || []).length }}/{{ profile.garage_slots }}</p>
           <p v-if="!(me.vehicles || []).length" class="mut">{{ t('garage_empty') }}</p>
           <div v-for="v in me.vehicles" :key="v.id" class="card">
@@ -101,6 +104,7 @@
               </template>
             </div>
           </div>
+          </template>
         </section>
 
         <!-- CONCESSION -->
@@ -212,6 +216,8 @@ const logged = computed(() => net.status === "in")
 const me = computed(() => net.me || {})
 const profile = computed(() => net.me?.profile || {})
 const taxi = computed(() => net.game.taxi || {})
+const garageNear = computed(() => !!net.game.garage?.near)
+const garageDist = computed(() => (typeof net.game.garage?.dist === "number" ? net.game.garage.dist : null))
 const place = computed(() => net.places[f.place] || null)
 const tabs = computed(() => ["account", "servers", "garage", "dealer", "market", "trades", "board", "taxi", "bus"].concat(profile.value.is_admin ? ["admin"] : []))
 const money = n => "$" + Number(n || 0).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
@@ -259,6 +265,9 @@ async function askTaxi() {
   await act(() => rpc("request_taxi", { p_level: net.game.level || null, p_pickup: net.game.pos, p_dropoff: { x: p.x, y: p.y, z: p.z, name: p.name }, p_distance_m: null }))
 }
 
+// Bouton "Rejoindre" du menu principal : force l'onglet Serveurs à l'ouverture.
+watch(() => net.open, open => { if (open && net.wantTab) { tab.value = net.wantTab; net.wantTab = null } })
+
 let poll = null
 function loadTab() {
   net.error = ""; msg.value = ""
@@ -284,6 +293,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 6px 12px; backg
 nav { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-bottom: 1px solid rgba(255, 102, 0, 0.3);
   button { padding: 3px 10px; color: #fff; cursor: pointer; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 102, 0, 0.4); border-radius: 4px; &.on, &:hover { background: var(--ac); } } }
 .bar { padding: 4px 12px; font-size: 12px; background: rgba(74, 222, 128, 0.1); border-bottom: 1px solid rgba(74, 222, 128, 0.3); }
+.bar.upd { background: rgba(245, 185, 66, 0.15); border-bottom: 1px solid rgba(245, 185, 66, 0.4); color: #f5b942; font-weight: 600; }
 main { flex: 1; overflow-y: auto; padding: 10px 14px; }
 h4 { margin: 12px 0 6px; color: var(--ac); font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }

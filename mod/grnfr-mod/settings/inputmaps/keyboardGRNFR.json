@@ -5,12 +5,12 @@
       "control": "k"
     },
     {
-      "action": "grnfr_chase_go",
-      "control": "j"
-    },
-    {
       "action": "grnfr_online_toggle",
       "control": "o"
+    },
+    {
+      "action": "grnfr_quick_toggle",
+      "control": "j"
     }
   ]
 }

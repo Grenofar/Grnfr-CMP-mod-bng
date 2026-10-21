@@ -6,7 +6,7 @@
 import { reactive } from "vue"
 import { useBridge } from "@/bridge"
 import cfg from "./serverConfig.js"
-import { callLua, unwrapObj } from "./luaCall.js"
+import { callLua, unwrapObj, unwrapList } from "./luaCall.js"
 
 export const net = reactive({
   configured: !String(cfg.url).startsWith("__"),
@@ -14,11 +14,16 @@ export const net = reactive({
   username: "", email: "", me: null,
   error: "", info: "",
   open: false, lang: "fr",
+  quickOpen: false,       // petite fenêtre rapide (touche J) : chat, joueurs, drag
+  dragCount: null,        // compte à rebours de départ d'une course de drag (3,2,1, puis 0 = TOP), null = masqué
+  wantTab: null,          // onglet à afficher à la prochaine ouverture (bouton "Rejoindre" du menu principal)
   game: {},               // état poussé par le Lua (GRNFROnline) : taxi, bus, véhicules sortis, destination
   places: [],
   server: null,           // { id, name, max_players } si on est dans un serveur de jeu
   players: [],            // les autres joueurs du serveur (pseudo, carte, position...)
   syncErr: "",
+  modVersion: null,       // version du mod installé (Lua, événement GRNFRStatic)
+  updateAvailable: null,  // version plus récente publiée sur le site (null si à jour ou non vérifié)
 })
 
 const KEY = "grnfr_auth"
@@ -26,6 +31,7 @@ let auth = null          // { access, refresh, exp }
 let started = false
 let bridge = null
 let syncBusy = false, lastPos = null, lastHb = 0, rejoining = false
+let lastConvoy = null // dernière position des 2 voitures de trafic, envoyée par Lua si je suis l'hôte du serveur
 let offs = []
 
 // ------------------------------------------------------------------ stockage du jeton (jamais dans les logs)
@@ -99,6 +105,12 @@ function engineLua(code) { const a = api(); if (a) { try { a.engineLua(code) } c
 function sendResult(id, ok, obj) { engineLua("extensions.grnfr_online.onNetResult(" + Number(id) + "," + (ok ? "true" : "false") + "," + luaStr(JSON.stringify(obj)) + ")") }
 
 export const ui = (name, args) => callLua("ui", name, JSON.stringify(args || {}))
+
+// Ouvre la fenêtre GRNFR Online directement sur un onglet donné (bouton "Rejoindre" du menu principal / menu pause).
+export function openOnlineAt(tab) {
+  net.wantTab = tab || null
+  return ui("window.open")
+}
 
 // ------------------------------------------------------------------ messages d'erreur lisibles
 const ERR = {
@@ -188,9 +200,27 @@ export async function signOut() {
 // ------------------------------------------------------------------ serveurs de jeu
 function setServerLocal(srv) {
   net.server = srv
-  if (!srv) net.players = []
+  if (!srv) { net.players = []; lastConvoy = null }
   const interval = Math.max(150, Number(net.me?.config?.sync_interval_ms) || 300)
   ui("server.state", { joined: !!srv, name: srv?.name || "", intervalMs: interval })
+}
+
+// ------------------------------------------------------------------ mise à jour du mod
+// Compare la version du mod (Lua) à la dernière release publiée sur le site. Vérifié une seule fois par
+// lancement : le joueur recopie lui-même le zip dans son dossier mods, BeamNG n'installe rien tout seul.
+let updateChecked = false
+function newerVersion(a, b) {
+  const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number)
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) }
+  return false
+}
+async function checkUpdate() {
+  if (updateChecked || !net.configured || !net.modVersion) return
+  updateChecked = true
+  try {
+    const latest = await rpcPublic("get_latest_release", {})
+    if (latest && newerVersion(latest.version, net.modVersion)) net.updateAvailable = latest.version
+  } catch (e) { /* pas d'inquiétude : on retentera au prochain lancement */ }
 }
 
 export async function listServers() { return rpc("get_servers") }
@@ -206,16 +236,23 @@ export async function leaveServer() {
   setServerLocal(null)
 }
 
-// Réception de ma position (Lua) -> server_sync -> envoi des autres joueurs au Lua.
+// Position des 2 voitures de trafic partagé, envoyée par Lua uniquement si je suis l'hôte du serveur (voir convoy.lua).
+function onConvoySelf(d) {
+  const c = unwrapList(d)
+  if (Array.isArray(c)) lastConvoy = c
+}
+
+// Réception de ma position (Lua) -> server_sync -> envoi des autres joueurs (et du trafic partagé) au Lua.
 async function onSelf(d) {
   const s = unwrapObj(d)
   if (!s || !net.server || syncBusy || net.status !== "in") return
   syncBusy = true
   try {
-    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null })
+    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null, p_convoy: lastConvoy })
     net.syncErr = ""
     net.players = r.players || []
     engineLua("extensions.grnfr_ghosts.onSync(" + luaStr(JSON.stringify({ players: net.players })) + ")")
+    engineLua("extensions.grnfr_convoy.onSync(" + luaStr(JSON.stringify({ isHost: r.is_host === true, convoy: r.convoy || null })) + ")")
   } catch (e) {
     if (e.code === "not_in_server" && net.server && !rejoining) { // place libérée (coupure réseau) : on tente de revenir
       rejoining = true
@@ -250,11 +287,23 @@ export async function initNet() {
   const on = (name, fn) => { b.events.on(name, fn); offs.push(() => b.events.off(name, fn)) }
   on("GRNFRNetReq", onNetReq)
   on("GRNFRSelf", onSelf)
+  on("GRNFRConvoySelf", onConvoySelf)
   on("GRNFRPos", onPos)
   on("GRNFROnline", d => { const g = unwrapObj(d); if (g) net.game = g })
   on("GRNFRPlaces", d => { const g = unwrapObj(d); if (g?.places) net.places = g.places })
   on("GRNFROnlineWin", d => { const g = unwrapObj(d); if (g) net.open = !!g.open })
-  on("GRNFRStatic", d => { const g = unwrapObj(d); if (g?.settings?.lang) net.lang = g.settings.lang })
+  on("GRNFRQuickWin", d => { const g = unwrapObj(d); if (g) net.quickOpen = !!g.open })
+  on("GRNFRDragCount", d => {
+    const g = unwrapObj(d)
+    if (!g || typeof g.value !== "number") return
+    net.dragCount = g.value
+    if (g.value === 0) setTimeout(() => { net.dragCount = null }, 1200)
+  })
+  on("GRNFRStatic", d => {
+    const g = unwrapObj(d)
+    if (g?.settings?.lang) net.lang = g.settings.lang
+    if (g?.version && g.version !== net.modVersion) { net.modVersion = g.version; checkUpdate() }
+  })
   loadAuth()
   if (auth) { // session précédente : on la reprend sans redemander le mot de passe
     net.status = "busy"

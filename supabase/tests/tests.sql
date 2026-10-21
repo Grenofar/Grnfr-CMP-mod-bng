@@ -272,6 +272,30 @@ select t.root();
 select t.eq((select m.veh ->> 'model' from server_members m join profiles p on p.id = m.user_id where p.username = 'alice'), 'unicycle', 'véhicule invalide ignoré (ancien conservé)');
 select t.eq((select m.pos ->> 'x' from server_members m join profiles p on p.id = m.user_id where p.username = 'alice'), '1', 'position invalide ignorée');
 
+-- ---------- trafic partagé (2 voitures IA) : hôte = joueur présent depuis le plus longtemps sur le serveur
+select t.login('00000000-0000-0000-0000-00000000000a');
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) ->> 'is_host')::boolean, true, 'alice (arrivée la première sur Serveur 1) est hôte du trafic');
+select t.login('00000000-0000-0000-0000-00000000000b');
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) ->> 'is_host')::boolean, false, 'bob n''est pas hôte');
+-- bob n'est pas hôte : le trafic qu'il envoie est ignoré
+select public.server_sync('west_coast_usa', null, null, null, null,
+  '[{"pos":{"x":1,"y":1,"z":1},"veh":{"model":"covet"}},{"pos":{"x":2,"y":2,"z":2},"veh":{"model":"pickup"}}]'::jsonb);
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) -> 'convoy'), null::jsonb, 'trafic envoyé par un non-hôte ignoré');
+select t.login('00000000-0000-0000-0000-00000000000a');
+select public.server_sync('west_coast_usa', null, null, null, null,
+  '[{"pos":{"x":10,"y":20,"z":3},"rot":[0,0,0,1],"veh":{"model":"covet","config":"base"}},{"pos":{"x":15,"y":20,"z":3},"veh":{"model":"pickup"}}]'::jsonb);
+select t.eq(jsonb_array_length(public.server_sync('west_coast_usa', null, null, null, null) -> 'convoy'), 2, 'trafic de l''hôte enregistré (2 voitures)');
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) -> 'convoy' -> 0 -> 'veh' ->> 'model'), 'covet', 'modèle de la 1re voiture de trafic reçu');
+select t.login('00000000-0000-0000-0000-00000000000b');
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) -> 'convoy' -> 1 -> 'pos' ->> 'x')::float8, 15::float8, 'bob voit la position du trafic envoyé par l''hôte');
+-- l'hôte quitte : le joueur suivant par ancienneté (bob) devient hôte au prochain appel
+select t.login('00000000-0000-0000-0000-00000000000a');
+select public.leave_server();
+select t.login('00000000-0000-0000-0000-00000000000b');
+select t.eq((public.server_sync('west_coast_usa', null, null, null, null) ->> 'is_host')::boolean, true, 'alice partie : bob prend le relais (hôte)');
+select t.login('00000000-0000-0000-0000-00000000000a');
+select public.join_server(t.srv('Serveur 1')); -- alice revient (remet Serveur 1 à 4 joueurs pour la suite des tests)
+
 -- changer de serveur = quitter l'ancien ; un joueur absent depuis trop longtemps libère sa place
 select t.login('00000000-0000-0000-0000-00000000000b');
 select public.join_server(t.srv('Serveur 3'));
@@ -311,5 +335,109 @@ select t.root(); update profiles set is_admin = false where username = 'alice';
 select t.eq((select count(*) from game_servers)::int, 4, 'serveur créé par un admin');
 select t.eq((select count(*) from profiles p where p.balance <> (select coalesce(sum(amount), 0) from transactions x where x.user_id = p.id))::int, 0,
             'INVARIANT toujours vrai après les tests de serveurs');
+
+-- ---------- chat de serveur (dave et erin_ok sont sur Serveur 1 à ce stade)
+select t.login('00000000-0000-0000-0000-00000000000d');
+select public.send_chat_message('Salut !');
+select t.login('00000000-0000-0000-0000-00000000000e');
+select public.send_chat_message('Hello');
+select t.eq(jsonb_array_length(public.get_chat_messages(10)), 2, 'les 2 messages sont reçus');
+select t.eq((public.get_chat_messages(10) -> 0 ->> 'username'), 'dave', 'ordre chronologique : dave en premier');
+select t.fails($$select public.send_chat_message('')$$, 'bad_message');
+select t.login('00000000-0000-0000-0000-00000000000c'); -- carol n'est plus sur aucun serveur à ce stade
+select t.fails($$select public.send_chat_message('x')$$, 'not_in_server');
+select t.fails($$select public.get_chat_messages(10)$$, 'not_in_server');
+select t.anon();
+select t.fails($$select public.send_chat_message('x')$$, 'permission denied');
+
+-- ---------- garages par serveur (un par place occupée, jamais celui d'un autre)
+select t.login('00000000-0000-0000-0000-00000000000d');
+select t.eq((public.claim_garage_spot('west_coast_usa', '{"x":100,"y":200,"z":0}') ->> 'slot')::int, 0, 'premier garage demandé = place 0');
+select t.eq((public.claim_garage_spot('west_coast_usa', '{"x":999,"y":999,"z":0}') ->> 'slot')::int, 0, 're-appel : même place');
+select t.eq((public.claim_garage_spot('west_coast_usa', '{"x":999,"y":999,"z":0}') -> 'pos' ->> 'x')::float8, 100::float8, 'position jamais déplacée après coup');
+select t.login('00000000-0000-0000-0000-00000000000e');
+select t.eq((public.claim_garage_spot('west_coast_usa', '{"x":300,"y":400,"z":0}') ->> 'slot')::int, 1, 'deuxième joueur = place différente (1)');
+select t.eq(jsonb_array_length(public.get_server_garage_spots()), 2, '2 garages visibles sur Serveur 1');
+select t.anon();
+select t.fails($$select public.claim_garage_spot('west_coast_usa', '{"x":1,"y":1,"z":0}')$$, 'permission denied');
+-- complet (places 2 et 3 occupées par alice, qui a été expulsée du serveur = place abandonnée) : récupérée par frank
+select t.root();
+insert into garage_spots (server_id, slot, user_id, level, pos) values
+  (t.srv('Serveur 1'), 2, '00000000-0000-0000-0000-00000000000a', 'west_coast_usa', '{"x":1,"y":1,"z":0}'),
+  (t.srv('Serveur 1'), 3, '00000000-0000-0000-0000-00000000000a', 'west_coast_usa', '{"x":2,"y":2,"z":0}');
+select t.login('00000000-0000-0000-0000-00000000000f');
+select t.fails($$select public.claim_garage_spot('west_coast_usa', '{"x":5,"y":5,"z":0}')$$, 'not_in_server');
+select public.join_server(t.srv('Serveur 1'));
+select t.eq((public.claim_garage_spot('west_coast_usa', '{"x":5,"y":5,"z":0}') ->> 'slot')::int, 2, 'garage complet : place abandonnée (alice, plus sur ce serveur) récupérée');
+select t.root();
+select t.eq((select count(*) from garage_spots where server_id = t.srv('Serveur 1') and user_id = '00000000-0000-0000-0000-00000000000a')::int, 1,
+            'une seule des 2 places d''alice reste (l''autre a été reprise par frank)');
+
+-- ---------- courses de drag (mise d'argent, une seule par serveur, anti-triche limité sur le temps)
+select t.login('00000000-0000-0000-0000-00000000000d');
+select t.fails($$select public.propose_drag_race('west_coast_usa', '{"x":0,"y":0,"z":0}', '{"x":50,"y":0,"z":0}')$$, 'too_short');
+select public.propose_drag_race('west_coast_usa', '{"x":0,"y":0,"z":0}', '{"x":400,"y":0,"z":0}');
+select t.root();
+create function t.race() returns uuid language sql security definer as $$ select id from public.drag_races order by created_at desc limit 1 $$;
+grant execute on function t.race() to anon, authenticated;
+select t.login('00000000-0000-0000-0000-00000000000d');
+select t.fails($$select public.propose_drag_race('west_coast_usa', '{"x":0,"y":0,"z":0}', '{"x":400,"y":0,"z":0}')$$, 'race_active');
+select t.fails($$select public.start_drag_race(t.race())$$, 'not_enough_players');
+select public.join_drag_race(t.race(), 1000);
+select t.fails($$select public.join_drag_race(t.race(), 1000)$$, 'already_in');
+select t.fails($$select public.join_drag_race(t.race(), 10)$$, 'bad_stake');
+select t.login('00000000-0000-0000-0000-00000000000e');
+select public.join_drag_race(t.race(), 2000);
+select t.login('00000000-0000-0000-0000-00000000000f');
+select t.fails($$select public.start_drag_race(t.race())$$, 'forbidden');
+select t.login('00000000-0000-0000-0000-00000000000d');
+select t.eq((select pot from drag_races where id = t.race()), 3000::bigint, 'le pot = la somme des 2 mises');
+select public.start_drag_race(t.race());
+select t.fails($$select public.join_drag_race(t.race(), 1000)$$, 'betting_closed');
+select t.fails($$select public.report_drag_finish(t.race(), 1)$$, 'too_fast');
+select public.report_drag_finish(t.race(), 15000);
+select t.eq((select status from drag_races where id = t.race()), 'running', 'course toujours en cours (erin n''a pas encore de temps)');
+select t.login('00000000-0000-0000-0000-00000000000e');
+select public.report_drag_finish(t.race(), 20000);
+select t.root();
+select t.eq((select status from drag_races where id = t.race()), 'finished', 'course terminée : tout le monde a un temps');
+select t.eq((select username from profiles where id = (select winner_id from drag_races where id = t.race())), 'dave', 'dave (le plus rapide) gagne');
+select t.eq((select balance from profiles where username = 'dave'), 27000::bigint, 'dave : -1000 (mise) +3000 (pot) = +2000');
+select t.eq((select balance from profiles where username = 'erin_ok'), 23000::bigint, 'erin : -2000 (mise), perdue');
+-- 2e course : désistement remboursé, puis annulation si l'hôte part
+select t.login('00000000-0000-0000-0000-00000000000f');
+select public.propose_drag_race('west_coast_usa', '{"x":1000,"y":0,"z":0}', '{"x":1300,"y":0,"z":0}');
+select public.join_drag_race(t.race(), 500);
+select t.login('00000000-0000-0000-0000-00000000000d');
+select public.join_drag_race(t.race(), 500);
+select t.eq((select balance from profiles where username = 'dave'), 26500::bigint, 'dave mise 500 sur la 2e course');
+select public.leave_drag_race(t.race());
+select t.eq((select balance from profiles where username = 'dave'), 27000::bigint, 'dave remboursé après désistement');
+select t.login('00000000-0000-0000-0000-00000000000f');
+select public.leave_drag_race(t.race()); -- l'hôte part : course annulée, tout le monde remboursé
+select t.eq((select balance from profiles where username = 'frank'), 25000::bigint, 'frank remboursé (hôte parti = course annulée)');
+select t.eq((select status from drag_races where id = t.race()), 'cancelled', 'course annulée (hôte parti pendant les mises)');
+select t.fails($$select public.join_drag_race(t.race(), 500)$$, 'betting_closed');
+select t.root();
+select t.eq((select count(*) from profiles p where p.balance <> (select coalesce(sum(amount), 0) from transactions x where x.user_id = p.id))::int, 0,
+            'INVARIANT toujours vrai après chat, garages et courses de drag');
+
+-- ---------- releases du mod (lecture publique, écriture réservée au service_role / superutilisateur)
+select t.root();
+select t.eq(public.get_latest_release(), 'null'::jsonb, 'aucune release au départ');
+select t.eq(public.get_releases(10), '[]'::jsonb, 'aucune release dans la liste au départ');
+select t.anon();
+select t.fails($$insert into public.mod_releases (version, file_path, size, sha256) values ('1.0.0', 'grnfr-online.zip', 100, repeat('a', 64))$$, 'permission denied');
+select t.root();
+insert into public.mod_releases (version, file_path, size, sha256, notes) values ('1.1.0', 'grnfr-online-v1.1.0.zip', 123456, repeat('a', 64), 'Première release');
+select t.fails($$insert into public.mod_releases (version, file_path, size, sha256) values ('1.1.0', 'dup.zip', 1, repeat('b', 64))$$, 'duplicate key');
+insert into public.mod_releases (version, file_path, size, sha256, notes) values ('1.2.0', 'grnfr-online-v1.2.0.zip', 222222, repeat('b', 64), 'Deuxième release');
+select t.anon();
+select t.eq((public.get_latest_release() ->> 'version'), '1.2.0', 'get_latest_release renvoie la dernière version');
+select t.eq(jsonb_array_length(public.get_releases(10)), 2, 'historique : 2 releases');
+select t.eq((public.get_releases(10) -> 0 ->> 'version'), '1.2.0', 'historique trié du plus récent au plus ancien');
+select t.fails($$update public.mod_releases set is_latest = true where version = '1.1.0'$$, 'permission denied');
+select t.fails($$delete from public.mod_releases$$, 'permission denied');
+select t.root();
 
 \echo === TOUS LES TESTS PASSENT ===

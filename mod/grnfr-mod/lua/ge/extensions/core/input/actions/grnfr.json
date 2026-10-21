@@ -7,20 +7,20 @@
     "title": "GRNFR Mod : ouvrir / fermer",
     "desc": "Ouvre ou ferme le GRNFR Mod"
   },
-  "grnfr_chase_go": {
-    "cat": "general",
-    "order": 901,
-    "ctx": "tlua",
-    "onDown": "if extensions.grnfr then extensions.grnfr.chaseGo() end",
-    "title": "GRNFR Mod : jouer le chase",
-    "desc": "Reprend le jeu une fois la voiture de police en place (Chase)"
-  },
   "grnfr_online_toggle": {
     "cat": "general",
-    "order": 902,
+    "order": 901,
     "ctx": "tlua",
     "onDown": "if extensions.grnfr then extensions.grnfr.toggleOnline() end",
     "title": "GRNFR Online : ouvrir / fermer",
     "desc": "Ouvre ou ferme la fenêtre GRNFR Online (compte, serveurs, garage, marché, taxi, bus)"
+  },
+  "grnfr_quick_toggle": {
+    "cat": "general",
+    "order": 902,
+    "ctx": "tlua",
+    "onDown": "if extensions.grnfr then extensions.grnfr.toggleQuick() end",
+    "title": "GRNFR : fenêtre rapide (chat, joueurs, drag)",
+    "desc": "Ouvre ou ferme la petite fenêtre rapide : chat de serveur, liste des joueurs, repère, argent, échange, courses de drag"
   }
 }

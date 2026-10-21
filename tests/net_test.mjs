@@ -1,22 +1,22 @@
-// Test du client réseau (mod/ui/.../net.js) avec un faux Supabase et un faux pont BeamNG. Usage : node tests/net_test.mjs
+// Test du client réseau (mod/grnfr-mod/ui/.../net.js) avec un faux Supabase et un faux pont BeamNG. Usage : node tests/net_test.mjs
 import fs from "fs"
 import path from "path"
 import os from "os"
 import assert from "assert"
 import { pathToFileURL } from "url"
 
-const SRC = path.resolve("mod/ui/ui-vue/mods/GRNFR/net.js")
+const SRC = path.resolve("mod/grnfr-mod/ui/ui-vue/mods/GRNFR/net.js")
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "grnfr-"))
 let code = fs.readFileSync(SRC, "utf8")
 code = code.replace('import { reactive } from "vue"', "const reactive = x => x")
   .replace('import { useBridge } from "@/bridge"', 'import { useBridge } from "./bridge_stub.mjs"')
   .replace('import cfg from "./serverConfig.js"', 'const cfg = { url: "https://fake.supabase.co", anonKey: "anon" }')
-  .replace('import { callLua, unwrapObj } from "./luaCall.js"', 'import { callLua, unwrapObj } from "./lua_stub.mjs"')
+  .replace('import { callLua, unwrapObj, unwrapList } from "./luaCall.js"', 'import { callLua, unwrapObj, unwrapList } from "./lua_stub.mjs"')
 fs.writeFileSync(path.join(tmp, "net.mjs"), code)
 const lcalls = [], engine = [], handlers = {}
 globalThis.__t = { lcalls, engine, handlers }
 fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.engine.push(c) } })`)
-fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d`)
+fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d\nexport const unwrapList = d => d`)
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
 
 // ---------- faux Supabase

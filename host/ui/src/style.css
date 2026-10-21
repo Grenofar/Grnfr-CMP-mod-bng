@@ -1,0 +1,66 @@
+:root {
+  --ac: #ff6600;
+  --bg: #0a0a0a;
+  --card: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 102, 0, 0.35);
+  --mut: rgba(255, 255, 255, 0.6);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: #fff;
+  font: 15px/1.4 "Segoe UI", "Overpass", sans-serif;
+}
+.wrap {
+  max-width: 420px;
+  margin: 48px auto;
+  padding: 0 20px;
+}
+h1 { color: var(--ac); margin: 0 0 4px; font-size: 26px; }
+.sub { color: var(--mut); margin: 0 0 20px; }
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--mut);
+}
+label.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+}
+input[type="text"], input[type="password"], input[type="number"] {
+  padding: 8px 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font: inherit;
+}
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ac); }
+button {
+  padding: 10px 16px;
+  font: 600 14px "Overpass", "Segoe UI", sans-serif;
+  color: #fff;
+  background: var(--ac);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+button:hover { background: #ff7a1a; }
+.status { color: #4ade80; margin: 0; font-size: 13px; }
+.error { color: #ff6b6b; font-size: 13px; }
+.note { color: var(--mut); font-size: 12px; margin: 0; }
+.mut { color: var(--mut); }
