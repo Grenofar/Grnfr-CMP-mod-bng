@@ -18,7 +18,7 @@ use eframe::egui;
 use logger::log;
 use relay::ServerState;
 
-pub const VERSION: &str = "0.3.0";
+pub const VERSION: &str = "0.3.1";
 
 fn main() {
     log(&format!("=== GRNFR Host CMP v{} ===", VERSION));
