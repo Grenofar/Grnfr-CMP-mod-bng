@@ -2,7 +2,7 @@
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
   'grnfr_places', 'grnfr_nav', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
-  'grnfr_chat', 'grnfr_track', 'grnfr_drag' }
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile' }
 
 local VERSION = '2.0.2'
 local uiAttached = false
@@ -195,6 +195,12 @@ local ROUTES = {
   ['drag.leave']      = function() grnfr_drag.leave() end,
   ['drag.start']      = function() grnfr_drag.start() end,
   ['drag.forceFinish'] = function() grnfr_drag.forceFinish() end,
+  ['profile.export']  = function(a)
+    local ok, path = grnfr_profile.export(a)
+    guihooks.trigger('GRNFRProfileExport', { ok = ok == true, path = path })
+  end,
+  ['profile.list']    = function() guihooks.trigger('GRNFRProfileList', { list = grnfr_profile.list() }) end,
+  ['profile.import']  = function(a) guihooks.trigger('GRNFRProfileImport', { data = grnfr_profile.read(a.path) }) end,
   ['auth']            = function(a)
     grnfr_online.setAuth(a.loggedIn, a.username)
     if a.loggedIn ~= true then

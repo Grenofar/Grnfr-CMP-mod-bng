@@ -24,10 +24,13 @@ export const net = reactive({
   syncErr: "",
   modVersion: null,       // version du mod installé (Lua, événement GRNFRStatic)
   updateAvailable: null,  // version plus récente publiée sur le site (null si à jour ou non vérifié)
+  profiles: [],           // profils trouvés sur cette machine (settings/grnfr/profiles/*.grnfrprofile.json)
+  exportedPath: "",       // chemin du dernier profil exporté (pour l'afficher au joueur)
 })
 
 const KEY = "grnfr_auth"
 let auth = null          // { access, refresh, exp }
+let sessionToken = null  // anti-partage : invalidé si une autre connexion a lieu avec le même compte
 let started = false
 let bridge = null
 let syncBusy = false, lastPos = null, lastHb = 0, rejoining = false
@@ -124,6 +127,9 @@ const ERR = {
     invalid_login_credentials: "E-mail ou mot de passe incorrect.", "Invalid login credentials": "E-mail ou mot de passe incorrect.",
     "User already registered": "Un compte existe déjà avec cet e-mail.", email_not_confirmed: "Confirmez d'abord votre e-mail (lien reçu).",
     "Database error saving new user": "Pseudo invalide ou déjà pris.",
+    anonymous_provider_disabled: "Création de profil indisponible (connexions anonymes désactivées sur le serveur).",
+    session_replaced: "Votre profil a été utilisé ailleurs : vous avez été déconnecté ici.",
+    bad_profile: "Fichier de profil invalide ou illisible.",
   },
   en: {
     network: "Cannot reach the server (network).", not_configured: "This mod is not linked to a server (see the website).",
@@ -135,6 +141,9 @@ const ERR = {
     invalid_login_credentials: "Wrong e-mail or password.", "Invalid login credentials": "Wrong e-mail or password.",
     "User already registered": "An account already exists with this e-mail.", email_not_confirmed: "Confirm your e-mail first (link sent).",
     "Database error saving new user": "Invalid or already taken username.",
+    anonymous_provider_disabled: "Cannot create a profile (anonymous sign-ins are disabled on the server).",
+    session_replaced: "Your profile was used somewhere else: you were disconnected here.",
+    bad_profile: "Invalid or unreadable profile file.",
   },
 }
 export function errText(e) {
@@ -150,6 +159,7 @@ export async function usernameAvailable(name) {
 async function afterLogin() {
   await refreshMe()
   net.status = "in"
+  try { sessionToken = await rpc("start_session") } catch (e) { sessionToken = null } // anti-partage : best-effort
   await ui("auth", { loggedIn: true, username: net.username })
 }
 
@@ -183,6 +193,26 @@ export async function signUp(email, password, username) {
   } catch (e) { net.status = "out"; net.error = errText(e) }
 }
 
+// Création de profil simplifiée : pas d'e-mail ni de mot de passe. Connexion anonyme Supabase (à activer :
+// Authentication > Providers > Anonymous Sign-Ins), puis choix du pseudo (set_username). Ce qui prouve que
+// c'est vous ensuite, c'est le jeton de session gardé ici (voir exportProfile/importProfile) : à exporter
+// avant de changer de PC, sinon la progression reste associée à cette seule machine.
+export async function signUpAnonymous(username) {
+  net.error = ""; net.info = ""
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username || "")) { net.error = errText({ code: "username_invalid" }); return false }
+  net.status = "busy"
+  try {
+    const free = await usernameAvailable(username)
+    if (free === false) { net.status = "out"; net.error = errText({ code: "username_taken" }); return false }
+    const d = await http("/auth/v1/signup", {})
+    if (!d || !d.access_token) { net.status = "out"; net.error = errText({ code: "anon_failed" }); return false }
+    setSession(d)
+    await afterLogin()
+    const ok = await chooseUsername(username)
+    return ok
+  } catch (e) { net.status = "out"; net.error = errText(e); return false }
+}
+
 export async function chooseUsername(name) {
   net.error = ""
   try { await rpc("set_username", { p_username: name }); await refreshMe(); await ui("auth", { loggedIn: true, username: net.username }); return true }
@@ -192,9 +222,42 @@ export async function chooseUsername(name) {
 export async function signOut() {
   try { if (net.server) await rpc("leave_server") } catch (e) { /* ignoré */ }
   setServerLocal(null)
-  auth = null; saveAuth()
+  auth = null; saveAuth(); sessionToken = null
   net.status = "out"; net.me = null; net.username = ""
   await ui("auth", { loggedIn: false })
+}
+
+// Déconnexion forcée : une autre connexion a eu lieu avec le même profil (voir session_replaced). On ne
+// prévient pas le serveur (il a déjà sa nouvelle session) : juste un nettoyage local + message clair.
+function forceSignOutReplaced() {
+  setServerLocal(null)
+  auth = null; saveAuth(); sessionToken = null
+  net.status = "out"; net.me = null; net.username = ""
+  net.error = errText({ code: "session_replaced" })
+  ui("auth", { loggedIn: false })
+}
+
+// ------------------------------------------------------------------ profil portable (export/import)
+// Le fichier exporté contient le jeton de connexion actuel : c'est tout ce qu'il faut pour redevenir "vous"
+// sur une autre machine (voir profile.lua). Rien d'économique n'est dupliqué : l'argent et le garage restent
+// décidés par le serveur, lus à nouveau au prochain login, où qu'il ait lieu.
+export function exportProfile() {
+  if (!auth?.refresh || !net.username) return
+  ui("profile.export", { username: net.username, refresh: auth.refresh })
+}
+export function requestProfiles() { ui("profile.list") }
+export async function importProfile(path) {
+  net.error = ""
+  ui("profile.import", { path })
+}
+function onProfileImport(d) {
+  const g = unwrapObj(d)
+  const data = g && g.data
+  if (!data || !data.refresh) { net.error = errText({ code: "bad_profile" }); return }
+  auth = { access: null, refresh: data.refresh, exp: 0 } // force un rafraîchissement immédiat
+  saveAuth()
+  net.status = "busy"
+  refresh().then(afterLogin).catch(e => { net.status = "out"; net.error = errText(e) })
 }
 
 // ------------------------------------------------------------------ serveurs de jeu
@@ -248,13 +311,14 @@ async function onSelf(d) {
   if (!s || !net.server || syncBusy || net.status !== "in") return
   syncBusy = true
   try {
-    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null, p_convoy: lastConvoy })
+    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null, p_convoy: lastConvoy, p_session: sessionToken })
     net.syncErr = ""
     net.players = r.players || []
     engineLua("extensions.grnfr_ghosts.onSync(" + luaStr(JSON.stringify({ players: net.players })) + ")")
     engineLua("extensions.grnfr_convoy.onSync(" + luaStr(JSON.stringify({ isHost: r.is_host === true, convoy: r.convoy || null })) + ")")
   } catch (e) {
-    if (e.code === "not_in_server" && net.server && !rejoining) { // place libérée (coupure réseau) : on tente de revenir
+    if (e.code === "session_replaced") { forceSignOutReplaced() }
+    else if (e.code === "not_in_server" && net.server && !rejoining) { // place libérée (coupure réseau) : on tente de revenir
       rejoining = true
       try { await rpc("join_server", { p_server: net.server.id }) } catch (e2) { net.error = errText(e2); setServerLocal(null) }
       rejoining = false
@@ -270,7 +334,8 @@ async function onPos(d) {
   lastPos = p
   if (Date.now() - lastHb < 15000) return
   lastHb = Date.now()
-  try { await rpc("heartbeat", { p_level: p.level || null, p_pos: p.pos || null, p_duty: p.duty || "none" }); await refreshMe() } catch (e) { /* prochain essai */ }
+  try { await rpc("heartbeat", { p_level: p.level || null, p_pos: p.pos || null, p_duty: p.duty || "none", p_session: sessionToken }); await refreshMe() }
+  catch (e) { if (e.code === "session_replaced") forceSignOutReplaced() }
 }
 
 async function onNetReq(d) {
@@ -293,6 +358,9 @@ export async function initNet() {
   on("GRNFRPlaces", d => { const g = unwrapObj(d); if (g?.places) net.places = g.places })
   on("GRNFROnlineWin", d => { const g = unwrapObj(d); if (g) net.open = !!g.open })
   on("GRNFRQuickWin", d => { const g = unwrapObj(d); if (g) net.quickOpen = !!g.open })
+  on("GRNFRProfileExport", d => { const g = unwrapObj(d); if (g?.ok) net.exportedPath = g.path || "" })
+  on("GRNFRProfileList", d => { const g = unwrapObj(d); if (g) net.profiles = g.list || [] })
+  on("GRNFRProfileImport", onProfileImport)
   on("GRNFRDragCount", d => {
     const g = unwrapObj(d)
     if (!g || typeof g.value !== "number") return

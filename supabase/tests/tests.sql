@@ -440,4 +440,28 @@ select t.fails($$update public.mod_releases set is_latest = true where version =
 select t.fails($$delete from public.mod_releases$$, 'permission denied');
 select t.root();
 
+-- ---------- profils portables (connexion anonyme, pseudo seulement) et anti-partage de compte
+select t.root();
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-0000000000a1', null, '{}'::jsonb);
+select t.eq((select username_confirmed from profiles where id = '00000000-0000-0000-0000-0000000000a1'), false, 'connexion anonyme : pseudo non confirmé');
+select t.eq((select username like 'profile\_%' from profiles where id = '00000000-0000-0000-0000-0000000000a1'), true, 'pseudo temporaire généré');
+select t.eq((select balance from profiles where id = '00000000-0000-0000-0000-0000000000a1'), 25000::bigint, 'argent de départ même pour un compte anonyme');
+
+select t.login('00000000-0000-0000-0000-0000000000a1');
+select t.eq((public.get_me() -> 'profile' ->> 'username_confirmed')::boolean, false, 'get_me expose username_confirmed (faux)');
+select public.set_username('newplayer');
+select t.eq((public.get_me() -> 'profile' ->> 'username'), 'newplayer', 'pseudo choisi après une connexion anonyme');
+select t.eq((public.get_me() -> 'profile' ->> 'username_confirmed')::boolean, true, 'confirmé après set_username');
+
+-- anti-partage : une deuxième connexion invalide le jeton de la précédente
+select public.start_session() as tok1 \gset
+select t.eq(public.heartbeat(null, null, null, :'tok1'::uuid) >= 0, true, 'heartbeat avec le jeton courant accepté');
+select t.eq(public.heartbeat(null, null, null, null) >= 0, true, 'heartbeat sans jeton (compatibilité) toujours accepté');
+select public.start_session() as tok2 \gset
+select t.fails($$select public.heartbeat(null, null, null, :'tok1'::uuid)$$, 'session_replaced');
+select t.eq(public.heartbeat(null, null, null, :'tok2'::uuid) >= 0, true, 'la connexion la plus récente (tok2) continue de fonctionner');
+select t.root();
+select t.eq((select count(*) from profiles p where p.balance <> (select coalesce(sum(amount), 0) from transactions x where x.user_id = p.id))::int, 0,
+            'INVARIANT toujours vrai après les profils portables');
+
 \echo === TOUS LES TESTS PASSENT ===
