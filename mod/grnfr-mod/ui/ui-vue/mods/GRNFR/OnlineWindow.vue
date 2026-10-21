@@ -30,7 +30,7 @@
             <div class="form">
               <h4>{{ t('quick_create') }}</h4>
               <input v-model="f.pseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkPseudo" />
-              <small :class="pseudoState === 'free' ? 'good' : 'bad'">{{ pseudoHint }}</small>
+              <small :class="hintClass(pseudoState)">{{ pseudoHint }}</small>
               <button type="button" class="btn" :disabled="busy || pseudoState !== 'free'" @click="net_createProfile">{{ t('create_profile') }}</button>
 
               <div class="row">
@@ -50,7 +50,7 @@
                 <input v-model="f.password" type="password" :placeholder="t('password')" autocomplete="off" />
                 <template v-if="reg">
                   <input v-model="f.username" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkName" />
-                  <small :class="nameState === 'free' ? 'good' : 'bad'">{{ nameHint }}</small>
+                  <small :class="hintClass(nameState)">{{ nameHint }}</small>
                 </template>
                 <div class="row">
                   <button v-if="!reg" type="button" class="btn" :disabled="busy" @click="net_signIn">{{ t('signin') }}</button>
@@ -68,7 +68,7 @@
             <h4>{{ t('change_pseudo') }}</h4>
             <div class="row">
               <input v-model="f.newPseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkNewPseudo" />
-              <small :class="newPseudoState === 'free' ? 'good' : 'bad'">{{ newPseudoHint }}</small>
+              <small :class="hintClass(newPseudoState)">{{ newPseudoHint }}</small>
               <button type="button" class="btn" :disabled="busy || newPseudoState !== 'free'" @click="net_changePseudo">{{ t('change_pseudo_do') }}</button>
             </div>
             <h4>{{ t('your_profile') }}</h4>
@@ -98,7 +98,7 @@
           <div v-if="needPseudo" class="form">
             <p class="warn">{{ t('pseudo_needed') }}</p>
             <input v-model="f.username" maxlength="20" :placeholder="t('username')" @input="checkName" />
-            <small :class="nameState === 'free' ? 'good' : 'bad'">{{ nameHint }}</small>
+            <small :class="hintClass(nameState)">{{ nameHint }}</small>
             <button type="button" class="btn" :disabled="nameState !== 'free'" @click="pickName">{{ t('choose') }}</button>
           </div>
           <div class="row">
@@ -286,9 +286,24 @@ const icons = {
   admin: "M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z",
 }
 const money = n => "$" + Number(n || 0).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
-const nameHint = computed(() => nameState.value === "free" ? t("free") : nameState.value === "taken" ? t("taken") : nameState.value === "bad" ? t("badname") : nameState.value === "wait" ? t("checking") : t("badname"))
-const pseudoHint = computed(() => pseudoState.value === "free" ? t("free") : pseudoState.value === "taken" ? t("taken") : pseudoState.value === "wait" ? t("checking") : t("badname"))
-const newPseudoHint = computed(() => newPseudoState.value === "free" ? t("free") : newPseudoState.value === "taken" ? t("taken") : newPseudoState.value === "wait" ? t("checking") : t("badname"))
+// États possibles : "" (rien saisi), "bad" (format invalide), "wait" (vérification en cours),
+// "error" (le serveur n'a pas pu être contacté pour vérifier — PAS un problème de format), "free", "taken".
+function hintFor(state) {
+  if (state === "free") return t("free")
+  if (state === "taken") return t("taken")
+  if (state === "wait") return t("checking")
+  if (state === "error") return t("checkerr")
+  return t("badname")
+}
+const nameHint = computed(() => hintFor(nameState.value))
+const pseudoHint = computed(() => hintFor(pseudoState.value))
+const newPseudoHint = computed(() => hintFor(newPseudoState.value))
+function hintClass(state) {
+  if (state === "free") return "good"
+  if (state === "wait") return "mut"
+  if (state === "error") return "warn"
+  return "bad"
+}
 const filteredServers = computed(() => {
   const q = (f.srvSearch || "").trim().toLowerCase()
   if (!q) return d.servers
@@ -301,28 +316,31 @@ function focus(e, on) { const tg = e.target?.tagName; if (tg === "INPUT" || tg =
 let nameTimer = null
 function checkName() {
   clearTimeout(nameTimer)
-  const n = f.username
+  const n = f.username.trim()
+  if (!n) { nameState.value = ""; return }
   if (!/^[A-Za-z0-9_]{3,20}$/.test(n)) { nameState.value = "bad"; return }
   nameState.value = "wait"
-  nameTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.username) nameState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
+  nameTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.username.trim()) nameState.value = ok === null ? "error" : ok ? "free" : "taken" }, 350)
 }
 
 let pseudoTimer = null
 function checkPseudo() {
   clearTimeout(pseudoTimer)
-  const n = f.pseudo
+  const n = f.pseudo.trim()
+  if (!n) { pseudoState.value = ""; return }
   if (!/^[A-Za-z0-9_]{3,20}$/.test(n)) { pseudoState.value = "bad"; return }
   pseudoState.value = "wait"
-  pseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.pseudo) pseudoState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
+  pseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.pseudo.trim()) pseudoState.value = ok === null ? "error" : ok ? "free" : "taken" }, 350)
 }
 
 let newPseudoTimer = null
 function checkNewPseudo() {
   clearTimeout(newPseudoTimer)
-  const n = f.newPseudo
+  const n = f.newPseudo.trim()
+  if (!n) { newPseudoState.value = ""; return }
   if (!/^[A-Za-z0-9_]{3,20}$/.test(n)) { newPseudoState.value = "bad"; return }
   newPseudoState.value = "wait"
-  newPseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.newPseudo) newPseudoState.value = ok === null ? "" : ok ? "free" : "taken" }, 350)
+  newPseudoTimer = setTimeout(async () => { const ok = await usernameAvailable(n); if (n === f.newPseudo.trim()) newPseudoState.value = ok === null ? "error" : ok ? "free" : "taken" }, 350)
 }
 
 async function wrap(fn) { busy.value = true; try { await fn() } finally { busy.value = false } }
@@ -391,12 +409,12 @@ onBeforeUnmount(() => clearInterval(poll))
 
 <style lang="scss" scoped>
 .onw { position: fixed; inset: 0; z-index: 2147482500; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); pointer-events: auto; }
-.win { --ac: #ff6600; width: 1020px; max-width: 96vw; height: 680px; max-height: 92vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.82); border: 1px solid var(--ac); border-radius: 8px;
+.win { --ac: #ff6600; width: 1180px; max-width: 97vw; height: 780px; max-height: 94vh; display: flex; flex-direction: column; background: rgba(10, 10, 10, 0.62); backdrop-filter: blur(6px); border: 1px solid var(--ac); border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 102, 0, 0.15); color: #fff; font: 14px/1.35 "Overpass", "Segoe UI", sans-serif; overflow: hidden; * { box-sizing: border-box; } }
-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.42); border-bottom: 2px solid var(--ac);
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(0, 0, 0, 0.3); border-bottom: 2px solid var(--ac);
   .title { font: 700 19px "Overpass", sans-serif; color: var(--ac); letter-spacing: 0.02em; } .who { flex: 1; text-align: right; color: rgba(255, 255, 255, 0.75); font-size: 13px; } }
 .body { flex: 1; display: flex; min-height: 0; }
-.tabs { display: flex; flex-direction: column; gap: 3px; padding: 10px; width: 180px; flex: none; border-right: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.28); overflow-y: auto;
+.tabs { display: flex; flex-direction: column; gap: 3px; padding: 10px; width: 190px; flex: none; border-right: 1px solid rgba(255, 102, 0, 0.3); background: rgba(0, 0, 0, 0.18); overflow-y: auto;
   button { display: flex; align-items: center; gap: 10px; background: none; border: 0; border-radius: 6px; color: rgba(255, 255, 255, 0.6); padding: 9px 10px; font: inherit; cursor: pointer; text-align: left;
     transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
     &:hover { background: rgba(255, 102, 0, 0.16); color: #fff; transform: translateX(3px); }

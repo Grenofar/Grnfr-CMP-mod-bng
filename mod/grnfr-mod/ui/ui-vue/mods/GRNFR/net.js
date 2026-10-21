@@ -177,7 +177,8 @@ export async function signIn(email, password) {
 // Inscription : le pseudo est OBLIGATOIRE et doit être libre (vérifié avant, puis refusé aussi par la base si besoin).
 export async function signUp(email, password, username) {
   net.error = ""; net.info = ""
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username || "")) { net.error = errText({ code: "username_invalid" }); return }
+  username = (username || "").trim()
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) { net.error = errText({ code: "username_invalid" }); return }
   net.status = "busy"
   try {
     const free = await usernameAvailable(username)
@@ -194,7 +195,8 @@ export async function signUp(email, password, username) {
 // avant de changer de PC, sinon la progression reste associée à cette seule machine.
 export async function signUpAnonymous(username) {
   net.error = ""; net.info = ""
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username || "")) { net.error = errText({ code: "username_invalid" }); return false }
+  username = (username || "").trim()
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) { net.error = errText({ code: "username_invalid" }); return false }
   net.status = "busy"
   try {
     const free = await usernameAvailable(username)
@@ -210,6 +212,7 @@ export async function signUpAnonymous(username) {
 
 export async function chooseUsername(name) {
   net.error = ""
+  name = (name || "").trim()
   try { await rpc("set_username", { p_username: name }); await refreshMe(); await ui("auth", { loggedIn: true, username: net.username }); return true }
   catch (e) { net.error = errText(e); return false }
 }
@@ -217,7 +220,8 @@ export async function chooseUsername(name) {
 // Renommage d'un pseudo déjà confirmé (contrairement à set_username, utilisable une fois le compte créé).
 export async function changeUsername(name) {
   net.error = ""; net.info = ""
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(name || "")) { net.error = errText({ code: "username_invalid" }); return false }
+  name = (name || "").trim()
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(name)) { net.error = errText({ code: "username_invalid" }); return false }
   try {
     await rpc("change_username", { p_username: name })
     await refreshMe()
