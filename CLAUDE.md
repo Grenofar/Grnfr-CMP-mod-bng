@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.11.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.12.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -635,17 +635,73 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     le tableau de bord) n'a jamais été vérifié en conditions réelles (conflit possible avec une touche déjà prise
     par BeamNG ou un autre mod, non vérifiable hors jeu).
 
+- **Grand chantier Phase B — verrouillage de la configuration véhicule native (mod 2.12.0)**, demandé explicitement
+  par l'utilisateur en cours de session (« qu'on puisse pas configurer le véhicule à part avec l'ui dans le
+  garage de GRNFR CMP »).
+  - **🔎 Découverte importante en lisant les vraies sources du jeu** (BeamNG installé sur cette machine,
+    `F:\SteamLibrary\steamapps\common\BeamNG.drive\lua\ge\extensions\core\vehicle\partmgmt.lua`, 1971 lignes) :
+    ceci répond enfin à la question ouverte depuis le point 1/2bis du TODO (« trouver la vraie API de changement
+    de pièces »). Le VRAI `core_vehicle_partmgmt` :
+    - `setPartsConfig` **existe mais est dépréciée** (elle ne fait plus que `log('E', ..., 'please use the new
+      function setPartsTreeConfig instead')`) — donc le nom que `computer.lua` essayait en premier depuis 2.7.0
+      n'aurait jamais fonctionné.
+    - La vraie fonction est `M.setPartsTreeConfig(dataTree, respawn, part)` : `dataTree` est un ARBRE hiérarchique
+      (pas un `{slot: partKey}` plat), forme exacte encore à déterminer (pas trouvée dans cette lecture — à
+      extraire par exemple d'un fichier `.pc` réel ou de `buildConfigFromString`/`getRichPartInfo` dans le même
+      fichier). Fait `extensions.hook('onPartsTreeConfigChanged', ...)` puis `mergeConfig({partsTree = dataTree},
+      respawn)`.
+    - Peinture : `M.setConfigPaints(data, respawn, explicitVehicleId)` → `mergeConfig({paints = data}, respawn)`
+      — `data` est une structure de données de peinture (pas directement r/g/b/a comme `obj:setColor` suppose),
+      forme exacte aussi à vérifier. `obj:setColor()` (déjà utilisé par `computer.lua`) reste probablement valide
+      EN PARALLÈLE pour un effet visuel immédiat sans passer par le système de config/respawn — les deux ne sont
+      pas forcément incompatibles, mais ce sont deux mécanismes différents.
+    - Réglages (tuning) : `M.setConfigVars(data, respawn)` → `mergeConfig({vars = data}, respawn)`.
+    - **Point important** : `mergeConfig`/`mergeConfigOfVehicle` (qui font le vrai travail : fusion dans
+      `vehicleData.config`, puis `veh:respawn(serialize(vehicleData.config))` si `respawn=true`) sont des
+      fonctions **locales** à `partmgmt.lua`, donc inaccessibles depuis l'extérieur — seules 5 fonctions
+      PUBLIQUES y donnent accès : `setConfig`, `setConfigOfVehicle` (alias de `mergeConfig`/`mergeConfigOfVehicle`),
+      `setConfigPaints`, `setConfigVars`, `setPartsTreeConfig`. **Tout changement de config passe forcément par
+      une de ces 5**, ce qui en fait un point de verrouillage complet et fiable (voir ci-dessous).
+    - Changer des pièces nécessite normalement un **respawn** du véhicule (c'est comme ça que le jeu applique un
+      nouveau jbeam) — donc même une fois la vraie API utilisée, `computer.lua` devra probablement faire
+      respawn le véhicule pour qu'un changement de pièce soit visible, pas juste appeler une fonction qui ne
+      lèverait pas d'erreur. **`computer.lua` n'a pas encore été réécrit pour utiliser ces 5 vraies fonctions**
+      (toujours les anciens appels spéculatifs, voir TODO point 1/2bis) — cette découverte prépare cette correction
+      pour une prochaine passe, elle n'a pas encore été appliquée dans ce passage-ci (hors sujet de la Phase B).
+  - **Le verrouillage lui-même (ce qui était demandé)** : `computer.lua` enveloppe (monkey-patch) les 5 fonctions
+    publiques ci-dessus dès que `core_vehicle_partmgmt` devient disponible (`M.update()`, appelé à chaque image
+    depuis `grnfr.lua`, s'auto-désactive une fois le verrou installé). Tant qu'on est en ligne GRNFR
+    (`grnfr_online.isAuthed()` + `grnfr_ghosts.status().joined`), un appel qui ne vient pas de notre propre module
+    (drapeau `applying`, prévu pour être posé autour de nos futurs appels une fois `computer.lua` réécrit avec les
+    vraies fonctions) est bloqué : retourne sans rien faire + message au joueur (« Configuration bloquée :
+    utilisez l'ordinateur du garage GRNFR CMP. »). Hors ligne (carrière solo, etc.), rien n'est bloqué. Risque
+    documenté dans le code : si le jeu changeait un jour la configuration par une AUTRE voie non trouvée dans
+    cette lecture, elle ne serait pas couverte — à revérifier avec le `BeamNG.log` si un joueur arrive malgré tout
+    à configurer nativement en ligne.
+  - **Pas fait dans cette passe** : le nettoyage du menu Échap (« on voit toujours l'ancien UI ») — demande trop
+    vague pour agir sans plus de précisions (quel écran exactement, quel résultat attendu ?), **à clarifier avec
+    l'utilisateur** plutôt que deviner une modification du menu pause natif (risque réel de casser l'accès à des
+    réglages légitimes du jeu, comme les graphismes).
+  - Vérifié hors jeu : `luaparse` sur `computer.lua`/`grnfr.lua`, `node tests/net_test.mjs` (30/30). **Jamais
+    ouvert dans le vrai jeu** — en particulier, jamais vérifié que `core_vehicle_partmgmt` est bien le nom
+    d'extension chargé tel quel (lu depuis le fichier source, mais le nom d'extension exposé dans `_G`/
+    `extensions` à l'exécution n'a pas été confirmé en jeu réel), et jamais vérifié que le monkey-patch résiste à
+    un rechargement de l'extension native (qui recréerait `M` et perdrait notre enveloppe — à surveiller).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
-1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
-   mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
-   (`core_vehicle_partmgmt` ou équivalent) pour que « Pièces »/« Réglages » changent vraiment le véhicule, pas
-   seulement la base de données ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
+1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
+   La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
+   réécrit pour l'utiliser** — reste à faire avant de pouvoir dire que « Pièces »/« Réglages » changent vraiment
+   le véhicule ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
 2. **Phase 2 — missions / livraisons comme la carrière, en multi** — **colis fait (mod 2.6.0, voir ci-dessus) ;
    le reste est repris et élargi dans la Phase D du grand chantier plus bas** (entreprises, poids/distance,
    salarié, blocage sans pièce de fret).
-2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — reste à vérifier en
-   jeu que `core_vehicle_partmgmt` (ou l'API réelle, encore à trouver) applique vraiment la pièce achetée au
-   véhicule, pas seulement en base.
+2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — la vraie API
+   `core_vehicle_partmgmt` a maintenant été TROUVÉE en lisant les sources du jeu (mod 2.12.0, Phase B, voir § Fait
+   ci-dessus : 5 fonctions publiques `setConfig`/`setConfigOfVehicle`/`setConfigPaints`/`setConfigVars`/
+   `setPartsTreeConfig`), mais **`computer.lua` n'a pas encore été réécrit pour les utiliser** (toujours les
+   anciens appels spéculatifs qui ne marchaient probablement pas) — reste à faire : forme exacte de l'arbre de
+   pièces attendu par `setPartsTreeConfig`, et gérer le respawn du véhicule que ça implique.
 2ter. ~~**Garage : signalé en jeu par l'utilisateur, « je me suis trouvé dans une sorte de petite tente pour les
    courses, qui n'est pas un garage »**~~ **Diagnostiqué et corrigé (mod 2.7.1)**. Grâce à l'installation BeamNG
    trouvée sur cette machine : inspection directe de
@@ -685,7 +741,8 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
    ci-dessous (hors-sujet de la demande du 22/10/2026) — à refaire une passe dédiée plus tard.
 5. Divers en attente : publier host 0.6.0 ; vérifier en jeu l'unité de `Power` des fiches véhicules (supposée kW)
    et l'affichage des images `/vehicles/...` dans le CEF ; **vérifier l'ordinateur du garage en jeu réel** (point 1
-   ci-dessus) — peinture, et surtout trouver la vraie API de changement de pièces ; **launcher/host détectés par
+   ci-dessus) — peinture, et réécrire `computer.lua` avec les vraies fonctions `core_vehicle_partmgmt` trouvées
+   (voir 2bis/Phase B) ; **launcher/host détectés par
    plusieurs antivirus sur VirusTotal** (voir § `launcher/` specifics ci-dessus), non résolu, nécessite un
    certificat de signature de code ou une soumission aux éditeurs d'antivirus.
 
@@ -757,15 +814,10 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - ~~Message d'arrivée mentionnant les deux touches~~ Fait.
    - **Reporté** : la disposition HUD native BeamNG basée sur « Basic Mission Layout » avec chat intégré — zone
      non explorée (aucun fichier de layout HUD dans ce repo), à investiguer avant de coder quoi que ce soit.
-**Phase B — Verrouillage de la configuration véhicule** :
-   - Empêcher toute configuration de pièces/réglages/peinture par le menu natif BeamNG (parts selector/configurateur
-     accessible depuis Échap ou le sélecteur de véhicule) tant qu'on est en ligne GRNFR — seul l'ordinateur du
-     garage (Personnaliser) doit pouvoir changer un véhicule. Mécanisme exact à investiguer (désactiver l'entrée de
-     menu, bloquer l'action clavier correspondante, ou intercepter l'ouverture de cette UI native) — pas encore de
-     piste technique vérifiée.
-   - Nettoyer le menu Échap en jeu : CLAUDE.md note déjà que taper Échap montre encore « l'ancien UI » au lieu de
-     rediriger proprement vers GRNFR CMP — à corriger en même temps (branding cohérent, pas de menu BeamNG résiduel
-     visible).
+~~**Phase B — Verrouillage de la configuration véhicule**~~ **Fait pour la partie verrouillage (mod 2.12.0, voir
+§ Fait ci-dessus — monkey-patch des 5 vraies fonctions `core_vehicle_partmgmt`)** :
+   - **Reste ouvert** : nettoyer le menu Échap (« on voit toujours l'ancien UI ») — demande trop vague pour agir,
+     à clarifier avec l'utilisateur avant de toucher au menu pause natif.
 **Phase C — Véhicules taxi/bus, classes perf/confort** :
    - Chaque véhicule du catalogue reçoit une classe de performance et une classe de confort (nouvelles colonnes,
      `dealership_catalog`/`garage_vehicles` probablement).

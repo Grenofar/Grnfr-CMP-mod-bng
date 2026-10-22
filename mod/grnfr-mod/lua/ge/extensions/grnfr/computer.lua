@@ -18,8 +18,70 @@ local M = {}
 
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
 local function num(x) x = tonumber(x) if x and x == x then return x end end
+local function online() return rawget(_G, 'grnfr_online') end
+local function L(fr, en) local o = online() return o and o.L(fr, en) or fr end
+local function toast(m, k) local o = online() if o then o.toast(m, k) end end
 
 function M.isNear() return grnfr_garage.isNear() end
+
+-- ------------------------------------------------------------------ verrouillage de la config native (grand
+-- chantier Phase B, 22/10/2026) : tant qu'on est en ligne GRNFR, toute pièce/réglage/peinture doit passer par
+-- CET ordinateur, jamais par le configurateur natif du jeu (menu Échap ou sélecteur de véhicule). Découverte en
+-- lisant les vraies sources du jeu (BeamNG installé sur cette machine,
+-- lua/ge/extensions/core/vehicle/partmgmt.lua) : TOUT changement de pièces/vars/peinture passe forcément par une
+-- de ces 5 fonctions PUBLIQUES de core_vehicle_partmgmt (les fonctions qui font le vrai travail, mergeConfig/
+-- mergeConfigOfVehicle, sont locales à ce fichier et donc inaccessibles depuis l'extérieur) : setConfig,
+-- setConfigOfVehicle, setConfigPaints, setConfigVars, setPartsTreeConfig (setPartsConfig existe mais le jeu lui-
+-- même ne fait plus que logger une erreur, dépréciée). On les remplace chacune par une enveloppe qui laisse
+-- passer l'appel UNIQUEMENT si CE module vient de l'appeler lui-même (drapeau `applying`, posé juste autour de
+-- nos propres appels) ; sinon, si on est en ligne GRNFR, l'appel est bloqué (retourne nil sans rien faire) et un
+-- message explique pourquoi. Hors ligne (carrière solo, etc.), rien n'est bloqué.
+-- Risque connu : si le jeu appelle une AUTRE fonction encore pour changer la config (non trouvée dans cette
+-- lecture du code), elle ne serait pas couvrue -- à revérifier avec le BeamNG.log si un joueur arrive malgré tout
+-- à configurer nativement pendant qu'il est en ligne.
+local ENTRY_POINTS = { 'setConfig', 'setConfigOfVehicle', 'setConfigPaints', 'setConfigVars', 'setPartsTreeConfig' }
+local hooked, applying = false, false
+
+local function lockActive()
+  local o = online()
+  local gh = rawget(_G, 'grnfr_ghosts')
+  return o and o.isAuthed() and gh and gh.status and gh.status().joined == true
+end
+
+local function tryInstallLock()
+  if hooked then return end
+  local pm = rawget(_G, 'core_vehicle_partmgmt')
+  if not pm then return end
+  hooked = true
+  for _, name in ipairs(ENTRY_POINTS) do
+    local orig = pm[name]
+    if type(orig) == 'function' then
+      pm[name] = function(...)
+        if applying or not lockActive() then return orig(...) end
+        toast(L('Configuration bloquée : utilisez l\'ordinateur du garage GRNFR CMP.',
+          'Configuration blocked: use the GRNFR CMP garage computer.'), 'warning')
+        slog('warn', 'Computer: blocked a native vehicle configuration call (' .. name .. ') while online.')
+        return nil
+      end
+    end
+  end
+  slog('info', 'Computer: native vehicle configuration is now locked while online (GRNFR computer only, lockdown installed).')
+end
+
+-- Appelé à chaque image par grnfr.lua (M.tick) : installe le verrou dès que core_vehicle_partmgmt existe (ordre
+-- de chargement des extensions non garanti), puis ne fait plus rien (hooked = true).
+function M.update() pcall(tryInstallLock) end
+
+-- À utiliser autour de nos PROPRES appels à core_vehicle_partmgmt, une fois que applyParts/applyPaint/applyTuning
+-- les utiliseront vraiment (pas encore le cas, voir plus bas) : fn() s'exécute avec le verrou désactivé.
+local function withLockDisabled(fn)
+  local prev = applying
+  applying = true
+  local ok, err = pcall(fn)
+  applying = prev
+  if not ok then slog('warn', 'Computer: error while applying our own config change: ' .. tostring(err)) end
+end
+M.withLockDisabled = withLockDisabled
 
 local function liveObj(vehicleId)
   local sp = grnfr_online.spawnedList()

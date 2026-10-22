@@ -5,7 +5,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
   'grnfr_delivery' }
 
-local VERSION = '2.11.0'
+local VERSION = '2.12.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -477,6 +477,7 @@ function M.tick(dtReal)
     pcall(function() timer:stopAndReset() end) -- garde le chronomètre synchronisé
   end
   grnfr_perf.sample(dtReal)
+  grnfr_computer.update() -- verrouille la config véhicule native dès que core_vehicle_partmgmt est disponible
   do -- GRNFR Online : actif seulement dans une partie où il est autorisé
     local d0 = tonumber(dtReal) or 0
     if d0 > 0.5 then d0 = 0.5 end
