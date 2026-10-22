@@ -17,7 +17,7 @@ use tauri::Manager;
 use logger::log;
 use relay::HostState;
 
-pub const VERSION: &str = "0.5.0";
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
