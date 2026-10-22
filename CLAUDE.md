@@ -135,11 +135,17 @@ session, tokens and error handling) and gets results back via engine events (`GR
 `connect-src 'self' localhost 127.0.0.1`, so every `fetch()` to Supabase failed with "Failed to fetch" for every
 player (diagnosed in v2.1.5–2.1.7 by wrongly chasing firewalls/DNS; the real proof was in `BeamNG.log`:
 `violates the following Content Security Policy directive`). `net.js`'s `http()` therefore sends each request to
-`grnfr/http.lua` (`extensions.grnfr_http.request(...)`), which calls the engine's native curl client
-`SecureComm.apiCall` (same as `core/online.lua` — hypothesis API, pcall-wrapped) and returns the response via the
-`GRNFRHttp` event. That client only takes one header (`authorizationHeader`), so the anon key goes in the URL
-(`?apikey=`). Consequence: the session token *does* reach Lua, but only in `grnfr_http.request` — `http.lua`
-must never log the URL or the Authorization value. When a network bug is reported, ask for `BeamNG.log`
+`grnfr/http.lua` (`extensions.grnfr_http.request(...)`), a small non-blocking HTTPS client written on the game's
+bundled LuaSocket (`require('socket')`) + LuaSec (`require('ssl')`): one coroutine per request, advanced every frame
+by `grnfr_http.update` (called from `grnfr.lua`'s `M.tick`, menu included), sets SNI itself (Cloudflare in front of
+Supabase requires it), `verify='none'` (no CA store in the game — known limitation), response returned via the
+`GRNFRHttp` event. Do **not** go back to either of these, both tried and failed: the engine's `SecureComm.apiCall`
+(v2.1.8 — only serves BeamNG's own API, silently never answered for Supabase) and `copas.http` (bundled, but never
+sets SNI). On load, `http.lua` logs to `BeamNG.log` (`grnfr_http`) whether `socket`/`ssl` loaded, and one line per
+request (method + path, never the query). The anon key is also in the URL (`?apikey=`, left from the v2.1.8
+design, harmless). The session token *does* reach Lua, but only in `grnfr_http.request` — `http.lua` must never log
+the URL or the Authorization value. `http.lua`'s response parsing (incl. chunked) was run under `fengari`
+(npm Lua VM) but the network path has only ever been tested in the real game, if at all — check the log. When a network bug is reported, ask for `BeamNG.log`
 (`%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log`) first: CEF console errors are written there.
 `grnfr_online.call(fn, args, cb)` (`online.lua`) is a
 **generic RPC bridge**: any Supabase RPC can be invoked through it without adding new event plumbing — this
