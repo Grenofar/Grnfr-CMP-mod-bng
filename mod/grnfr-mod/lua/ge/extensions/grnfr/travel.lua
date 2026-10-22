@@ -56,8 +56,9 @@ end
 
 -- level = nom de dossier de carte (ex. west_coast_usa) ; pos = {x,y,z} d'un joueur déjà présent, ou nil.
 -- level absent (serveur vide) : on reste sur la carte actuelle, ou depuis le menu principal on charge DEFAULT_LEVEL.
+-- beforeLoad (facultatif) : appelé juste avant de lancer le chargement d'une carte (fermer les fenêtres du mod).
 local DEFAULT_LEVEL = 'west_coast_usa'
-function M.go(level, pos)
+function M.go(level, pos, beforeLoad)
   if level == nil then
     if grnfr_places.level() ~= 'unknown' then return true end
     level, pos = DEFAULT_LEVEL, nil
@@ -77,6 +78,7 @@ function M.go(level, pos)
   slog('info', 'Travel: loading the server map (' .. level .. ').')
   grnfr_online.toast(L('Chargement de la carte du serveur : ', 'Loading the server map: ') .. level)
   target, waitAcc = { level = level, pos = pos }, 0
+  if beforeLoad then pcall(beforeLoad) end
   if not loadLevel(level) then
     target = nil
     slog('warn', 'Travel: the game refused to load the map.')

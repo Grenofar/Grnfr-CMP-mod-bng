@@ -4,7 +4,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel' }
 
-local VERSION = '2.3.0'
+local VERSION = '2.3.1'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -213,7 +213,9 @@ local ROUTES = {
     grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
     if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
   end,
-  ['server.travel']   = function(a) grnfr_travel.go(a.level, a.pos) end,
+  ['server.travel']   = function(a)
+    grnfr_travel.go(a.level, a.pos, function() setOnlineOpen(false); setQuickOpen(false) end)
+  end,
   ['typing']          = function(a) grnfr_online.setTyping(a.on) end,
   ['places.refresh']  = function() grnfr_online.requestPlaces() end,
   ['garage.spawn']    = function(a)
