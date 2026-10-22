@@ -283,7 +283,7 @@ function hintFor(state, raw) {
   if (state === "free") return t("free")
   if (state === "taken") return t("taken")
   if (state === "wait") return t("checking")
-  if (state === "error") return t("checkerr")
+  if (state === "error") return t("checkerr") + (net.lastNetworkDetail ? ` (${net.lastNetworkDetail})` : "")
   if (state === "bad" && raw) return `« ${raw} » : ${t("badname")}`
   return t("badname")
 }

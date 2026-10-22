@@ -25,6 +25,7 @@ export const net = reactive({
   updateAvailable: null,  // version plus récente publiée sur le site (null si à jour ou non vérifié)
   profiles: [],           // profils trouvés sur cette machine (settings/grnfr/profiles/*.grnfrprofile.json)
   exportedPath: "",       // chemin du dernier profil exporté (pour l'afficher au joueur)
+  lastNetworkDetail: "",  // raison brute du dernier échec réseau (fetch) : DNS, TLS, pare-feu, CORS... pour diagnostiquer
 })
 
 const KEY = "grnfr_auth"
@@ -41,7 +42,7 @@ function saveAuth() { try { auth ? localStorage.setItem(KEY, JSON.stringify(auth
 function loadAuth() { try { const a = JSON.parse(localStorage.getItem(KEY) || "null"); if (a && a.refresh) auth = a } catch (e) { /* ignoré */ } }
 
 // ------------------------------------------------------------------ HTTP
-class NetError extends Error { constructor(code, status) { super(code); this.code = code; this.status = status } }
+class NetError extends Error { constructor(code, status, detail) { super(code); this.code = code; this.status = status; this.detail = detail } }
 
 async function http(path, body, token, method = "POST") {
   if (!net.configured) throw new NetError("not_configured", 0)
@@ -52,7 +53,12 @@ async function http(path, body, token, method = "POST") {
       headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: "Bearer " + (token || cfg.anonKey) },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
-  } catch (e) { throw new NetError("network", 0) }
+  } catch (e) {
+    // La cause réelle (DNS, TLS, pare-feu, CORS...) est précieuse pour diagnostiquer à distance : on la
+    // garde dans net.lastNetworkDetail pour l'afficher, plutôt que de la jeter comme avant.
+    net.lastNetworkDetail = (e && (e.message || e.name)) || String(e)
+    throw new NetError("network", 0, net.lastNetworkDetail)
+  }
   let data = null
   try { data = await res.json() } catch (e) { /* corps vide */ }
   if (!res.ok) {
