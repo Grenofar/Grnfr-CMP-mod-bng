@@ -16,6 +16,7 @@ export const net = reactive({
   error: "", info: "",
   open: false, lang: "fr", langChosen: true,
   quickOpen: false,       // petite fenêtre rapide (touche J) : chat, joueurs, drag
+  tablet: { open: false, name: "" }, // tablette du garage (touche O devant son garage) : garage, joueurs, concession...
   dragCount: null,        // compte à rebours de départ d'une course de drag (3,2,1, puis 0 = TOP), null = masqué
   game: {},               // état poussé par le Lua (GRNFROnline) : taxi, bus, véhicules sortis, destination
   places: [],
@@ -425,6 +426,7 @@ export async function initNet() {
   on("GRNFROnline", d => { const g = unwrapObj(d); if (g) net.game = g })
   on("GRNFRPlaces", d => { const g = unwrapObj(d); if (g?.places) net.places = g.places })
   on("GRNFROnlineWin", d => { const g = unwrapObj(d); if (g) net.open = !!g.open })
+  on("GRNFRTabletWin", d => { const g = unwrapObj(d); if (g) net.tablet = { open: !!g.open, name: String(g.name || "") } })
   on("GRNFRQuickWin", d => { const g = unwrapObj(d); if (g) net.quickOpen = !!g.open })
   on("GRNFRProfileExport", d => { const g = unwrapObj(d); if (g?.ok) net.exportedPath = g.path || "" })
   on("GRNFRProfileList", d => { const g = unwrapObj(d); if (g) net.profiles = g.list || [] })

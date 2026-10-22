@@ -118,6 +118,7 @@ function M.update(dt)
 end
 
 function M.isNear() return near end
+function M.name() return mine and mine.name or nil end
 
 function M.status()
   return { pos = mine and mine.pos or nil, slot = mine and mine.slot or nil, near = near, dist = dist and math.floor(dist) or nil }

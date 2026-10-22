@@ -11,6 +11,7 @@ local hudOpen = false
 local bigOpen = false -- grande fenêtre en jeu (bouton Option du HUD)
 local onlineOpen = false -- fenêtre GRNFR Online (touche O)
 local quickOpen = false -- petite fenêtre rapide : chat, joueurs, drag (touche J)
+local tabletOpen = false -- tablette du garage (touche O devant SON garage)
 local acc = 0
 local cntPre, cntUpd, cntPoll, cntSent = 0, 0, 0, 0 -- compteurs de diagnostic (log toutes les 5 s + affichés dans le HUD)
 local modeInfo = { id = 'menu', label = 'Menu principal', session = false }
@@ -157,7 +158,24 @@ local function setOnlineOpen(on)
   pushStatic(true)
   return true
 end
-function M.toggleOnline() return setOnlineOpen(not onlineOpen) end
+
+-- Tablette du garage : seulement devant SON garage (garage.lua), en partie. Touche O : la tablette si on est devant
+-- son garage, sinon la fenêtre GRNFR (compte, serveurs, réglages).
+local function setTabletOpen(on)
+  on = on == true
+  if on and not (modeInfo.session and grnfr_garage.isNear()) then return false end
+  if on and onlineOpen then setOnlineOpen(false) end
+  tabletOpen = on
+  grnfr_online.setFocus(on or onlineOpen or quickOpen)
+  if not on and not onlineOpen and not quickOpen then grnfr_online.setTyping(false) end
+  guihooks.trigger('GRNFRTabletWin', { open = tabletOpen, name = grnfr_garage.name() })
+  return true
+end
+function M.toggleOnline()
+  if tabletOpen then return setTabletOpen(false) end
+  if not onlineOpen and modeInfo.session and grnfr_garage.isNear() then return setTabletOpen(true) end
+  return setOnlineOpen(not onlineOpen)
+end
 
 -- Petite fenêtre rapide (touche J) : chat, liste des joueurs, repère, argent, échange, courses de drag.
 -- Mêmes règles d'ouverture que GRNFR Online (jeu libre / multijoueur, pas en carrière / scénario).
@@ -171,8 +189,8 @@ local function setQuickOpen(on)
     end
   end
   quickOpen = on
-  grnfr_online.setFocus(on or onlineOpen)
-  if not on and not onlineOpen then grnfr_online.setTyping(false) end
+  grnfr_online.setFocus(on or onlineOpen or tabletOpen)
+  if not on and not onlineOpen and not tabletOpen then grnfr_online.setTyping(false) end
   guihooks.trigger('GRNFRQuickWin', { open = quickOpen })
   pushStatic(true)
   return true
@@ -184,6 +202,7 @@ local ROUTES = {
   ['window.open']     = function() setOnlineOpen(true) end,
   ['window.close']    = function() setOnlineOpen(false) end,
   ['quick.open']      = function() setQuickOpen(true) end,
+  ['tablet.close']    = function() setTabletOpen(false) end,
   ['quick.close']     = function() setQuickOpen(false) end,
   ['chat.send']       = function(a) grnfr_chat.send(a.text) end,
   ['track.set']       = function(a) grnfr_track.set(a.username) end,
@@ -214,7 +233,7 @@ local ROUTES = {
     if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
   end,
   ['server.travel']   = function(a)
-    grnfr_travel.go(a.level, a.pos, function() setOnlineOpen(false); setQuickOpen(false) end)
+    grnfr_travel.go(a.level, a.pos, function() setOnlineOpen(false); setQuickOpen(false); setTabletOpen(false) end)
   end,
   ['typing']          = function(a) grnfr_online.setTyping(a.on) end,
   ['places.refresh']  = function() grnfr_online.requestPlaces() end,
@@ -361,6 +380,7 @@ local function resetGameplayFeatures()
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset)
   pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
   if onlineOpen then onlineOpen = false; guihooks.trigger('GRNFROnlineWin', { open = false }) end
+  if tabletOpen then tabletOpen = false; guihooks.trigger('GRNFRTabletWin', { open = false }) end
   if quickOpen then quickOpen = false; guihooks.trigger('GRNFRQuickWin', { open = false }) end
   sessionAge = 0
 end
@@ -457,6 +477,7 @@ function M.tick(dtReal)
     grnfr_http.update(d0)
     grnfr_online.update(d0)
     grnfr_travel.update(d0)
+    if tabletOpen and not grnfr_garage.isNear() then setTabletOpen(false) end -- on s'est éloigné du garage
     if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_convoy.update(d0); grnfr_track.update() end
   end
   if wasSession then grnfr_sessionlog.update(tonumber(dtReal) or 0, (grnfr_perf.get() or {}).avg) end

@@ -8,6 +8,7 @@ import HudOverlay from "./HudOverlay.vue"
 import OnlineWindow from "./OnlineWindow.vue"
 import QuickPanel from "./QuickPanel.vue"
 import ServerBar from "./ServerBar.vue"
+import Tablet from "./Tablet.vue"
 import { initNet, stopNet, ui } from "./net.js"
 import { startPerfStore, stopPerfStore } from "./perfStore.js"
 
@@ -23,6 +24,8 @@ let quickApp = null
 let quickEl = null
 let barApp = null
 let barEl = null
+let tabApp = null
+let tabEl = null
 
 function addGrnfrButton(addButton) {
   // Un seul bouton : ouvre la fenêtre GRNFR CMP (comptes, serveurs, garage... et réglages). Fonctionne depuis
@@ -68,6 +71,12 @@ export async function onLoad() {
   document.body.appendChild(barEl)
   barApp = createApp(ServerBar)
   barApp.mount(barEl)
+  // Tablette du garage (touche O devant son garage) : garage, joueurs, échanges, concession, annonces, travail
+  tabEl = document.createElement("div")
+  tabEl.id = "grnfr-tablet-root"
+  document.body.appendChild(tabEl)
+  tabApp = createApp(Tablet)
+  tabApp.mount(tabEl)
   initNet().catch(e => console.error("[GRNFR] online", e))
   try {
     await lua.extensions.ui_pause_actions.registerModButton({
@@ -96,6 +105,8 @@ export async function onUnload() {
   quickEl?.remove()
   barApp?.unmount()
   barEl?.remove()
-  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = null
+  tabApp?.unmount()
+  tabEl?.remove()
+  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = tabApp = tabEl = null
   try { await lua.extensions.ui_pause_actions.unregisterModButton(PAUSE_BUTTON_ID) } catch (e) { /* ignoré */ }
 }

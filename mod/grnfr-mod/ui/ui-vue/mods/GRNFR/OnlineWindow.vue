@@ -67,11 +67,6 @@
               <span v-if="net.exportedPath" class="mut">{{ t('exported_to') }} {{ net.exportedPath }}</span>
               <button type="button" class="btn dim" @click="switchProfile">{{ t('switch_profile') }}</button>
             </div>
-            <h4>{{ t('send_money') }}</h4>
-            <div class="row">
-              <input v-model="f.to" :placeholder="t('adm_user')" /><input v-model.number="f.amount" type="number" min="1" :placeholder="t('amount')" />
-              <button type="button" class="btn" @click="act(() => rpc('send_money', { p_username: f.to, p_amount: f.amount }), loadTx)">{{ t('send') }}</button>
-            </div>
             <h4>{{ t('history') }}</h4>
             <table class="tb"><tr v-for="x in d.tx" :key="x.id"><td>{{ x.created_at.slice(0, 16).replace('T', ' ') }}</td><td>{{ x.ref || x.kind }}</td><td :class="x.amount < 0 ? 'bad' : 'good'">{{ x.amount > 0 ? '+' : '' }}{{ x.amount }}</td></tr></table>
             <button type="button" class="btn dim" @click="net_signOut">{{ t('signout') }}</button>
@@ -113,103 +108,10 @@
           <p v-else class="mut">{{ t('srv_off') }}</p>
         </section>
 
-        <!-- GARAGE : la tablette ne s'ouvre qu'à proximité de VOTRE point de garage (un par carte) -->
-        <section v-else-if="tab === 'garage'">
-          <p v-if="!garageNear" class="warn">{{ t('garage_far') }}{{ garageDist !== null ? ' (' + garageDist + ' m)' : '' }}</p>
-          <template v-else>
-          <p class="mut">{{ (me.vehicles || []).length }}/{{ profile.garage_slots }}</p>
-          <p v-if="!(me.vehicles || []).length" class="mut">{{ t('garage_empty') }}</p>
-          <div v-for="v in me.vehicles" :key="v.id" class="card">
-            <div class="row"><b>{{ v.nickname || v.model_key }}</b><span class="mut">{{ t('slot') }} {{ v.slot + 1 }} · {{ v.model_key }} · {{ money(v.value) }}</span>
-              <span v-if="v.listed" class="tag">{{ t('listed') }}</span><span v-if="net.game.spawned && net.game.spawned[v.id]" class="tag">{{ t('out_now') }}</span></div>
-            <div class="row">
-              <button v-if="!(net.game.spawned && net.game.spawned[v.id])" type="button" class="btn" @click="ui('garage.spawn', { id: v.id, model_key: v.model_key, config_key: v.config_key, nickname: v.nickname })">{{ t('out') }}</button>
-              <button v-else type="button" class="btn" @click="ui('garage.store', { id: v.id })">{{ t('store') }}</button>
-              <template v-if="!v.listed">
-                <button type="button" class="btn dim" @click="act(async () => { await ui('garage.store', { id: v.id }); await rpc('sell_vehicle_to_dealer', { p_vehicle_id: v.id }) })">{{ t('sell_dealer') }}</button>
-                <input v-model.number="f['p' + v.id]" type="number" min="1" :placeholder="t('price')" class="sm" />
-                <button type="button" class="btn dim" @click="act(() => rpc('create_listing', { p_vehicle_id: v.id, p_price: f['p' + v.id], p_description: null }))">{{ t('list_it') }}</button>
-              </template>
-            </div>
-          </div>
-          </template>
-        </section>
-
-        <!-- CONCESSION -->
-        <section v-else-if="tab === 'dealer'">
-          <div v-for="c in d.catalog" :key="c.id" class="card row">
-            <b>{{ c.name }}</b><span class="mut">{{ money(c.price) }}</span>
-            <button type="button" class="btn" @click="act(() => rpc('buy_vehicle', { p_catalog_id: c.id }))">{{ t('buy') }}</button>
-          </div>
-        </section>
-
-        <!-- ANNONCES -->
-        <section v-else-if="tab === 'market'">
-          <p v-if="!d.market.length" class="mut">{{ t('none') }}</p>
-          <div v-for="l in d.market" :key="l.id" class="card">
-            <div class="row"><b>{{ l.nickname || l.model_key }}</b><span class="mut">{{ l.model_key }} · {{ t('sold_by') }} {{ l.seller }}</span><span class="big sm">{{ money(l.price) }}</span></div>
-            <div v-if="l.description" class="mut">{{ l.description }}</div>
-            <button v-if="l.seller === net.username" type="button" class="btn dim" @click="act(() => rpc('cancel_listing', { p_listing_id: l.id }), loadMarket)">{{ t('cancel_listing') }} {{ t('mine') }}</button>
-            <button v-else type="button" class="btn" @click="act(() => rpc('buy_listing', { p_listing_id: l.id }), loadMarket)">{{ t('buy') }}</button>
-          </div>
-        </section>
-
-        <!-- ÉCHANGES -->
-        <section v-else-if="tab === 'trades'">
-          <div class="form">
-            <div class="row"><input v-model="f.tradeUser" :placeholder="t('trade_with')" /><button type="button" class="btn dim" @click="loadTheirs">{{ t('trade_load') }}</button></div>
-            <select v-model="f.offer"><option value="">{{ t('trade_offer') }} {{ t('nothing') }}</option><option v-for="v in me.vehicles" :key="v.id" :value="v.id">{{ v.nickname || v.model_key }}</option></select>
-            <select v-model="f.want"><option value="">{{ t('trade_want') }} {{ t('nothing') }}</option><option v-for="v in d.theirs" :key="v.id" :value="v.id">{{ v.nickname || v.model_key }} ({{ money(v.value) }})</option></select>
-            <input v-model.number="f.cash" type="number" :placeholder="t('trade_cash')" />
-            <button type="button" class="btn" @click="act(() => rpc('propose_trade', { p_username: f.tradeUser, p_offered: f.offer || null, p_wanted: f.want || null, p_cash: f.cash || 0 }), loadTrades)">{{ t('trade_send') }}</button>
-          </div>
-          <div v-for="x in d.trades" :key="x.id" class="card">
-            <div><b>{{ x.direction === 'in' ? x.proposer : x.target }}</b> <span class="mut">({{ x.direction === 'in' ? t('trade_in') : t('trade_out') }})</span></div>
-            <div class="mut">{{ x.offered ? (x.offered.nickname || x.offered.model_key) : t('nothing') }} ⇄ {{ x.wanted ? (x.wanted.nickname || x.wanted.model_key) : t('nothing') }} · {{ money(x.cash_from_proposer) }}</div>
-            <div class="row">
-              <template v-if="x.direction === 'in'">
-                <button type="button" class="btn" @click="act(() => rpc('respond_trade', { p_trade_id: x.id, p_accept: true, p_slot: null }), loadTrades)">{{ t('accept') }}</button>
-                <button type="button" class="btn dim" @click="act(() => rpc('respond_trade', { p_trade_id: x.id, p_accept: false, p_slot: null }), loadTrades)">{{ t('refuse') }}</button>
-              </template>
-              <button v-else type="button" class="btn dim" @click="act(() => rpc('cancel_trade', { p_trade_id: x.id }), loadTrades)">{{ t('cancel') }}</button>
-            </div>
-          </div>
-        </section>
-
         <!-- CLASSEMENT -->
         <section v-else-if="tab === 'board'">
           <p class="mut">{{ t('lb_wealth') }}</p>
           <table class="tb"><tr v-for="(r, i) in d.board" :key="r.username" :class="{ me: r.username === net.username }"><td>{{ i + 1 }}</td><td>{{ r.username }}</td><td>{{ money(r.wealth) }}</td></tr></table>
-        </section>
-
-        <!-- TAXI -->
-        <section v-else-if="tab === 'taxi'">
-          <div class="row"><b>{{ t('taxi_duty') }}</b><span :class="taxi.duty ? 'good' : 'mut'">{{ taxi.duty ? t('taxi_on') : t('taxi_off') }}</span>
-            <button type="button" class="btn" @click="ui('taxi.duty', { on: !taxi.duty })">{{ taxi.duty ? t('taxi_off') : t('taxi_on') }}</button></div>
-          <div v-if="taxi.duty" class="mut">{{ taxi.rides || 0 }} {{ t('rides') }} · {{ money(taxi.earned || 0) }} {{ t('earned') }}<template v-if="taxi.phase"> · {{ taxi.phase }}</template></div>
-          <button v-if="taxi.duty" type="button" class="btn dim" @click="ui('taxi.cancel')">{{ t('taxi_cancel') }}</button>
-          <h4>{{ t('taxi_open') }}</h4>
-          <button type="button" class="btn dim" @click="loadReqs">{{ t('refresh') }}</button>
-          <div v-for="r in d.reqs" :key="r.id" class="card row"><b>{{ r.passenger }}</b><span class="mut">{{ Math.round(r.route_m / 100) / 10 }} km</span><span>{{ money(r.fare) }}</span>
-            <button type="button" class="btn" @click="ui('taxi.accept', r)">{{ t('take') }}</button></div>
-          <h4>{{ t('taxi_dest') }}</h4>
-          <select v-model="f.place" @focus="ui('places.refresh')"><option v-for="(p, i) in net.places" :key="i" :value="i">{{ p.name }} ({{ Math.round(p.d || 0) }} m)</option></select>
-          <div class="row">
-            <button type="button" class="btn" :disabled="!place" @click="ui('bot.call', place)">{{ t('taxi_call') }}</button>
-            <button type="button" class="btn dim" :disabled="!place || !net.game.pos" @click="askTaxi">{{ t('taxi_ask') }}</button>
-          </div>
-          <div v-if="net.game.bot && net.game.bot.phase !== 'idle'" class="card">{{ t('taxi_bot') }} : {{ net.game.bot.phase }}<button type="button" class="btn dim" @click="ui('bot.cancel')">{{ t('cancel') }}</button></div>
-          <div v-if="me.taxi" class="card">{{ t('taxi_state') }} : {{ me.taxi.status }} · {{ me.taxi.role }} · {{ money(me.taxi.fare) }}
-            <button v-if="me.taxi.role === 'passenger'" type="button" class="btn dim" @click="act(() => rpc('cancel_taxi_request', { p_id: me.taxi.id }))">{{ t('taxi_cancel') }}</button></div>
-        </section>
-
-        <!-- BUS -->
-        <section v-else-if="tab === 'bus'">
-          <div class="row">
-            <button v-if="!(net.game.bus && net.game.bus.active)" type="button" class="btn" @click="ui('bus.start')">{{ t('bus_start') }}</button>
-            <button v-else type="button" class="btn dim" @click="ui('bus.stop')">{{ t('bus_stop') }}</button>
-          </div>
-          <div v-if="net.game.bus && net.game.bus.active" class="mut">{{ t('bus_state') }} · {{ net.game.bus.legs || 0 }} {{ t('legs') }} · {{ money(net.game.bus.earned || 0) }} {{ t('earned') }}</div>
         </section>
 
         <!-- RÉGLAGES (HUD, compteur FPS, langue, mods) : le même panneau que le menu principal, réutilisé ici
@@ -256,21 +158,11 @@ const d = reactive({ tx: [], servers: [], catalog: [], market: [], trades: [], t
 const logged = computed(() => net.status === "in")
 const me = computed(() => net.me || {})
 const profile = computed(() => net.me?.profile || {})
-const taxi = computed(() => net.game.taxi || {})
-const garageNear = computed(() => !!net.game.garage?.near)
-const garageDist = computed(() => (typeof net.game.garage?.dist === "number" ? net.game.garage.dist : null))
-const place = computed(() => net.places[f.place] || null)
-const tabs = computed(() => ["account", "servers", "garage", "dealer", "market", "trades", "board", "taxi", "bus", "settings"].concat(profile.value.is_admin ? ["admin"] : []))
+const tabs = computed(() => ["account", "servers", "board", "settings"].concat(profile.value.is_admin ? ["admin"] : []))
 const icons = {
   account: "M12 8a4 4 0 100-8 4 4 0 000 8zM4 20c0-4 4-6 8-6s8 2 8 6",
   servers: "M4 4h16v4H4zM4 10h16v4H4zM4 16h16v4H4z",
-  garage: "M3 11l9-7 9 7M5 10v10h14V10",
-  dealer: "M6 7h12l-1 13H7L6 7zM9 7V5a3 3 0 016 0v2",
-  market: "M4 4h10l6 6-10 10-6-6V4zM8.5 8.5h.01",
-  trades: "M4 7h13M13 3l4 4-4 4M20 17H7M11 21l-4-4 4-4",
   board: "M4 14h4v6H4zM10 10h4v10h-4zM16 6h4v14h-4z",
-  taxi: "M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11M4 11h16v6H4z",
-  bus: "M4 5h16v12H4zM4 17v2M20 17v2",
   settings: "M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6",
   admin: "M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z",
 }
@@ -352,10 +244,6 @@ async function act(fn, after) {
 const safe = async (fn) => { try { await fn() } catch (e) { net.error = errText(e) } }
 const loadTx = () => safe(async () => { d.tx = await rpc("get_my_transactions", { p_limit: 30 }) })
 const loadServers = () => safe(async () => { d.servers = await listServers() })
-const loadMarket = () => safe(async () => { d.market = await rpc("get_market", { p_limit: 50, p_offset: 0 }) })
-const loadTrades = () => safe(async () => { d.trades = await rpc("get_trades") })
-const loadReqs = () => safe(async () => { d.reqs = await rpc("get_open_taxi_requests", { p_level: net.game.level || null }) })
-const loadTheirs = () => safe(async () => { d.theirs = await rpc("get_player_garage", { p_username: f.tradeUser || "" }) })
 
 async function join(id) {
   const r = await joinServer(id)
@@ -364,10 +252,6 @@ async function join(id) {
 }
 async function leave() { await leaveServer(); await loadServers() }
 async function pickName() { if (await chooseUsername(f.username)) { needPseudo.value = false; msg.value = t("ok") } }
-async function askTaxi() {
-  const p = place.value
-  await act(() => rpc("request_taxi", { p_level: net.game.level || null, p_pickup: net.game.pos, p_dropoff: { x: p.x, y: p.y, z: p.z, name: p.name }, p_distance_m: null }))
-}
 
 // À la première ouverture : un onglet de départ raisonnable (langue pas encore choisie -> Réglages ; pas
 // connecté -> Compte), sans gêner ensuite les clics de l'utilisateur sur les autres onglets.
@@ -386,11 +270,8 @@ function loadTab() {
   if (!logged.value) return
   const x = tab.value
   if (x === "account") loadTx(); else if (x === "servers") loadServers()
-  else if (x === "dealer") safe(async () => { d.catalog = await rpc("get_catalog") })
-  else if (x === "market") loadMarket(); else if (x === "trades") loadTrades()
   else if (x === "board") safe(async () => { d.board = await rpc("get_leaderboard", { p_limit: 25 }) })
-  else if (x === "taxi") { ui("places.refresh"); loadReqs() }
-  if (x === "garage" || x === "trades" || x === "account") refreshMe().catch(() => {})
+  if (x === "account") refreshMe().catch(() => {})
 }
 watch([tab, logged, () => net.open], loadTab)
 onMounted(() => { poll = setInterval(() => { if (net.open && logged.value && tab.value === "servers") loadServers() }, 5000) })
