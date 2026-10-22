@@ -44,19 +44,30 @@ function loadAuth() { try { const a = JSON.parse(localStorage.getItem(KEY) || "n
 // ------------------------------------------------------------------ HTTP
 class NetError extends Error { constructor(code, status, detail) { super(code); this.code = code; this.status = status; this.detail = detail } }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 async function http(path, body, token, method = "POST") {
   if (!net.configured) throw new NetError("not_configured", 0)
-  let res
-  try {
-    res = await fetch(cfg.url + path, {
-      method,
-      headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: "Bearer " + (token || cfg.anonKey) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-  } catch (e) {
+  let res, lastErr = null
+  // Beaucoup de "Failed to fetch" viennent d'un antivirus/pare-feu qui bloque le PREMIER contact du
+  // processus BeamNG vers un hôte inconnu puis laisse passer la suite une fois la connexion inspectée —
+  // 2 nouvelles tentatives (0,5s puis 1,5s) absorbent silencieusement ce cas sans rien demander au joueur.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(500 * attempt)
+    try {
+      res = await fetch(cfg.url + path, {
+        method,
+        headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: "Bearer " + (token || cfg.anonKey) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+      lastErr = null
+      break
+    } catch (e) { lastErr = e }
+  }
+  if (lastErr) {
     // La cause réelle (DNS, TLS, pare-feu, CORS...) est précieuse pour diagnostiquer à distance : on la
     // garde dans net.lastNetworkDetail pour l'afficher, plutôt que de la jeter comme avant.
-    net.lastNetworkDetail = (e && (e.message || e.name)) || String(e)
+    net.lastNetworkDetail = (lastErr.message || lastErr.name) || String(lastErr)
     throw new NetError("network", 0, net.lastNetworkDetail)
   }
   let data = null
@@ -149,7 +160,10 @@ const ERR = {
 }
 export function errText(e) {
   const code = e?.code || e?.message || String(e)
-  return (ERR[net.lang] || ERR.fr)[code] || ((net.lang === "en" ? "Error: " : "Erreur : ") + code)
+  const base = (ERR[net.lang] || ERR.fr)[code] || ((net.lang === "en" ? "Error: " : "Erreur : ") + code)
+  // Même logique que hintFor() dans OnlineWindow.vue pour la vérif de pseudo en direct : montrer la cause
+  // brute à chaque fois qu'on affiche une erreur "network", pas seulement à cet endroit-là.
+  return code === "network" && net.lastNetworkDetail ? `${base} (${net.lastNetworkDetail})` : base
 }
 
 // ------------------------------------------------------------------ compte
