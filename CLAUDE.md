@@ -358,3 +358,68 @@ which design is actually in place.
   **Not verified**: anything on Windows (detection on a real machine, launching, SmartScreen — the exe is unsigned
   by Microsoft so Windows shows "Windows a protégé votre ordinateur"), and the mod talking to it from inside the
   real BeamNG. Say so plainly.
+
+## État actuel et TODO (feuille de route — à lire en premier dans une nouvelle session)
+
+Le projet est en train de devenir une **copie multijoueur de la carrière de BeamNG**, avec notre propre UI (tablette,
+ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
+
+### Versions au moment d'écrire ceci
+- Mod : **2.4.3** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2). Host : **0.6.0** dans le code, **pas
+  encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de `host-release.yml`, input
+  `version` = 0.6.0, quand l'utilisateur le demande). Launcher : 0.1.1.
+- Migrations appliquées en prod : 0001 → 0014 (0014 collée à la main par l'utilisateur dans le SQL Editor).
+- L'utilisateur publie le mod lui-même : `git fetch origin main-n8m0cl && git reset --hard origin/main-n8m0cl` puis
+  `.\release.local.bat` (note de version modifiée à la main dans ce .bat, sans accents). Son `main` local a divergé
+  par le passé : toujours lui donner ces deux commandes, jamais `git pull` seul.
+
+### Fait (vérifié seulement hors jeu : tests node, LuaJIT avec faux jeu, navigateur avec données factices)
+- Rejoindre un serveur → charge la carte de l'hôte en jeu libre → place au **vrai garage** attribué (garages de
+  carrière, `facilities.lua`) → dans sa voiture, ou à pied devant la tablette si aucune voiture ; voiture du jeu
+  libre supprimée. Bandeau serveur en haut (`ServerBar.vue`). Bouton « Aller à mon garage » (touche J).
+- Tablette (touche O devant son garage, `Tablet.vue`) : Mes voitures (sortir sur une place du garage, ranger,
+  verrouiller, assurance, vendre/annoncer, photo + fiche), Joueurs (argent / donner voiture / échange en choisissant
+  dans la liste), Échanges, Concession (négociation bot serveur + 4 assurances + photo + fiche), Annonces, Travail
+  (taxi/bus anciens), Historique.
+- Host 0.6.0 : « Carte en direct » (serveurs du mod, joueurs, carte 2D des routes envoyées par le mod).
+- Confirmé en jeu par l'utilisateur : arrivée au garage OK (2.4.x).
+
+### TODO — dans l'ordre demandé par l'utilisateur
+1. **Ordinateur du garage = personnalisation de la voiture** (demandé explicitement). S'ouvre UNIQUEMENT dans son
+   garage (même test de proximité que la tablette, `garage.isNear()`), touche dédiée ou bouton sur la tablette.
+   UI maison (pas l'UI BeamNG). Contenu visé, comme l'ordinateur de la carrière : pièces (changer des pièces du
+   véhicule sorti : `core_vehicle_partmgmt` / `vehicle.partConfig` — API à vérifier, voir les copies RLS dans
+   le scratchpad de l'agent ou https://github.com/RLS-Modding/rls_career_overhaul `career/modules/partShopping`,
+   `tuning`, `painting`), réglages (tuning), peinture, et **ajout d'espaces de stockage pour colis** (pièces
+   `cargo_load_*` / section jbeam `cargoStorage`). Tout achat de pièce passe par une RPC serveur (argent côté
+   serveur, `private.add_money`) ; enregistrer la config choisie dans `garage_vehicles.config_key` ou une nouvelle
+   colonne `parts jsonb` pour qu'elle survive au rangement.
+2. **Phase 2 — missions / livraisons comme la carrière, en multi** :
+   - Points de ramassage/dépôt = `deliveryProvider` facilities de la carte (`freeroam_facilities.getFacilitiesByType
+     ('deliveryProvider')`, `manualAccessPoints` → `parkingSpots.byName`), comme `career/modules/delivery/generator.lua`.
+   - Colis (selon la capacité cargo du véhicule : `core_vehicleBridge.requestValue(veh, cb, 'getCargoContainers')`),
+     remorques à livrer pour des entreprises, passagers taxi ; génération côté serveur (nouvelle table `jobs`/
+     `deliveries`, RPC `list_jobs`, `accept_job`, `complete_job` avec contrôle de vraisemblance temps/distance comme
+     `too_fast`/`too_short`).
+   - Navigation : itinéraire GPS vers le point (`core_groundMarkers.setPath` sous pcall, déjà utilisé par nav.lua),
+     marqueurs des points de dépôt.
+   - **Compte rendu de fin de mission** (gain, bonus/malus temps, dégâts), application « Travail » de la tablette
+     refaite (liste des missions, mission en cours, historique des gains).
+3. **Phase 3 — réparation comme la carrière** : interdire le reset/recovery gratuit quand le véhicule est endommagé
+   (`core_recoveryPrompt` / hook `onResetGameplay` — à vérifier), estimation des dommages (`core_vehicleBridge.
+   requestValue(veh, cb, 'getPartConditions')`, pièce cassée = `integrityValue == 0`, coût = valeur des pièces),
+   réparation payante au garage avec franchise selon l'assurance (`private.insurance_plan` : deductible, towing),
+   remorquage payant/offert.
+4. **Phase 4** : négociation aussi à la revente et entre joueurs (annonces), personnalisation « pour une tâche »
+   (ex. kit cargo, attelage) proposée depuis la mission.
+5. Divers en attente : publier host 0.6.0 ; vérifier en jeu l'unité de `Power` des fiches véhicules (supposée kW)
+   et l'affichage des images `/vehicles/...` dans le CEF ; `host/` toujours non relié au mod.
+
+### Règles à garder
+- Toute API du jeu non vérifiée sous `pcall`, avec repli, et des logs `Garage:`/`Travel:`/... dans BeamNG.log
+  (demander `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log` dès qu'un bug en jeu est signalé).
+- Argent uniquement côté serveur (RPC security definer), jamais de prix décidé par le client.
+- Tester hors jeu avant de pousser : `node tests/net_test.mjs`, `luajit -bl` sur chaque .lua, simulations LuaJIT
+  avec faux jeu, compilation des .vue (`@vue/compiler-sfc`), capture navigateur avec données factices. Dire
+  clairement que rien n'est vérifié dans le vrai BeamNG.
+- Migrations contenant `delete`/`drop` : les faire coller par l'utilisateur dans le SQL Editor (voir plus haut).
