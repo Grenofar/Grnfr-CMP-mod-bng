@@ -12,6 +12,7 @@
       <p v-if="!net.server" class="mut">{{ t('q_need_server') }}</p>
       <template v-else>
         <section class="players">
+          <button type="button" class="mini home" @click="ui('garage.home')">🏠 {{ net.lang === 'en' ? 'Go to my garage' : 'Aller à mon garage' }}<template v-if="net.game.garage && net.game.garage.name"> — {{ net.game.garage.name }}</template></button>
           <h4>{{ t('q_players') }}</h4>
           <p v-if="!net.players.length" class="mut">{{ t('srv_empty') }}</p>
           <div v-for="p in net.players" :key="p.username" class="prow">
@@ -193,6 +194,7 @@ h4 { margin: 10px 0 4px; color: var(--ac); font-size: 11px; text-transform: uppe
 .prow { padding: 4px 0; border-bottom: 1px solid rgba(255, 102, 0, 0.15); }
 .line { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .pactions { display: flex; gap: 4px; }
+.mini.home { width: 100%; padding: 5px 8px; margin-bottom: 6px; text-align: left; }
 .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
 .stakes { .mini { padding: 2px 7px; } }
 .trade { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }

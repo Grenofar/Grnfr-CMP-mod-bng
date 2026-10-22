@@ -4,7 +4,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo' }
 
-local VERSION = '2.4.2'
+local VERSION = '2.4.3'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -244,6 +244,12 @@ local ROUTES = {
     grnfr_online.spawnVehicle(a)
   end,
   ['veh.info']        = function(a) grnfr_vehinfo.request(a.list) end,
+  ['garage.home']     = function()
+    if not grnfr_garage.mine() then grnfr_online.toast(grnfr_online.L('Pas encore de garage sur ce serveur.', 'No garage on this server yet.'), 'warning') return end
+    if not grnfr_garage.teleportHome(be:getPlayerVehicle(0)) then
+      grnfr_online.toast(grnfr_online.L('Impossible de vous ramener au garage.', 'Could not take you to your garage.'), 'error')
+    end
+  end,
   ['garage.lock']     = function(a) grnfr_online.setLocked(a.id, a.on) end,
   ['garage.store']    = function(a)
     if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end

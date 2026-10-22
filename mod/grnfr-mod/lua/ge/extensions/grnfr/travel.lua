@@ -146,7 +146,9 @@ function M.update(dt)
     if mine and type(mine.pos) == 'table' then
       target = nil
       if mine.garage then
-        grnfr_garage.teleportHome(playerVeh())
+        if not grnfr_garage.teleportHome(playerVeh()) then
+          grnfr_online.toast(L('Impossible de vous placer au garage : touche J > « Aller à mon garage ».', 'Could not place you at your garage: J key > "Go to my garage".'), 'warning')
+        end
         slog('info', 'Travel: at the garage, asking the interface which vehicle to take out.')
         -- l'interface connaît mes véhicules : elle répond par server.arrive (voir M.arrive)
         guihooks.trigger('GRNFRArrived', { garage = mine.garage.name })

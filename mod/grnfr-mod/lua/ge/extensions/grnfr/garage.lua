@@ -164,19 +164,29 @@ function M.freeSpot()
   return best or mine.garage.spots[1]
 end
 
--- Place le véhicule du joueur dans son garage (méthode de la carrière, sinon téléportation simple).
+-- Place le véhicule du joueur sur une place de son garage (sinon à côté de la tablette), puis VÉRIFIE qu'il y est :
+-- freeroam_facilities.teleportToGarage (carrière) ne fait rien, sans erreur, quand il ne trouve pas de place, d'où
+-- plusieurs méthodes essayées tour à tour. Renvoie true si le véhicule est bien au garage.
 function M.teleportHome(veh)
   if not (mine and veh) then return false end
-  if mine.garage and mine.garage.id then
-    local ok = pcall(function() freeroam_facilities.teleportToGarage(mine.garage.id, veh, false) end)
-    if ok then return true end
-  end
   local s = M.freeSpot()
-  local p = s and s.pos or vec3(mine.pos.x + 3, mine.pos.y + 3, mine.pos.z + 0.5)
-  return pcall(function()
-    if spawn and spawn.safeTeleport then spawn.safeTeleport(veh, p, s and s.rot or quat(0, 0, 0, 1))
-    else veh:setPositionRotation(p.x, p.y, p.z, 0, 0, 0, 1) end
-  end)
+  local p = s and vec3(s.pos.x, s.pos.y, s.pos.z + 0.5) or vec3(mine.pos.x + 3, mine.pos.y + 3, mine.pos.z + 0.5)
+  local r = s and s.rot or quat(0, 0, 0, 1)
+  local function arrived()
+    local ok, cur = pcall(function() return veh:getPosition() end)
+    return ok and cur and grnfr_facilities.dist(cur, p) < 15
+  end
+  local tries = {
+    { 'spawn.safeTeleport', function() spawn.safeTeleport(veh, p, r) end },
+    { 'setPositionRotation', function() veh:setPositionRotation(p.x, p.y, p.z, r.x or r[1] or 0, r.y or r[2] or 0, r.z or r[3] or 0, r.w or r[4] or 1) end },
+    { 'teleportToGarage', function() freeroam_facilities.teleportToGarage(mine.garage.id, veh, false) end },
+  }
+  for _, t in ipairs(tries) do
+    local ok, err = pcall(t[2])
+    if ok and arrived() then slog('info', 'Garage: player placed at the garage (' .. t[1] .. ').') return true end
+    slog('warn', 'Garage: ' .. t[1] .. ' did not move the player to the garage' .. (ok and '' or (' (' .. tostring(err) .. ')')) .. '.')
+  end
+  return false
 end
 
 function M.status()
