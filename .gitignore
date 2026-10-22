@@ -11,3 +11,6 @@ host/src-tauri/gen/
 grnfr-host.id
 grnfr-host.cache
 grnfr-host.log
+
+# Clé privée de signature des mises à jour Tauri — NE JAMAIS committer (voir .tauri-keys/README.md)
+.tauri-keys/
