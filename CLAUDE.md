@@ -365,13 +365,13 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.8.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.9.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
   à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
   input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
-- Migrations appliquées en prod : 0001 → 0019 (0015 à 0019 appliquées via l'outil MCP `apply_migration` ; 0017 et
+- Migrations appliquées en prod : 0001 → 0020 (0015 à 0020 appliquées via l'outil MCP `apply_migration` ; 0017 et
   0018 ont dû passer par un `drop function` pour changer une signature de paramètres, accepté sans confirmation
   interactive cette fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait
   viser surtout delete/drop sur des données ou des tables, 0018 contient 1405 lignes d'insertion appliquées en
@@ -532,6 +532,32 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     même modèle trouvé dans le garage, pas besoin qu'il soit sorti).
   - Vérifié hors jeu : `node tests/net_test.mjs` (30/30), `Tablet.vue` compile. **Jamais ouvert dans le vrai jeu.**
 
+- **Reprise à la dernière position en se reconnectant (mod 2.9.0, TODO point 3bis, moitié « reprise » faite,
+  dégâts persistants toujours pas touchés)**. Avant : rejoindre un serveur où l'on était déjà membre renvoyait
+  systématiquement près d'un autre joueur puis au garage, comme une toute première arrivée.
+  - `supabase/migrations/0020_resume_position.sql` : `join_server` détecte maintenant une reconnexion (ligne déjà
+    présente dans `server_members`) et renvoie `resumed: true` + `level`/`pos` = la DERNIÈRE position sauvegardée
+    du joueur (`profiles.pos`/`level`, déjà tenus à jour en continu par `heartbeat()` toutes les ~5 s — rien à
+    ajouter côté sauvegarde elle-même, il manquait juste de s'en servir). Annule aussi, en réutilisant les
+    fonctions d'annulation déjà existantes (jamais de nouvelle logique d'argent) : missions taxi PNJ/bus en cours
+    (`cancel_job`), livraison acceptée (`cancel_delivery`), mise en course de drag (`leave_drag_race`), et libère
+    une demande de taxi IA qu'on conduisait. **Testé en direct contre le vrai Supabase** (1er join = resumed false,
+    2e join = resumed true avec le bon niveau sauvegardé, mission taxi PNJ en cours bien annulée et remboursée —
+    tout dans une transaction annulée volontairement, solde/niveau/missions vérifiés identiques après coup).
+  - `net.js` (`joinServer`) : si `resumed` et `level` sont présents, appelle `server.travel` directement avec
+    `resume: true` au lieu du trajet normal « vers les autres joueurs » (`travelToPlayers`).
+  - `travel.lua` (`M.go`, 4ᵉ argument `resume`) : **point important** — passer juste la position ne suffisait pas,
+    car le code existant forçait toujours un `teleportHome` (retour au garage) une fois un garage attribué en
+    arrière-plan. En reprise, cette étape « garage » est maintenant sautée entièrement (`target.resume` dans
+    `M.update`) : le joueur reste simplement où il était, dans la voiture par défaut du jeu libre, libre d'aller
+    chercher sa vraie voiture quand il veut (touche J). Le garage continue d'être attribué en arrière-plan comme
+    avant (pour que « Aller à mon garage » marche), seule la téléportation forcée est sautée.
+  - Vérifié hors jeu : `luaparse` sur `travel.lua` et `grnfr.lua`, `node --check` sur `net.js`,
+    `node tests/net_test.mjs` (30/30, pas de régression). **Jamais ouvert dans le vrai jeu** — en particulier,
+    `resumed: true` sans `level`/`pos` valides (compte jamais encore apparu une fois) est géré côté `net.js` par
+    un simple repli sur `travelToPlayers()`, jamais testé dans le vrai jeu. **Les dégâts persistants restent
+    entièrement à faire** (toujours liés à la phase 3 réparation, voir TODO).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
    mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
@@ -572,17 +598,13 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
 2quinquies. ~~**Vente de pièces à prix libre, dans une boutique privée**~~ **Fait (mod 2.8.0, voir § Fait
    ci-dessus)**.
 2sexies. ~~**Chat accessible depuis la tablette**~~ **Fait (mod 2.8.0, voir § Fait ci-dessus)**.
-3bis. **Dégâts persistants + sauvegarde périodique** (demandé par l'utilisateur, **non commencé**) :
-   - Les dégâts du véhicule doivent survivre au rangement/à la reconnexion (aujourd'hui : rien n'est enregistré,
-     lié à la phase 3 "réparation" déjà prévue plus bas — probablement à faire ensemble plutôt que deux fois).
-   - Sauvegarde automatique toutes les ~2 minutes (position, argent — l'argent est déjà toujours à jour côté
-     serveur à chaque RPC, donc surtout la position/carte/véhicule) ; à la reconnexion, si le joueur n'est pas à
-     proximité de son garage, le faire réapparaître à sa DERNIÈRE position sauvegardée plutôt que systématiquement
-     au garage ; annuler toute mission en cours (taxi/bus/drag/livraison) à ce moment-là plutôt que la laisser
-     bloquée. Implique : nouvelle colonne (ex. `profiles.last_pos`/`last_level`, ou table dédiée), nouvelle RPC
-     d'enregistrement périodique, un minuteur côté Lua, et une branche dans `travel.lua`/`online.lua` pour choisir
-     entre "arrivée au garage" (comportement actuel) et "reprise à la dernière position". Assez gros pour mériter
-     sa propre passe plutôt qu'être ajouté en vitesse.
+3bis. **Dégâts persistants + sauvegarde périodique** — ~~moitié « reprise à la dernière position + annulation des
+   missions en cours » faite (mod 2.9.0, migration 0020, voir § Fait ci-dessus)~~. Reste à faire :
+   - **Dégâts persistants eux-mêmes : toujours pas commencés.** Les dégâts du véhicule doivent survivre au
+     rangement/à la reconnexion (aujourd'hui : rien n'est enregistré) — lié à la phase 3 "réparation" ci-dessous,
+     probablement à faire ensemble plutôt que deux fois.
+   - La sauvegarde périodique de position existait déjà (`heartbeat()`, ~5 s) et est maintenant exploitée à la
+     reconnexion (0020) ; ce qui reste, c'est uniquement la partie dégâts/intégrité des pièces.
 3. **Phase 3 — réparation comme la carrière** : interdire le reset/recovery gratuit quand le véhicule est endommagé
    (`core_recoveryPrompt` / hook `onResetGameplay` — à vérifier), estimation des dommages (`core_vehicleBridge.
    requestValue(veh, cb, 'getPartConditions')`, pièce cassée = `integrityValue == 0`, coût = valeur des pièces),

@@ -347,8 +347,16 @@ export async function listServers() { return rpc("get_servers") }
 
 export async function joinServer(id) {
   net.error = ""
-  try { const srv = await rpc("join_server", { p_server: id }); setServerLocal(srv); await travelToPlayers(); return true }
-  catch (e) { net.error = errText(e); return e.code === "username_required" ? "pseudo" : false }
+  try {
+    const srv = await rpc("join_server", { p_server: id })
+    setServerLocal(srv)
+    // Reconnexion à un serveur où j'étais déjà (profiles.level/pos, tenus à jour en continu par heartbeat()) :
+    // on reprend là où on était plutôt que de toujours repartir vers un autre joueur / le garage (et le serveur
+    // a déjà annulé mes missions en cours, voir join_server, 0020). Sinon (vraie première arrivée) : comme avant.
+    if (srv.resumed && srv.level) ui("server.travel", { level: srv.level, pos: srv.pos || null, resume: true })
+    else await travelToPlayers()
+    return true
+  } catch (e) { net.error = errText(e); return e.code === "username_required" ? "pseudo" : false }
 }
 
 // Juste après être entré : où sont les joueurs déjà présents ? Le Lua charge leur carte (celle du plus ancien,

@@ -85,7 +85,12 @@ local function hold(on) pcall(grnfr_garage.setHold, on) end
 -- level = nom de dossier de carte (ex. west_coast_usa) ; pos = {x,y,z} d'un joueur déjà présent, ou nil.
 -- level absent (serveur vide) : on reste sur la carte actuelle, ou depuis le menu principal on charge DEFAULT_LEVEL.
 -- beforeLoad (facultatif) : appelé juste avant de lancer le chargement d'une carte (fermer les fenêtres du mod).
-function M.go(level, pos, beforeLoad)
+-- resume (0020, reconnexion à un serveur où l'on était déjà) : pos est alors MA dernière position connue, pas
+-- celle d'un autre joueur -> une fois arrivé là, on ne force PLUS le trajet jusqu'au garage (M.update) : le
+-- joueur reste où il était (dans la voiture par défaut du jeu libre), libre d'aller chercher la sienne quand il
+-- veut (touche J > « Aller à mon garage »). Le garage continue d'être attribué en arrière-plan (hold(false)).
+function M.go(level, pos, beforeLoad, resume)
+  resume = resume == true
   local cur = grnfr_places.level()
   if level == nil then
     if cur ~= 'unknown' then level = cur else level = DEFAULT_LEVEL end
@@ -94,7 +99,7 @@ function M.go(level, pos, beforeLoad)
   if type(level) ~= 'string' or not level:match('^[%w_%-]+$') or #level > 60 then hold(false) return false end
   if type(pos) ~= 'table' then pos = nil end
   if cur == level then
-    target = { level = level, pos = pos, phase = 'host', t = 0, settle = SETTLE }
+    target = { level = level, pos = pos, phase = 'host', t = 0, settle = SETTLE, resume = resume }
     return true
   end
   if not levelExists(level) then
@@ -105,7 +110,7 @@ function M.go(level, pos, beforeLoad)
   end
   slog('info', 'Travel: loading the server map (' .. level .. ').')
   grnfr_online.toast(L('Chargement de la carte du serveur : ', 'Loading the server map: ') .. level)
-  target = { level = level, pos = pos, phase = 'load', t = 0, settle = 0, loadedByUs = true }
+  target = { level = level, pos = pos, phase = 'load', t = 0, settle = 0, loadedByUs = true, resume = resume }
   if beforeLoad then pcall(beforeLoad) end
   if not loadLevel(level) then
     target = nil
@@ -137,8 +142,13 @@ function M.update(dt)
       end
     end
     if target.pos then placeNear(target.pos, 8) end
-    target.phase, target.t = 'garage', 0
     hold(false) -- le garage peut maintenant être attribué, depuis cette position
+    if target.resume then
+      slog('info', 'Travel: resumed at the last known position, no forced trip to the garage.')
+      target = nil
+      return
+    end
+    target.phase, target.t = 'garage', 0
     return
   end
   if target.phase == 'garage' then
