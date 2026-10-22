@@ -9,14 +9,9 @@
       { "key": "Content-Type", "value": "application/zip" },
       { "key": "Content-Disposition", "value": "attachment; filename=\"grnfr-online.zip\"" },
       { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" } ] },
-    { "source": "/((?!bridge\\.html$).*)", "headers": [
+    { "source": "/(.*)", "headers": [
       { "key": "X-Content-Type-Options", "value": "nosniff" },
       { "key": "Referrer-Policy", "value": "same-origin" },
-      { "key": "X-Frame-Options", "value": "DENY" } ] },
-    { "source": "/bridge.html", "headers": [
-      { "key": "X-Content-Type-Options", "value": "nosniff" },
-      { "key": "Referrer-Policy", "value": "no-referrer" },
-      { "key": "Cache-Control", "value": "public, max-age=300, must-revalidate" },
-      { "key": "Content-Security-Policy", "value": "default-src 'none'; script-src 'self'; connect-src https://*.supabase.co" } ] }
+      { "key": "X-Frame-Options", "value": "DENY" } ] }
   ]
 }

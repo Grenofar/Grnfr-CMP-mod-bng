@@ -4,6 +4,7 @@
 // (l'interface du jeu n'a le droit de contacter que localhost, le Lua du jeu n'a pas de TLS). Le launcher tourne à
 // côté du jeu et relaie les requêtes du mod (http://127.0.0.1:30815) vers Supabase en HTTPS. Il sait aussi trouver
 // BeamNG / BeamMP, installer la dernière version du mod et lancer le jeu.
+pub mod app;
 pub mod detect;
 pub mod launch;
 pub mod modsync;

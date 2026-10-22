@@ -13,44 +13,8 @@ code = code.replace('import { reactive } from "vue"', "const reactive = x => x")
   .replace('import cfg from "./serverConfig.js"', 'const cfg = { url: "https://fake.supabase.co", anonKey: "anon" }')
   .replace('import { callLua, unwrapObj, unwrapList } from "./luaCall.js"', 'import { callLua, unwrapObj, unwrapList } from "./lua_stub.mjs"')
 fs.writeFileSync(path.join(tmp, "net.mjs"), code)
-const lcalls = [], engine = [], handlers = {}, httpCalls = []
-// Faux grnfr/http.lua : les requêtes HTTP envoyées au jeu (extensions.grnfr_http.request(...)) sont rejouées sur le
-// faux Supabase ci-dessous, puis la réponse revient par l'événement GRNFRHttp, comme en jeu. Les autres appels Lua
-// sont seulement enregistrés (engine).
-const luaArgs = s => [...s.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => new TextDecoder().decode(Uint8Array.from(
-  m[1].match(/\\\d{3}|\\.|[^\\]/g) || [], t => t.length === 4 && t[0] === "\\" ? Number(t.slice(1)) : t.length === 2 ? t.charCodeAt(1) : t.charCodeAt(0))))
-function gameHttp(c) {
-  const id = Number(c.match(/^extensions\.grnfr_http\.request\((\d+),/)[1])
-  const [method, url, body, authorization] = luaArgs(c)
-  httpCalls.push({ method, url, authorization })
-  const u = new URL(url)
-  const apikey = u.searchParams.get("apikey")
-  u.searchParams.delete("apikey")
-  setTimeout(async () => {
-    const r = apikey !== "anon" ? { status: 401, body: '{"message":"no_apikey"}' }
-      : await fakeServer(u.origin + u.pathname + u.search, { method, headers: { Authorization: authorization }, body: body || undefined })
-    handlers.GRNFRHttp({ id, ...r })
-  }, 0)
-}
-globalThis.__t = { lcalls, engine, handlers, lua: c => c.startsWith("extensions.grnfr_http.request(") ? gameHttp(c) : engine.push(c) }
-
-// Faux relais (public/bridge.js) : un cadre dont la fenêtre reçoit {grnfr:"req"} par postMessage, interroge le faux
-// Supabase et répond {grnfr:"bridge", id, status, body} au parent. Au chargement il annonce {ready:true}.
-const bridgeCalls = [], winListeners = []
-let frameWin = null, frameSrc = ""
-const toParent = data => winListeners.forEach(f => f({ data, source: frameWin }))
-globalThis.window = { addEventListener: (t, f) => { if (t === "message") winListeners.push(f) } }
-globalThis.document = {
-  createElement: () => ({ style: {}, setAttribute() {}, set src(v) { frameSrc = v }, contentWindow: (frameWin = { postMessage: m => {
-    if (m.grnfr !== "req") return
-    bridgeCalls.push(m)
-    setTimeout(async () => {
-      const r = await fakeServer("https://fake.supabase.co" + m.path, { method: m.method, headers: { Authorization: m.authorization }, body: m.body || undefined })
-      toParent({ grnfr: "bridge", id: m.id, ...r })
-    }, 0)
-  } }) }),
-  body: { appendChild: () => setTimeout(() => toParent({ grnfr: "bridge", ready: true, configured: true }), 0) },
-}
+const lcalls = [], engine = [], handlers = {}, launcherCalls = []
+globalThis.__t = { lcalls, engine, handlers, lua: c => engine.push(c) }
 fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.lua(c) } })`)
 fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d\nexport const unwrapList = d => d`)
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
@@ -60,7 +24,15 @@ const members = {}, calls = []
 const sessions = {} // token -> { username } ; un profil = juste un pseudo, choisi APRÈS la connexion anonyme
 const MAX = 4
 let anonCalls = 0
-globalThis.fetch = () => { throw new Error("fetch ne doit plus être utilisé en jeu (CSP de BeamNG 0.40)") }
+// Comme dans BeamNG 0.40 : l'interface ne peut joindre que localhost. fetch vers Supabase -> "Failed to fetch".
+// fetch vers http://127.0.0.1:30815 -> faux GRNFR CMP Launcher (s'il est "ouvert"), qui relaie au faux Supabase.
+let launcherUp = true
+globalThis.fetch = async (url, opt) => {
+  if (!url.startsWith("http://127.0.0.1:30815/") || !launcherUp) throw new TypeError("Failed to fetch")
+  launcherCalls.push({ url, method: opt.method, apikey: opt.headers.apikey, authorization: opt.headers.Authorization })
+  const r = await fakeServer(url.replace("http://127.0.0.1:30815", "https://fake.supabase.co"), opt)
+  return { status: r.status, text: async () => r.body }
+}
 async function fakeServer(url, opt) {
   const p = url.replace("https://fake.supabase.co", "")
   const body = opt.body ? JSON.parse(opt.body) : undefined
@@ -139,20 +111,16 @@ check(engine[1].includes("onNetResult(8,false,") && engine[1].includes("unknown_
 await handlers.GRNFRNetReq({ id: 9, fn: "drop table; --", args: {} })
 check(engine.length === 2, "nom de fonction suspect refusé")
 // jeton jamais écrit dans le texte envoyé au Lua
-check(!engine.join("").includes("tok_") && httpCalls.length === 0, "le jeton n'est jamais transmis au Lua (relais disponible : aucun envoi par le Lua)")
-check(frameSrc === "https://careermp.vercel.app/bridge.html", "le relais est chargé depuis le site")
-check(bridgeCalls.length > 0 && bridgeCalls.every(c => /^\/(rest|auth)\/v1\//.test(c.path)), "toutes les requêtes passent par le relais, avec un chemin seulement (jamais une URL complète)")
-check(bridgeCalls.some(c => c.authorization === "Bearer tok_anon2"), "le jeton de session part en en-tête Authorization")
+check(!engine.join("").includes("tok_"), "le jeton n'est jamais transmis au Lua")
+check(launcherCalls.length > 0 && launcherCalls.every(c => /^http:\/\/127\.0\.0\.1:30815\/(rest|auth)\/v1\//.test(c.url) && c.apikey === "anon"), "toutes les requêtes passent par GRNFR CMP Launcher (localhost), avec la clé anon")
+check(launcherCalls.some(c => c.authorization === "Bearer tok_anon2"), "le jeton de session part en en-tête Authorization")
 await net.signOut()
 check(st.status === "out" && st.server === null && lcalls.some(c => c[1] === "auth" && !JSON.parse(c[2]).loggedIn), "déconnexion : quitte le serveur, prévient le Lua")
 
-// Repli : relais impossible (pas de cadre) -> envoi par le Lua (grnfr/http.lua), erreur combinant les deux causes.
-delete globalThis.document
-const net2 = await import(pathToFileURL(path.join(tmp, "net.mjs")) + "?sans-relais")
-await net2.initNet()
-check(await net2.signUpAnonymous("zoe") === true && httpCalls.some(h => h.url.startsWith("https://fake.supabase.co/") && h.url.includes("apikey=anon")), "sans relais : repli sur le Lua du jeu (clé anon en paramètre d'URL)")
-const realLua = globalThis.__t.lua
-globalThis.__t.lua = c => c.startsWith("extensions.grnfr_http.request(") ? handlers.GRNFRHttp({ id: Number(c.match(/\((\d+),/)[1]), status: 0, error: "ssl indisponible" }) : realLua(c)
-await net2.signOut()
-check(await net2.signUpAnonymous("yann") === false && /relais impossible.*Lua : ssl indisponible/.test(net2.net.error), "les deux échecs (relais et Lua) sont affichés ensemble")
+// Launcher fermé : message clair (pas un « Failed to fetch » incompréhensible), y compris pour la vérif de pseudo.
+launcherUp = false
+check(await net.signUpAnonymous("zoe") === false && st.error.includes("GRNFR CMP Launcher n'est pas ouvert"), "launcher fermé : le joueur sait quoi faire")
+check(st.lastNetworkDetail.includes("Launcher"), "le détail affiché sous le champ pseudo nomme aussi le launcher")
+launcherUp = true
+check(await net.signUpAnonymous("zoe") === true, "launcher rouvert : ça repart sans relancer le jeu")
 console.log("=== TESTS CLIENT OK ===")
