@@ -38,7 +38,7 @@ let auth = null          // { access, refresh, exp }
 let sessionToken = null  // anti-partage : invalidé si une autre connexion a lieu avec le même compte
 let started = false
 let bridge = null
-let syncBusy = false, lastPos = null, lastHb = 0, rejoining = false
+let syncBusy = false, lastPos = null, lastHb = 0, lastEmployeeTick = 0, rejoining = false
 let offs = []
 
 // ------------------------------------------------------------------ stockage du jeton (jamais dans les logs)
@@ -410,10 +410,20 @@ async function onPos(d) {
   const p = unwrapObj(d)
   if (!p || net.status !== "in") return
   lastPos = p
-  if (Date.now() - lastHb < 15000) return
-  lastHb = Date.now()
-  try { await rpc("heartbeat", { p_level: p.level || null, p_pos: p.pos || null, p_duty: p.duty || "none", p_session: sessionToken }); await refreshMe() }
-  catch (e) { if (e.code === "session_replaced") forceSignOutReplaced() }
+  if (Date.now() - lastHb >= 15000) {
+    lastHb = Date.now()
+    try { await rpc("heartbeat", { p_level: p.level || null, p_pos: p.pos || null, p_duty: p.duty || "none", p_session: sessionToken }); await refreshMe() }
+    catch (e) { if (e.code === "session_replaced") forceSignOutReplaced() }
+  }
+  // Salarié du garage : aucune donnée de jeu nécessaire (aucune position envoyée), juste une occasion régulière de
+  // le faire avancer tant qu'on est en ligne. Le serveur mesure lui-même le temps écoulé (jamais le client).
+  if (Date.now() - lastEmployeeTick >= 60000) {
+    lastEmployeeTick = Date.now()
+    try {
+      const r = await rpc("employee_tick", {})
+      if (r && r.trips > 0) await refreshMe()
+    } catch (e) { /* salarié non embauché, ou coupure passagère : sans conséquence */ }
+  }
 }
 
 async function onNetReq(d) {

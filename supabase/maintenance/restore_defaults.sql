@@ -34,7 +34,12 @@ insert into public.server_config (key, value, description) values
   ('delivery_per_km',                '4',   'Livraison : prix au km'),
   ('delivery_per_unit',              '15',  'Livraison : prix par unité de capacité cargo demandée'),
   ('delivery_max_active_per_level',  '15',  'Livraison : nombre maximum d''offres disponibles en même temps par carte'),
-  ('delivery_offer_ttl_minutes',     '30',  'Livraison : durée de vie d''une offre non acceptée (minutes)')
+  ('delivery_offer_ttl_minutes',     '30',  'Livraison : durée de vie d''une offre non acceptée (minutes)'),
+  ('employee_hire_cost',             '5000', 'Salarié : coût d''embauche (une fois)'),
+  ('employee_speed_kmh',             '60',   'Salarié : vitesse virtuelle (km/h) utilisée pour faire avancer sa progression en temps réel'),
+  ('employee_income_per_100km',      '500',  'Salarié : revenu généré tous les 100 km parcourus'),
+  ('employee_wage_per_100km',        '200',  'Salarié : salaire payé tous les 100 km parcourus (déduit du revenu ci-dessus)'),
+  ('employee_max_tick_seconds',      '120',  'Salarié : écart de temps réel maximum accepté par mise à jour (protège contre une longue coupure/reconnexion)')
 on conflict (key) do nothing;
 
 -- ------------------------------------------------------------------ catalogue de base (0001)

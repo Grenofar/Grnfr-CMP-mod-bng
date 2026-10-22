@@ -69,6 +69,33 @@
               </div>
             </div>
           </div>
+
+          <!-- Salarié : livre et rapporte tout seul tant qu'on est en ligne, tous les 100 km un trajet est payé
+               (revenu - salaire, tiré au hasard : pas forcément gagnant). -->
+          <div class="tile employee">
+            <h4>👷 {{ L('Salarié', 'Employee') }}</h4>
+            <template v-if="employee.active">
+              <p class="mut">{{ employee.level_label }} ({{ L('niveau', 'level') }} {{ employee.level }})</p>
+              <p class="mut">{{ L('Progression', 'Progress') }} : {{ km(employee.distance_m) }} / 100 km</p>
+              <p class="mut">{{ L('Revenu par trajet', 'Income per trip') }} : {{ money(employee.income_min_100km) }} – {{ money(employee.income_max_100km) }}
+                ({{ L('salaire', 'wage') }} {{ money(employee.wage_per_100km) }})</p>
+              <p class="mut">{{ L('Total gagné', 'Total earned') }} : {{ money(employee.total_earned) }}</p>
+              <div class="acts">
+                <button v-if="employee.next" type="button" class="btn" @click="act(() => rpc('upgrade_employee'))">
+                  {{ L('Promouvoir', 'Promote') }} : {{ employee.next.label }} ({{ money(employee.next.upgrade_cost) }})
+                </button>
+                <span v-else class="mut">{{ L('Niveau maximum.', 'Max level.') }}</span>
+                <button type="button" class="btn dim" @click="act(() => rpc('fire_employee'))">{{ L('Licencier', 'Fire') }}</button>
+              </div>
+            </template>
+            <template v-else>
+              <p class="mut">{{ L('Embauchez un salarié : il livre et rapporte de l\'argent automatiquement tous les 100 km, tant que vous êtes en ligne.',
+                'Hire an employee: they deliver and bring back money automatically every 100 km, as long as you are online.') }}</p>
+              <button type="button" class="btn" @click="act(() => rpc('hire_employee'))">
+                {{ L('Embaucher', 'Hire') }} : {{ employee.next?.label }} ({{ money(employee.next?.upgrade_cost) }})
+              </button>
+            </template>
+          </div>
         </main>
 
         <!-- JOUEURS : on choisit un joueur du serveur dans la liste, puis l'action -->
@@ -424,6 +451,8 @@ const marketTab = ref("vehicles")
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
+const employee = computed(() => net.me?.employee || { active: false, level: 0, distance_m: 0 })
+const km = m => (Number(m || 0) / 1000).toFixed(1)
 const out = v => !!(net.game.spawned && net.game.spawned[v.id])
 const locked = v => !!(net.game.spawned && net.game.spawned[v.id] && net.game.spawned[v.id].locked)
 

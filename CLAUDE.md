@@ -382,13 +382,13 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.9.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.10.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
   à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
   input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
-- Migrations appliquées en prod : 0001 → 0020 (0015 à 0020 appliquées via l'outil MCP `apply_migration` ; 0017 et
+- Migrations appliquées en prod : 0001 → 0022 (0015 à 0022 appliquées via l'outil MCP `apply_migration` ; 0017 et
   0018 ont dû passer par un `drop function` pour changer une signature de paramètres, accepté sans confirmation
   interactive cette fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait
   viser surtout delete/drop sur des données ou des tables, 0018 contient 1405 lignes d'insertion appliquées en
@@ -574,6 +574,36 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     `resumed: true` sans `level`/`pos` valides (compte jamais encore apparu une fois) est géré côté `net.js` par
     un simple repli sur `travelToPlayers()`, jamais testé dans le vrai jeu. **Les dégâts persistants restent
     entièrement à faire** (toujours liés à la phase 3 réparation, voir TODO).
+- **Salarié au garage (mod 2.10.0, grand chantier Phase D, demandé puis précisé par l'utilisateur : « des niveaux
+  de salarié, argent par 100 km, obligé d'être gagnant mais ça peut être [variable] »)** : livre et rapporte de
+  l'argent tout seul, sans que le joueur conduise, tant qu'il est en ligne — pas besoin de vraies missions de
+  livraison pour ce mécanisme, c'est un revenu passif de fond.
+  - `supabase/migrations/0021_garage_employee.sql` + `0022_employee_levels.sql` (0022 réécrit `hire_employee`/
+    `get_me`/`employee_status` de 0021 pour ajouter les niveaux — appliqué en un seul passage, pas deux versions
+    en prod) : nouvelle table `garage_employees` (un salarié par joueur, `level`/`distance_m`/`total_distance_m`/
+    `total_earned`/`last_tick_at`) + `employee_levels` (catalogue à 4 niveaux : Débutant/Confirmé/Expert/Élite,
+    lecture publique comme `dealership_catalog`). `hire_employee` (embauche au niveau 1), `upgrade_employee`
+    (niveau suivant, coût croissant), `fire_employee`, `employee_status`. `employee_tick()` — **n'accepte AUCUN
+    paramètre du client** : mesure elle-même le temps écoulé depuis `last_tick_at` (plafonné par
+    `employee_max_tick_seconds`, protège une longue coupure/reconnexion), le convertit en distance via une
+    vitesse virtuelle fixe (`employee_speed_kmh`), et à chaque palier de 100 km paie un revenu **tiré au hasard
+    dans la fourchette du niveau actuel** (`income_min_100km`/`income_max_100km`) moins le salaire fixe du niveau
+    (`wage_per_100km`) — **jamais obligatoirement gagnant** : la fourchette basse de chaque niveau est sous le
+    salaire (perte nette possible), comme demandé explicitement. Niveaux supérieurs = salaire plus élevé mais
+    fourchette de revenu qui monte plus haut en moyenne. `get_me()`/`employee_status()` renvoient l'état complet
+    via `private.employee_view()` (niveau actuel + le niveau "suivant" à acheter, embauche ou promotion, avec son
+    coût — l'UI n'a jamais besoin d'interroger `employee_levels` elle-même). **Testé en direct contre le vrai
+    Supabase** : embauche → tick forcé (distance_m mise à 99900 manuellement pour déclencher un palier sans
+    attendre) → paiement vérifié exact → promotion → licenciement, tout dans une transaction annulée
+    volontairement (solde revérifié identique après coup, deux passages de test pour la version avec niveaux).
+  - `net.js` (`onPos`) : appelle `employee_tick` toutes les ~60 s tant qu'on est connecté à un serveur (aucune
+    position envoyée, le serveur n'en a pas besoin), et rafraîchit l'état (`refreshMe`) seulement si un palier a
+    été payé (`trips > 0`) — aucun nouveau code Lua nécessaire, le salarié ne dépend d'aucune donnée de jeu.
+  - `Tablet.vue` (app « Mes voitures ») : nouvelle tuile Salarié (progression en km, fourchette de revenu,
+    salaire, total gagné, bouton Promouvoir/Licencier, ou Embaucher si pas encore de salarié).
+  - Vérifié hors jeu : `node tests/net_test.mjs` (30/30), `Tablet.vue` et `net.js` compilent. **Jamais ouvert dans
+    le vrai jeu** — rien ne dépend du jeu pour ce mécanisme (aucune API BeamNG utilisée), donc le risque principal
+    non vérifié est seulement l'UI (affichage correct dans la vraie tablette en jeu).
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
@@ -728,10 +758,8 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
      place, ou s'il faut une colonne plus précise que juste une capacité en unités).
    - Plusieurs entreprises comme points de collecte/dépôt (resto, garage, hôpital, etc. — à définir), le prix de la
      livraison dépend du poids du colis ET de la distance entre les deux (pas juste la distance comme aujourd'hui).
-   - **Système de salarié au garage** (nouvelle mécanique) : tous les 100 km parcourus par un salarié embauché, le
-     joueur lui paie un salaire ; le salarié livre/rapporte automatiquement en tâche de fond. Implique probablement
-     un minuteur côté serveur (cron Supabase ou calcul à la demande sur la distance cumulée) plutôt qu'une
-     simulation Lua en continu — à concevoir.
+   - ~~**Système de salarié au garage**~~ **Fait (mod 2.10.0, avec niveaux, voir § Fait ci-dessus)** : revenu de
+     fond tous les 100 km (temps réel, vitesse virtuelle), montant aléatoire par niveau, pas forcément gagnant.
 **Phase E — Bus** : reprendre/refaire les lignes de bus existantes (`taxi.lua`/anciennes lignes, voir Architecture)
    avec les mêmes bases que la Phase C (classes de véhicule, etc. si applicable).
 **Phase F — Multijoueur visible** :
