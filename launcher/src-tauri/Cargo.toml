@@ -1,6 +1,6 @@
 [package]
 name = "grnfr-launcher"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "GRNFR CMP Launcher : app native (Tauri — Rust + React/TypeScript) qui relaie le mod GRNFR CMP vers son serveur (BeamNG 0.40 bloque le HTTPS des mods), installe le mod et lance BeamNG (Steam, direct ou BeamMP)."
 

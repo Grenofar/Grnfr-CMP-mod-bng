@@ -190,3 +190,14 @@ main.single .main-content { margin: 0 auto; }
 .badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #fff; color: var(--ac); font-size: 11px; line-height: 16px; text-align: center; }
 .save-bar { margin: -4px 0 14px; }
 code { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px; }
+
+/* ---------------------------------------------------------------- notifications (mise à jour launcher/mod) */
+.toast-stack { position: fixed; top: 16px; right: 16px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; width: 320px; }
+.toast {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border-radius: 8px; background: var(--panel); border: 1px solid var(--ac);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); font-size: 13px;
+  animation: toast-in 0.2s ease;
+}
+.toast span { flex: 1; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }

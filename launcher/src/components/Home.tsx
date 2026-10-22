@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { api, ModStatus, Settings, Status } from "../api"
 import ModeChooser from "./ModeChooser"
 
-const fileName = (p: string) => p.split(/[\\/]/).pop() || p
-
-export default function Home({ settings, onSettings }: {
+// Vérification de version du mod et notifications (toasts) : remontées dans App.tsx, pour qu'elles marchent même
+// si la page Accueil n'est pas affichée. Ici, Home se contente d'afficher ce qu'on lui passe.
+export default function Home({ settings, onSettings, mod, modError, modBusy, onCheckMod, onInstallMod }: {
   settings: Settings
   onSettings: (s: Settings) => void
+  mod: ModStatus | null
+  modError: string
+  modBusy: boolean
+  onCheckMod: () => void
+  onInstallMod: () => void
 }) {
   const [status, setStatus] = useState<Status | null>(null)
-  const [mod, setMod] = useState<ModStatus | null>(null)
-  const [modError, setModError] = useState("")
-  const [modBusy, setModBusy] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [launchMsg, setLaunchMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -21,21 +23,6 @@ export default function Home({ settings, onSettings }: {
     const t = setInterval(poll, 2000)
     return () => clearInterval(t)
   }, [])
-
-  const checkMod = useCallback(async () => {
-    setModBusy(true); setModError("")
-    try { setMod(await api.modStatus()) } catch (e) { setModError(String(e)) } finally { setModBusy(false) }
-  }, [])
-  useEffect(() => { checkMod() }, [checkMod, settings.mods_dir])
-
-  async function installMod() {
-    setModBusy(true); setModError("")
-    try {
-      const r = await api.installMod()
-      if (r.failed.length) setModError("Anciennes versions non supprimées (fermez BeamNG puis réessayez) : " + r.failed.map(fileName).join(", "))
-      setMod(await api.modStatus())
-    } catch (e) { setModError(String(e)) } finally { setModBusy(false) }
-  }
 
   async function save(next: Settings) {
     await api.saveSettings(next)
@@ -49,7 +36,7 @@ export default function Home({ settings, onSettings }: {
       const parts = ["BeamNG est en cours de lancement. Laissez le launcher ouvert pendant que vous jouez."]
       if (r.installed) parts.unshift(`Mod GRNFR CMP mis à jour en v${r.installed.version}.`)
       setLaunchMsg({ ok: !r.warning, text: [...parts, r.warning || ""].filter(Boolean).join(" ") })
-      checkMod()
+      onCheckMod()
     } catch (e) { setLaunchMsg({ ok: false, text: String(e) }) } finally { setLaunching(false) }
   }
 
@@ -91,8 +78,8 @@ export default function Home({ settings, onSettings }: {
             ) : null}
           </div>
           <div className="row">
-            {mod && !mod.up_to_date && mod.latest && <button className="btn" onClick={installMod} disabled={modBusy}>{modBusy ? "Installation…" : "Mettre à jour le mod"}</button>}
-            <button className="btn dim" onClick={checkMod} disabled={modBusy}>Vérifier</button>
+            {mod && !mod.up_to_date && mod.latest && <button className="btn" onClick={onInstallMod} disabled={modBusy}>{modBusy ? "Installation…" : "Mettre à jour le mod"}</button>}
+            <button className="btn dim" onClick={onCheckMod} disabled={modBusy}>Vérifier</button>
           </div>
         </div>
         {mod && <p className="mut small">Dossier : {mod.mods_dir}</p>}
