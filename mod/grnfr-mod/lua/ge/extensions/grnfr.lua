@@ -1,10 +1,10 @@
 -- GRNFR Mod : extension GE principale (orchestration uniquement).
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
-  'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
+  'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap' }
 
-local VERSION = '2.3.2'
+local VERSION = '2.4.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -233,6 +233,7 @@ local ROUTES = {
     grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
     if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
   end,
+  ['server.arrive']   = function(a) grnfr_travel.arrive(a.vehicle) end,
   ['server.travel']   = function(a)
     grnfr_travel.go(a.level, a.pos, function() setOnlineOpen(false); setQuickOpen(false); setTabletOpen(false) end)
   end,
@@ -242,6 +243,7 @@ local ROUTES = {
     if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
     grnfr_online.spawnVehicle(a)
   end,
+  ['garage.lock']     = function(a) grnfr_online.setLocked(a.id, a.on) end,
   ['garage.store']    = function(a)
     if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
     grnfr_online.storeVehicle(a.id)
@@ -378,7 +380,7 @@ end
 -- reste enregistré tel que le joueur l'a choisi (il est réarmé automatiquement dans tick).
 local function resetGameplayFeatures()
   grnfr_traffic.reset()
-  pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset)
+  pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset); pcall(grnfr_facilities.reset)
   pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
   if onlineOpen then onlineOpen = false; guihooks.trigger('GRNFROnlineWin', { open = false }) end
   if tabletOpen then tabletOpen = false; guihooks.trigger('GRNFRTabletWin', { open = false }) end
@@ -393,7 +395,10 @@ function M.onClientEndMission()
   onStateEvent()
 end
 
-M.onVehicleSwitched = onStateEvent
+function M.onVehicleSwitched(oldId, newId, player)
+  pcall(grnfr_online.onVehicleSwitched, oldId, newId)
+  onStateEvent()
+end
 M.onSettingsChanged = onStateEvent
 M.onInputBindingsChanged = onStateEvent
 

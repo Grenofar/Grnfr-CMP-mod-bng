@@ -14,7 +14,7 @@ Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
-  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0012).
+  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0014).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
 - `host/` — a standalone Tauri app (Rust backend + React/TypeScript frontend, one native window — not a
   local web server you open in a browser, and not the old egui/eframe version from earlier in this project's
@@ -223,6 +223,32 @@ main menu in 2.3.0/2.3.1). Server empty: current map, or `west_coast_usa` from t
 that player → `garage.lua` released (it holds its claim on a fresh join so the garage isn't picked near the default
 spawn point) → car placed 4 m from the player's own garage (tablet in reach). The mod windows close before a load.
 All these game APIs are unverified hypotheses under `pcall`. `ServerBar.vue` = top-centre pill "server · n/max".
+
+**Garages, tablet, arrival (mod 2.4.0+).** `grnfr/facilities.lua` reads the map's REAL career garages
+(`freeroam_facilities.getFacilitiesByType('garage'|'computer')` + `getParkingSpotsForFacility`, fallback: parse
+`levels/<lvl>/facilities/*.facilities.json` + `facilities.sites.json` ourselves); the tablet position = the garage
+computer's door object (`scenetree.findObject`), else its first parking spot. `garage.lua` only ever claims one of
+those (never a random road point — a map without garages gives none), skips garages another player holds, and
+`release_garage_spot`s a pre-2.4 random-road spot it gets back. Tablet (`Tablet.vue`, key O within 12 m of your
+tablet/parking spots; O elsewhere opens the menu window, which now only has account/servers/board/settings): apps
+Mes voitures (spawn on a free garage spot, store, lock, insurance, sell/list), Joueurs (pick a server player →
+money / give car = `propose_trade` with nothing wanted / trade), Échanges, Concession (server-side negotiation bot
+`negotiate_vehicle` with secret floor 80–90 %, patience 3–5, insult < 60 %; insurance tiers none/basic/comfort/premium
+→ `buy_vehicle_insured`), Annonces, Travail, Historique. Arrival on a server: `travel.lua` → `teleportHome` (career's
+`freeroam_facilities.teleportToGarage`) → `GRNFRArrived` → `net.js` picks the first unlisted vehicle →
+`server.arrive` spawns it on a garage spot and enters it, else walking mode (`gameplay_walk.setWalkingMode(true)`) in
+front of the tablet; the free-roam default car is deleted either way. Lock = `online.lua` blocks entering (walks you
+out) + parking brake; all unverified game APIs under `pcall`. Research notes on career internals came from RLS
+Career Overhaul's copies of vanilla files (not vanilla itself).
+
+**Live map (host 0.6.0+, `0013_live_map.sql`).** The mod's `roadmap.lua` uploads once per map the navgraph as 2D
+segments (`level_roads_needed` → `upload_level_roads`); `live_servers()` / `get_level_roads()` are anon-readable and
+the host's "Carte en direct" (`LiveMap.tsx`) draws roads + players on a canvas. These are the MOD's game servers
+(Serveur 1/2/3 on Supabase), not the host's own relays.
+
+**Supabase MCP quirk:** statements containing `delete`/`drop` (even inside a function body) need an interactive
+confirmation and time out after 60 s from this environment — have the user paste such migrations into the
+Supabase SQL Editor instead (0014 was applied that way).
 
 **Host election / handover needs no explicit state.** The shared-traffic "host" (`convoy.lua`,
 `0003_convoy.sql`) is just "the `server_members` row with the oldest `joined_at` still present" —

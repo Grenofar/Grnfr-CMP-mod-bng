@@ -100,15 +100,20 @@ local function deleteObj(id)
   pcall(function() local o = be:getObjectByID(id) if o then o:delete() end end)
 end
 
--- v = { id, model_key, config_key, nickname }
-function M.spawnVehicle(v)
+-- v = { id, model_key, config_key, nickname }. Le véhicule apparaît sur une place libre de SON garage (comme la
+-- carrière), sinon à côté du joueur. enter = true : le joueur monte dedans (arrivée sur le serveur).
+function M.spawnVehicle(v, enter)
   if type(v) ~= 'table' or not v.model_key then return false end
-  if spawned[v.id] then deleteObj(spawned[v.id]); spawned[v.id] = nil end
+  if spawned[v.id] then deleteObj(spawned[v.id].obj); spawned[v.id] = nil end
   local pv = playerVeh()
+  local spot = grnfr_garage.freeSpot()
   local ok, obj = pcall(function()
-    local opts = { autoEnterVehicle = true }
+    local opts = { autoEnterVehicle = enter == true }
     if v.config_key and v.config_key ~= '' then opts.config = v.config_key end
-    if pv then
+    if spot then
+      opts.pos = vec3(spot.pos.x, spot.pos.y, spot.pos.z + 0.3)
+      if spot.rot then opts.rot = spot.rot end
+    elseif pv then
       local pos, dir, up = pv:getPosition(), pv:getDirectionVector(), pv:getDirectionVectorUp()
       local right = dir:cross(up):normalized()
       opts.pos = pos + right * 4 + dir * 2
@@ -121,15 +126,52 @@ function M.spawnVehicle(v)
     M.toast(M.L('Impossible de faire apparaître ce véhicule.', 'Could not spawn this vehicle.'), 'error')
     return false
   end
-  spawned[v.id] = type(obj) == 'number' and obj or obj:getID()
+  spawned[v.id] = { obj = type(obj) == 'number' and obj or obj:getID(), locked = false, name = v.nickname or v.model_key }
+  if not enter then M.toast(M.L('Votre véhicule est garé devant votre garage.', 'Your vehicle is parked at your garage.')) end
   lastSig = ''
   return true
 end
 
 function M.storeVehicle(id)
-  if spawned[id] then deleteObj(spawned[id]); spawned[id] = nil; lastSig = '' end
+  if spawned[id] then deleteObj(spawned[id].obj); spawned[id] = nil; lastSig = '' end
   return true
 end
+
+-- Verrouillage : un véhicule verrouillé ne peut pas être conduit (on en est sorti aussitôt) ; frein à main serré.
+-- Les autres joueurs ne voient de toute façon qu'un fantôme ; le verrou protège d'un « emprunt » dans le jeu.
+function M.setLocked(id, on)
+  local s = spawned[id]
+  if not s then return false end
+  s.locked = on == true
+  pcall(function()
+    local o = be:getObjectByID(s.obj)
+    -- API non vérifiées : frein à main et appel de phares (clignotants de détresse brièvement)
+    o:queueLuaCommand('if input and input.event then input.event("parkingbrake", ' .. (s.locked and 1 or 0) .. ', 1) end')
+    o:queueLuaCommand('if electrics and electrics.set_warn_signal then electrics.set_warn_signal(true) end')
+  end)
+  s.flashUntil = os.clock() + 1.2
+  M.toast(s.locked and M.L('Véhicule verrouillé.', 'Vehicle locked.') or M.L('Véhicule déverrouillé.', 'Vehicle unlocked.'))
+  lastSig = ''
+  return true
+end
+
+function M.isLocked(objId)
+  for _, s in pairs(spawned) do if s.obj == objId then return s.locked end end
+  return false
+end
+
+-- Le jeu nous fait entrer dans un véhicule verrouillé : on en ressort (à pied si possible).
+function M.onVehicleSwitched(oldId, newId)
+  if not newId or not M.isLocked(newId) then return end
+  M.toast(M.L('Ce véhicule est verrouillé (tablette > Mes voitures).', 'This vehicle is locked (tablet > My cars).'), 'warning')
+  pcall(function()
+    if gameplay_walk and gameplay_walk.setWalkingMode then gameplay_walk.setWalkingMode(true)
+    elseif oldId and oldId >= 0 then be:enterVehicle(0, be:getObjectByID(oldId)) end
+  end)
+end
+
+-- Mes véhicules sortis : id du garage -> objet, verrou.
+function M.spawnedList() return spawned end
 
 -- ------------------------------------------------------------------ saisie clavier dans l'interface
 -- Pendant qu'un champ texte est actif, les touches ne doivent pas piloter la voiture (API non vérifiée).
@@ -153,9 +195,13 @@ end
 
 local function buildState()
   local sp = {}
-  for id, objId in pairs(spawned) do
-    local ok, o = pcall(function() return be:getObjectByID(objId) end)
-    if ok and o then sp[id] = true else spawned[id] = nil end
+  for id, s in pairs(spawned) do
+    local ok, o = pcall(function() return be:getObjectByID(s.obj) end)
+    if ok and o then sp[id] = { locked = s.locked } else spawned[id] = nil end
+    if s.flashUntil and os.clock() > s.flashUntil then
+      s.flashUntil = nil
+      pcall(function() o:queueLuaCommand('if electrics and electrics.set_warn_signal then electrics.set_warn_signal(false) end') end)
+    end
   end
   local pos = grnfr_places.playerPos()
   return {
@@ -213,7 +259,7 @@ function M.requestPlaces()
 end
 
 function M.reset()
-  for _, objId in pairs(spawned) do deleteObj(objId) end
+  for _, s in pairs(spawned) do deleteObj(s.obj) end
   spawned, pending = {}, {}
   lastSig = ''
 end

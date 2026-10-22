@@ -366,6 +366,14 @@ export async function leaveServer() {
   setServerLocal(null)
 }
 
+// Arrivée au garage du serveur (travel.lua) : on sort mon premier véhicule disponible (pas en vente), sinon le Lua
+// me met à pied devant la tablette pour en acheter un.
+async function onArrived() {
+  try { await refreshMe() } catch (e) { /* on part avec ce qu'on a */ }
+  const v = (net.me?.vehicles || []).find(x => !x.listed)
+  ui("server.arrive", { vehicle: v ? { id: v.id, model_key: v.model_key, config_key: v.config_key, nickname: v.nickname } : null })
+}
+
 // Position des 2 voitures de trafic partagé, envoyée par Lua uniquement si je suis l'hôte du serveur (voir convoy.lua).
 function onConvoySelf(d) {
   const c = unwrapList(d)
@@ -426,6 +434,7 @@ export async function initNet() {
   on("GRNFROnline", d => { const g = unwrapObj(d); if (g) net.game = g })
   on("GRNFRPlaces", d => { const g = unwrapObj(d); if (g?.places) net.places = g.places })
   on("GRNFROnlineWin", d => { const g = unwrapObj(d); if (g) net.open = !!g.open })
+  on("GRNFRArrived", () => { onArrived().catch(() => {}) })
   on("GRNFRTabletWin", d => { const g = unwrapObj(d); if (g) net.tablet = { open: !!g.open, name: String(g.name || "") } })
   on("GRNFRQuickWin", d => { const g = unwrapObj(d); if (g) net.quickOpen = !!g.open })
   on("GRNFRProfileExport", d => { const g = unwrapObj(d); if (g?.ok) net.exportedPath = g.path || "" })

@@ -27,24 +27,43 @@
           </button>
         </div>
 
-        <!-- GARAGE -->
+        <!-- MES VOITURES : sortir (sur une place du garage), ranger, verrouiller, assurance, vendre -->
         <main v-else-if="app === 'garage'">
           <p class="mut">{{ L('Places utilisées', 'Slots used') }} : {{ vehicles.length }}/{{ profile.garage_slots || 0 }}</p>
-          <p v-if="!vehicles.length" class="empty">{{ L('Aucun véhicule. Passez par la Concession.', 'No vehicle. Visit the Dealership.') }}</p>
+          <div v-if="!vehicles.length" class="empty">
+            {{ L('Vous n\'avez pas encore de voiture.', 'You have no car yet.') }}<br />
+            <button type="button" class="btn" style="margin-top: 10px" @click="go('dealer')">{{ L('Aller à la concession', 'Go to the dealership') }}</button>
+          </div>
           <div class="grid">
             <div v-for="v in vehicles" :key="v.id" class="tile">
               <div class="tname">{{ v.nickname || v.model_key }}</div>
               <div class="mut">{{ v.model_key }}<template v-if="v.config_key"> · {{ v.config_key }}</template></div>
               <div class="price">{{ money(v.value) }}</div>
-              <div class="tags"><span v-if="v.listed" class="tag">{{ L('En vente', 'Listed') }}</span><span v-if="out(v)" class="tag on">{{ L('Sorti', 'Out') }}</span></div>
+              <div class="tags">
+                <span class="tag" :class="'ins-' + (v.insurance || 'none')">{{ planName(v.insurance) }}</span>
+                <span v-if="v.listed" class="tag">{{ L('En vente', 'Listed') }}</span>
+                <span v-if="out(v)" class="tag on">{{ L('Sorti', 'Out') }}</span>
+                <span v-if="locked(v)" class="tag lock">🔒 {{ L('Verrouillé', 'Locked') }}</span>
+              </div>
               <div class="acts">
-                <button v-if="!out(v)" type="button" class="btn" @click="ui('garage.spawn', { id: v.id, model_key: v.model_key, config_key: v.config_key, nickname: v.nickname })">{{ L('Sortir', 'Take out') }}</button>
-                <button v-else type="button" class="btn" @click="ui('garage.store', { id: v.id })">{{ L('Ranger', 'Store') }}</button>
+                <button v-if="!out(v)" type="button" class="btn" :disabled="v.listed" @click="ui('garage.spawn', { id: v.id, model_key: v.model_key, config_key: v.config_key, nickname: v.nickname })">{{ L('Sortir au garage', 'Take out') }}</button>
+                <template v-else>
+                  <button type="button" class="btn" @click="ui('garage.store', { id: v.id })">{{ L('Ranger', 'Store') }}</button>
+                  <button type="button" class="btn dim" @click="ui('garage.lock', { id: v.id, on: !locked(v) })">{{ locked(v) ? '🔓 ' + L('Déverrouiller', 'Unlock') : '🔒 ' + L('Verrouiller', 'Lock') }}</button>
+                </template>
+                <button type="button" class="btn dim" @click="insFor = insFor === v.id ? null : v.id">{{ L('Assurance', 'Insurance') }}</button>
                 <template v-if="!v.listed">
                   <button type="button" class="btn dim" @click="sellDealer(v)">{{ L('Vendre au concessionnaire', 'Sell to dealer') }}</button>
                   <div class="inline"><input v-model.number="f['p' + v.id]" type="number" min="1" :placeholder="L('Prix', 'Price')" />
                     <button type="button" class="btn dim" @click="act(() => rpc('create_listing', { p_vehicle_id: v.id, p_price: f['p' + v.id], p_description: null }))">{{ L('Mettre en vente', 'List') }}</button></div>
                 </template>
+              </div>
+              <div v-if="insFor === v.id" class="plans small">
+                <button v-for="pl in plans" :key="pl.tier" type="button" class="plan" :class="{ on: (v.insurance || 'none') === pl.tier }"
+                        @click="act(() => rpc('set_vehicle_insurance', { p_vehicle_id: v.id, p_insurance: pl.tier }), () => { insFor = null })">
+                  <b>{{ planName(pl.tier) }}</b>
+                  <span>{{ rank(pl.tier) > rank(v.insurance) ? money(premium(pl, v.value)) : L('gratuit', 'free') }}</span>
+                </button>
               </div>
             </div>
           </div>
@@ -68,7 +87,7 @@
               <label>{{ L('Montant', 'Amount') }}</label>
               <div class="chips"><button v-for="a in [100, 500, 1000, 5000, 10000]" :key="a" type="button" class="chip" @click="f.amount = a">{{ money(a) }}</button></div>
               <input v-model.number="f.amount" type="number" min="1" />
-              <button type="button" class="btn" :disabled="!(f.amount > 0)" @click="act(() => rpc('send_money', { p_username: sel, p_amount: f.amount }), () => { f.amount = 0 })">{{ L('Envoyer', 'Send') }} {{ money(f.amount) }}</button>
+              <button type="button" class="btn" :disabled="!(f.amount > 0)" @click="act(() => rpc('send_money', { p_username: sel, p_amount: f.amount }), () => { f.amount = null })">{{ L('Envoyer', 'Send') }} {{ money(f.amount) }}</button>
             </div>
             <div v-else-if="mode === 'car'" class="panel">
               <label>{{ L('Véhicule à donner (il devra accepter)', 'Vehicle to give (they must accept)') }}</label>
@@ -118,15 +137,52 @@
           </div>
         </main>
 
-        <!-- CONCESSION -->
-        <main v-else-if="app === 'dealer'">
+        <!-- CONCESSION : choisir un véhicule, négocier avec le vendeur (bot côté serveur), choisir l'assurance -->
+        <main v-else-if="app === 'dealer' && !buy.c">
           <div class="grid">
-            <div v-for="c in d.catalog" :key="c.id" class="tile">
+            <div v-for="c in d.catalog" :key="c.id" class="tile click" @click="openBuy(c)">
               <div class="tname">{{ c.name }}</div>
+              <div class="mut">{{ c.model_key }}</div>
               <div class="price">{{ money(c.price) }}</div>
-              <div class="acts"><button type="button" class="btn" :disabled="(profile.balance || 0) < c.price" @click="act(() => rpc('buy_vehicle', { p_catalog_id: c.id }))">{{ L('Acheter', 'Buy') }}</button></div>
             </div>
           </div>
+        </main>
+        <main v-else-if="app === 'dealer'" class="buy">
+          <section class="nego">
+            <button type="button" class="back" @click="buy.c = null">‹ {{ L('Catalogue', 'Catalogue') }}</button>
+            <h3>{{ buy.c.name }}</h3>
+            <div class="mut">{{ L('Prix affiché', 'List price') }} : <b>{{ money(buy.c.price) }}</b></div>
+            <div class="chat">
+              <div v-for="(m, i) in buy.log" :key="i" class="bubble" :class="m.who">{{ m.text }}</div>
+            </div>
+            <div class="pat">{{ L('Patience du vendeur', 'Seller patience') }} :
+              <span v-for="k in 5" :key="k" class="pdot" :class="{ on: k <= (buy.neg.patience || 0) }" /></div>
+            <template v-if="canOffer">
+              <div class="inline">
+                <input v-model.number="buy.offer" type="number" min="1" :placeholder="L('Votre offre', 'Your offer')" />
+                <button type="button" class="btn" :disabled="!(buy.offer > 0) || buy.busy" @click="offer(buy.offer)">{{ L('Proposer', 'Offer') }}</button>
+              </div>
+              <div class="chips">
+                <button v-for="k in [0.95, 0.9, 0.85]" :key="k" type="button" class="chip" @click="buy.offer = Math.round(buy.c.price * k / 50) * 50">-{{ Math.round((1 - k) * 100) }} %</button>
+                <button v-if="buy.neg.asking < buy.c.price" type="button" class="chip" @click="offer(buy.neg.asking)">{{ L('Accepter son prix', 'Accept their price') }} ({{ money(buy.neg.asking) }})</button>
+              </div>
+            </template>
+          </section>
+          <section class="checkout">
+            <h4>{{ L('Assurance', 'Insurance') }}</h4>
+            <button v-for="pl in plans" :key="pl.tier" type="button" class="plan wide" :class="{ on: buy.ins === pl.tier }" @click="buy.ins = pl.tier">
+              <b>{{ planName(pl.tier) }}</b>
+              <span class="mut">{{ planDesc(pl) }}</span>
+              <span class="pp">{{ money(premium(pl, buy.c.price)) }}</span>
+            </button>
+            <div class="total">
+              <div><span>{{ L('Véhicule', 'Vehicle') }}</span><b>{{ money(buyPrice) }}</b></div>
+              <div><span>{{ L('Assurance', 'Insurance') }}</span><b>{{ money(buyPremium) }}</b></div>
+              <div class="sum"><span>Total</span><b>{{ money(buyPrice + buyPremium) }}</b></div>
+            </div>
+            <button type="button" class="btn big" :disabled="buy.busy || (profile.balance || 0) < buyPrice + buyPremium" @click="purchase">{{ L('Acheter', 'Buy') }}</button>
+            <p v-if="(profile.balance || 0) < buyPrice + buyPremium" class="bad small">{{ L('Fonds insuffisants.', 'Not enough money.') }}</p>
+          </section>
         </main>
 
         <!-- ANNONCES -->
@@ -191,19 +247,72 @@ const apps = [
   { id: "history", color: "#64748b", path: "M12 7v5l3 2M21 12a9 9 0 11-3-6.7M21 4v5h-5" },
 ]
 const NAMES = {
-  garage: ["Garage", "Garage"], players: ["Joueurs", "Players"], trades: ["Échanges", "Trades"], dealer: ["Concession", "Dealership"],
+  garage: ["Mes voitures", "My cars"], players: ["Joueurs", "Players"], trades: ["Échanges", "Trades"], dealer: ["Concession", "Dealership"],
   market: ["Annonces", "Listings"], work: ["Travail", "Work"], history: ["Historique", "History"],
 }
 const appName = id => L(...NAMES[id])
 const modeName = m => ({ money: L("Argent", "Money"), car: L("Donner une voiture", "Give a car"), trade: L("Échange", "Trade") })[m]
 
-const app = ref(null), msg = ref(""), sel = ref(null), mode = ref("money")
-const f = reactive({ amount: 0, gift: "", offer: "", want: "", cash: 0 })
+const app = ref(null), msg = ref(""), sel = ref(null), mode = ref("money"), insFor = ref(null)
+const f = reactive({ amount: null, gift: "", offer: "", want: "", cash: null })
 const d = reactive({ trades: [], catalog: [], market: [], tx: [] })
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
 const out = v => !!(net.game.spawned && net.game.spawned[v.id])
+const locked = v => !!(net.game.spawned && net.game.spawned[v.id] && net.game.spawned[v.id].locked)
+
+// ------------------------------------------------------------------ assurances (mêmes valeurs que private.insurance_plan, 0014)
+const plans = ref([
+  { tier: "none", rank: 0, rate: 0, deductible: 100, towing: false },
+  { tier: "basic", rank: 1, rate: 2, deductible: 50, towing: false },
+  { tier: "comfort", rank: 2, rate: 5, deductible: 20, towing: true },
+  { tier: "premium", rank: 3, rate: 9, deductible: 0, towing: true },
+])
+const PLAN_NAMES = { none: ["Sans assurance", "No insurance"], basic: ["Essentielle", "Essential"], comfort: ["Confort", "Comfort"], premium: ["Premium", "Premium"] }
+const planName = t => L(...(PLAN_NAMES[t || "none"] || PLAN_NAMES.none))
+const rank = t => (plans.value.find(p => p.tier === (t || "none")) || { rank: 0 }).rank
+const premium = (pl, value) => Math.ceil((value || 0) * pl.rate / 100)
+const planDesc = pl => pl.tier === "none" ? L("Vous payez toutes les réparations.", "You pay all repairs.")
+  : L(`Franchise ${pl.deductible} % des réparations`, `Deductible ${pl.deductible}% of repairs`) + (pl.towing ? L(" · remorquage offert", " · free towing") : "")
+
+// ------------------------------------------------------------------ achat : négociation + assurance
+const buy = reactive({ c: null, neg: {}, offer: null, log: [], ins: "basic", busy: false })
+const canOffer = computed(() => ["open", "counter"].includes(buy.neg.status))
+const buyPrice = computed(() => (buy.neg.status === "accepted" ? buy.neg.asking : buy.c?.price) || 0)
+const buyPremium = computed(() => { const pl = plans.value.find(p => p.tier === buy.ins); return pl && buy.c ? premium(pl, buy.c.price) : 0 })
+function botSays(r) {
+  const p = money(r.asking)
+  const t = {
+    open: L(`Bonjour ! Il est à ${p}. Faites-moi une offre.`, `Hello! It's ${p}. Make me an offer.`),
+    counter: L(`Hmm... je peux descendre à ${p}.`, `Hmm... I can go down to ${p}.`),
+    final: L(`Dernier prix : ${p}. À prendre ou à laisser.`, `Final price: ${p}. Take it or leave it.`),
+    accepted: L(`Marché conclu à ${p} !`, `Deal at ${p}!`),
+    insulted: L("Vous vous moquez de moi ? Revenez plus tard.", "Are you kidding me? Come back later."),
+    refused: L("Non. On en reste là pour aujourd'hui.", "No. We're done for today."),
+    closed: L("Le vendeur ne veut plus négocier pour le moment (prix affiché seulement).", "The seller won't negotiate for now (list price only)."),
+  }[r.status]
+  if (t) buy.log.push({ who: "bot", text: t })
+}
+async function openBuy(c) {
+  Object.assign(buy, { c, neg: { status: "open", asking: c.price, patience: 5 }, offer: null, log: [], ins: "basic", busy: false })
+  try { const r = await rpc("negotiate_vehicle", { p_catalog_id: c.id, p_offer: null }); buy.neg = r; botSays(r) }
+  catch (e) { buy.neg = { status: "closed", asking: c.price, patience: 0 }; buy.log.push({ who: "bot", text: L("Négociation indisponible : prix affiché.", "Negotiation unavailable: list price.") }) }
+}
+async function offer(amount) {
+  const n = Math.floor(Number(amount))
+  if (!n || n <= 0 || !buy.c) return
+  buy.busy = true; net.error = ""
+  buy.log.push({ who: "me", text: L(`Je vous en propose ${money(n)}.`, `I offer ${money(n)}.`) })
+  try { const r = await rpc("negotiate_vehicle", { p_catalog_id: buy.c.id, p_offer: n }); buy.neg = { ...r, status: r.status === "insulted" || r.status === "refused" ? "closed" : r.status }; botSays(r) }
+  catch (e) { net.error = errText(e) }
+  buy.busy = false; buy.offer = null
+}
+async function purchase() {
+  buy.busy = true
+  await act(() => rpc("buy_vehicle_insured", { p_catalog_id: buy.c.id, p_insurance: buy.ins, p_color: null }), () => { buy.c = null; go("garage") })
+  buy.busy = false
+}
 const giftable = computed(() => vehicles.value.filter(v => !v.listed && !out(v)))
 const taxi = computed(() => net.game.taxi || {})
 const bus = computed(() => net.game.bus || {})
@@ -224,7 +333,7 @@ const loadMarket = () => safe(async () => { d.market = await rpc("get_market", {
 async function sellDealer(v) { await act(async () => { if (out(v)) await ui("garage.store", { id: v.id }); await rpc("sell_vehicle_to_dealer", { p_vehicle_id: v.id }) }) }
 
 async function pick(name) {
-  sel.value = name; f.gift = ""; f.offer = ""; f.want = ""; f.cash = 0; msg.value = ""; net.error = ""
+  sel.value = name; f.gift = ""; f.offer = ""; f.want = ""; f.cash = null; msg.value = ""; net.error = ""
   theirsLoading.value = true
   try { theirs.value = await rpc("get_player_garage", { p_username: name }) } catch (e) { theirs.value = [] }
   theirsLoading.value = false
@@ -235,12 +344,12 @@ watch(() => net.players.map(p => p.username).join(), () => { if (sel.value && !n
 function go(id) {
   app.value = id; msg.value = ""; net.error = ""
   if (id === "trades" || id === "players") loadTrades()
-  else if (id === "dealer") safe(async () => { d.catalog = await rpc("get_catalog") })
+  else if (id === "dealer") { buy.c = null; safe(async () => { d.catalog = await rpc("get_catalog") }) }
   else if (id === "market") loadMarket()
   else if (id === "history") safe(async () => { d.tx = await rpc("get_my_transactions", { p_limit: 40 }) })
   if (id === "garage" || id === "players") refreshMe().catch(() => {})
 }
-watch(() => net.tablet.open, o => { if (o) { go(null); loadTrades(); refreshMe().catch(() => {}) } })
+watch(() => net.tablet.open, o => { if (o) { go(null); loadTrades(); refreshMe().catch(() => {}); safe(async () => { const p = await rpc("get_insurance_plans"); if (Array.isArray(p) && p.length) plans.value = p }) } })
 
 let timer = null
 onMounted(() => { tick(); timer = setInterval(tick, 10000) })
@@ -269,8 +378,28 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .tile { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08);
   &.wide { margin-bottom: 12px; } .tname { font: 700 16px "Overpass", sans-serif; } .price { font: 800 20px "Overpass", sans-serif; color: var(--ac); }
-  .tags { display: flex; gap: 6px; min-height: 4px; } .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .inline { display: flex; gap: 6px; width: 100%; input { flex: 1; } } }
+  .tags { display: flex; gap: 6px; min-height: 4px; } .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .inline { display: flex; gap: 6px; width: 100%; input { flex: 1; min-width: 0; } .btn { white-space: nowrap; flex: none; } } }
 .tag { padding: 1px 8px; font-size: 11px; border-radius: 10px; background: rgba(255, 102, 0, 0.2); color: var(--ac); &.on { background: rgba(74, 222, 128, 0.2); color: #4ade80; } }
+.tile.click { cursor: pointer; transition: border-color 0.15s, transform 0.15s; &:hover { border-color: var(--ac); transform: translateY(-2px); } }
+.tag.lock { background: rgba(239, 68, 68, 0.2); color: #f87171; } .tag.ins-none { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); }
+.tag.ins-basic { background: rgba(59, 130, 246, 0.2); color: #93c5fd; } .tag.ins-comfort { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; } .tag.ins-premium { background: rgba(234, 179, 8, 0.2); color: #fde047; }
+.plans { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.plan { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04);
+  color: #fff; font: inherit; cursor: pointer; text-align: left; &.on, &:hover { border-color: var(--ac); background: rgba(255, 102, 0, 0.12); }
+  &.wide { width: 100%; display: grid; grid-template-columns: 1fr auto; margin-bottom: 6px; .mut { grid-column: 1; font-size: 12px; } .pp { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-weight: 800; color: var(--ac); } } }
+.buy { display: flex; gap: 20px; }
+.nego { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; h3 { margin: 0; font: 700 22px "Overpass", sans-serif; }
+  .back { align-self: flex-start; border: 0; background: none; color: var(--ac); font: 600 14px inherit; cursor: pointer; padding: 0; } }
+.chat { flex: 1; min-height: 160px; max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); }
+.bubble { max-width: 80%; padding: 8px 12px; border-radius: 14px; font-size: 13px; &.bot { align-self: flex-start; background: rgba(255, 255, 255, 0.08); border-bottom-left-radius: 4px; }
+  &.me { align-self: flex-end; background: var(--ac); border-bottom-right-radius: 4px; } }
+.pat { font-size: 12px; color: rgba(255, 255, 255, 0.6); display: flex; align-items: center; gap: 4px; }
+.pdot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); &.on { background: #4ade80; } }
+.checkout { width: 330px; flex: none; h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.6); } }
+.total { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); > div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .sum { border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 4px; padding-top: 6px; font-size: 16px; b { color: var(--ac); } } }
+.btn.big { width: 100%; padding: 12px; font-size: 15px; }
+.small { font-size: 12px; }
 .swap { display: flex; align-items: center; gap: 8px; .arr { color: var(--ac); font-size: 18px; } }
 .split { display: flex; gap: 16px; padding: 0; overflow: hidden; }
 .plist { width: 280px; flex: none; overflow-y: auto; padding: 14px; border-right: 1px solid rgba(255, 255, 255, 0.07); }

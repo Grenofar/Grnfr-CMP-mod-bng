@@ -144,19 +144,55 @@ function M.update(dt)
   if target.phase == 'garage' then
     local mine = grnfr_garage.mine and grnfr_garage.mine()
     if mine and type(mine.pos) == 'table' then
-      if mine.level == nil or mine.level == grnfr_places.level() then
-        placeNear(mine.pos, 4)
-        grnfr_online.toast(L('Vous êtes devant votre garage : la tablette est à portée.', 'You are at your garage: the tablet is in reach.'))
-        slog('info', 'Travel: placed the player at their garage.')
+      target = nil
+      if mine.garage then
+        grnfr_garage.teleportHome(playerVeh())
+        slog('info', 'Travel: at the garage, asking the interface which vehicle to take out.')
+        -- l'interface connaît mes véhicules : elle répond par server.arrive (voir M.arrive)
+        guihooks.trigger('GRNFRArrived', { garage = mine.garage.name })
       else
         slog('info', 'Travel: your garage on this server is on another map, staying here.')
       end
-      target = nil
     elseif target.t > WAIT_GARAGE then
       target = nil
       slog('warn', 'Travel: no garage was given in time, staying here.')
     end
   end
+end
+
+-- Arrivée au garage, comme la carrière : dans SA voiture (sortie sur une place du garage), ou à pied devant la
+-- tablette si on n'en a pas encore (première fois : on va acheter une voiture sur la tablette). La voiture « gratuite »
+-- du jeu libre est retirée. v = véhicule du garage à sortir, ou nil.
+function M.arrive(v)
+  local old = playerVeh()
+  local oldId = old and old:getID()
+  local function dropOld()
+    if not oldId then return end
+    for _, s in pairs(grnfr_online.spawnedList()) do if s.obj == oldId then return end end
+    if grnfr_ghosts.isGhost(oldId) then return end
+    pcall(function() local o = be:getObjectByID(oldId) if o then o:delete() end end)
+  end
+  if type(v) == 'table' and v.model_key then
+    if grnfr_online.spawnVehicle(v, true) then
+      dropOld()
+      grnfr_online.toast(L('Bienvenue ! Votre véhicule vous attend au garage. Tablette : touche O.', 'Welcome! Your vehicle is at your garage. Tablet: O key.'))
+      return true
+    end
+  end
+  -- à pied devant la tablette (API de la carrière, non vérifiées : gameplay_walk.setWalkingMode, spawn.safeTeleport)
+  local mine = grnfr_garage.mine()
+  local ok = pcall(function()
+    gameplay_walk.setWalkingMode(true)
+    if mine and mine.pos then
+      local t = vec3(mine.pos.x, mine.pos.y, mine.pos.z)
+      spawn.safeTeleport(be:getPlayerVehicle(0), t + vec3(1.5, 1.5, 0.3))
+      pcall(function() gameplay_walk.setRot(t - be:getPlayerVehicle(0):getPosition(), vec3(0, 0, 1)) end)
+    end
+  end)
+  if ok then dropOld() else slog('warn', 'Travel: could not switch to walking mode.') end
+  grnfr_online.toast(L('Vous êtes à pied devant votre garage : achetez votre première voiture sur la tablette (touche O).',
+    'You are on foot at your garage: buy your first car on the tablet (O key).'))
+  return true
 end
 
 return M
