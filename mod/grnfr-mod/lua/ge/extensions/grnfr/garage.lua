@@ -69,12 +69,20 @@ local function requestClaim()
   local t = g.tablet
   grnfr_online.call('claim_garage_spot', { p_level = grnfr_places.level(), p_pos = { x = t.x, y = t.y, z = t.z } }, function(ok, data)
     claiming = false
-    if not (ok and type(data) == 'table' and type(data.pos) == 'table') then return end
+    -- Le serveur n'a pas pu enregistrer le garage : on prend quand même ce vrai garage, ici seulement (il sera
+    -- enregistré à la prochaine arrivée). Le joueur n'attend jamais devant un garage qui n'existe pas.
+    local function useLocally(why)
+      slog('warn', 'Garage: ' .. why .. ', using ' .. g.name .. ' on this machine only.')
+      mine = { slot = nil, level = grnfr_places.level(), pos = { x = t.x, y = t.y, z = t.z }, garage = g, localOnly = true }
+    end
+    if not (ok and type(data) == 'table' and type(data.pos) == 'table') then useLocally('the server refused the garage (' .. tostring(data) .. ')') return end
     local real = (data.level == nil or data.level == grnfr_places.level()) and grnfr_facilities.at(data.pos, 30) or nil
     if not real and data.level == grnfr_places.level() then
       -- ancien garage au hasard sur la route : on le rend, la prochaine demande en donnera un vrai
       slog('info', 'Garage: the server gave an old garage that is not a real garage, giving it back.')
-      grnfr_online.call('release_garage_spot', {}, function(ok2) lastClaimTry = ok2 and (clock - 2) or (clock + 30) end)
+      grnfr_online.call('release_garage_spot', {}, function(ok2)
+        if ok2 then lastClaimTry = clock - 2 else useLocally('could not give the old garage back (server not up to date)') end
+      end)
       return
     end
     mine = { slot = data.slot, level = data.level, pos = data.pos, garage = real }
