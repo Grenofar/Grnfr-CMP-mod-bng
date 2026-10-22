@@ -1,6 +1,6 @@
 [package]
 name = "grnfr-host"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 description = "GRNFR Host CMP : app native (Tauri — Rust + React/TypeScript) pour des serveurs auto-hébergés du mod GRNFR CMP (plusieurs par installation, config stockée dans Supabase)."
 

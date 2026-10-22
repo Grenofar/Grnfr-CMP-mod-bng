@@ -10,7 +10,7 @@ program lives in `host/`, named GRNFR Host CMP. Comments in the code are in Fren
 writes for players are in English. The user (Grenofar / Rayan) communicates in French, often with typos —
 read intent, don't nitpick spelling.
 
-Four independent pieces:
+Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
@@ -22,6 +22,11 @@ Four independent pieces:
   install). Its config lives in Supabase (`host_servers` table, `0012_host_multi_server.sql`), keyed by a
   locally-generated id (`grnfr-host.id`), no account. Architecturally separate from the rest; `net.js` does
   not talk to it (yet).
+- `launcher/` — **GRNFR CMP Launcher**, a second Tauri app that every *player* runs next to BeamNG. Required
+  since mod 2.2.0: it is the mod's only way to reach Supabase (see "Architecture"). Relays the mod
+  (`http://127.0.0.1:30815`), detects BeamNG/BeamMP/the mods folder, installs and updates the mod, launches the
+  game (Steam, direct exe, or BeamMP Launcher), first-run wizard, self-update. `launcher/core` = all the logic,
+  no Tauri dependency, tested with `cargo test`; `launcher/src-tauri` = thin command layer; `launcher/src` = React.
 
 ## Supabase MCP access
 
@@ -95,11 +100,20 @@ node scripts/build.mjs
 # fails loudly if it didn't actually persist (see the service_role gotcha above) — don't remove that check.
 npm run release -- "release notes"
 
-# Client network tests (fakes Supabase + the Lua bridge, including grnfr/http.lua's GRNFRHttp round trip;
-# fetch() throws, so any regression back to fetch fails) — 25 checks (relay path + Lua fallback), covers profile creation
+# Client network tests (fakes Supabase, the Lua bridge and the launcher; like BeamNG 0.40, fetch() to anything
+# but http://127.0.0.1:30815 throws "Failed to fetch") — 25 checks, covers profile creation
 # (signUpAnonymous — no e-mail/password path exists in the UI anymore, see below), server join/leave,
-# ghost sync, server-full, not_in_server recovery, Lua RPC bridge, token only sent to Lua for HTTP transport
+# ghost sync, server-full, not_in_server recovery, Lua RPC bridge, token never sent to Lua, launcher closed/reopened
 node tests/net_test.mjs
+
+# End-to-end: real net.js -> REAL Rust relay (launcher/core, `cargo run --example relay`) -> fake Supabase.
+# Needs cargo. Proves the mod and the launcher agree on paths, headers, bodies and error codes.
+node tests/launcher_e2e.mjs
+
+# launcher/ — core logic tests (relay, Steam/BeamMP/mods detection, launch commands, mod install with sha256,
+# settings, app state; 26 tests), then the app itself (same build requirements as host/ below)
+cd launcher/core && cargo test
+cd launcher && npm install && npm run tauri build
 
 # SQL tests, against a real local Postgres (not available in every environment — check before assuming
 # psql exists; prefer the Supabase MCP tools above for checking the real project instead)
@@ -112,9 +126,12 @@ texlua tests/lua_sim.lua
 # host/ — Tauri app (Rust backend + React/TypeScript frontend); frontend alone needs only node/npm
 # (`cd host && npm install && npm run build` — tsc + vite build, works in any environment with node, and
 # was verified working: builds clean, every screen checked in a browser with a mocked Tauri bridge)
-# The full native app also needs cargo + Tauri's system deps (not available in the environment that wrote
-# this code; see .github/workflows/host-release.yml for the exact apt-get list on Linux — libwebkit2gtk,
-# build-essential, libayatana-appindicator3-dev, librsvg2-dev, etc.)
+# The full native app also needs cargo + Tauri's system deps (see .github/workflows/host-release.yml for the
+# apt-get list on Linux — libwebkit2gtk-4.1-dev, build-essential, libayatana-appindicator3-dev, librsvg2-dev…).
+# In the Claude Code cloud sandbox, cargo is present and `apt-get install` of that list works: both apps were
+# compiled there, and the launcher was run under Xvfb (`Xvfb :99 &`, `DISPLAY=:99 ./target/debug/grnfr-launcher`
+# with `npx vite --port 1421` running for the debug frontend; screenshots via `xwd -root | convert`, clicks via
+# xdotool). A debug build loads the Vite dev server (devUrl), not dist/.
 # SUPABASE_URL / SUPABASE_ANON_KEY must be set at compile time (option_env!, see
 # host/src-tauri/src/supabase.rs) or the app builds but can't read/write server configs.
 # TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD must also be set (see "Updates" below)
@@ -128,29 +145,23 @@ you're debugging.
 
 ## Architecture
 
-**Lua does game logic, JS does the online logic, the engine does the HTTPS.** Every extension module under
-`mod/grnfr-mod/lua/ge/extensions/grnfr/` sends requests to `ui/ui-vue/mods/GRNFR/net.js` (which owns the
+**Lua does game logic, JS does the online logic, GRNFR CMP Launcher does the HTTPS.** Every extension module
+under `mod/grnfr-mod/lua/ge/extensions/grnfr/` sends requests to `ui/ui-vue/mods/GRNFR/net.js` (which owns the
 session, tokens and error handling) and gets results back via engine events (`GRNFRNetReq` → `onNetResult`).
-**The UI must never `fetch()` an external host**: since BeamNG 0.40 the CEF UI has a Content-Security-Policy
-`connect-src 'self' localhost 127.0.0.1`, so every `fetch()` to Supabase failed with "Failed to fetch" for every
-player (diagnosed in v2.1.5–2.1.7 by wrongly chasing firewalls/DNS; the real proof was in `BeamNG.log`:
-`violates the following Content Security Policy directive`). The CSP is set by the engine, not in any game file,
-so only its `connect-src` is known. Transport history, all verified in the real game via `BeamNG.log` — do **not**
-retry the dead ends: v2.1.8 engine `SecureComm.apiCall` (only serves BeamNG's own API, never answered for
-Supabase); v2.1.9 Lua client on LuaSocket + LuaSec — the game ships LuaSocket 3.0-rc1 but **no LuaSec** (`module
-'ssl' not found`), so Lua has no HTTPS; `copas.http` is bundled but needs LuaSec too. Current (v2.1.10): **iframe
-relay** — `net.js` loads `https://careermp.vercel.app/bridge.html` (`public/bridge.html` + `bridge.js`) in a hidden
-iframe; that page isn't bound by the game's CSP, takes `{grnfr:"req", id, method, path, body, authorization}` by
-postMessage, fetches **only** `<config.js url> + path` (path must start `/rest/v1/` or `/auth/v1/` — never an open
-proxy) and posts back `{grnfr:"bridge", id, status, body}`. `vercel.json` exempts `/bridge.html` from the site-wide
-`X-Frame-Options: DENY` (and gives it a strict CSP of its own) — keep that exemption, or the relay stops loading.
-The site must be deployed (Vercel, from `main`) for the relay to work. Whether the game's CSP allows the iframe was
-unknown when this was written (only empirical test possible). If the relay doesn't load within 10 s, `net.js` falls
-back to `grnfr/http.lua` (the Lua client, kept for a future game version shipping LuaSec; it logs `socket`/`ssl`
-availability to `BeamNG.log` under `grnfr_http` on load) and the shown error combines both causes. If the iframe is
-blocked too, the remaining option is a local helper process on `localhost` (allowed by the CSP, like BeamMP's
-launcher) — every player would have to install it. When a network bug is reported, ask for `BeamNG.log`
-(`%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log`) first: CEF console errors are written there.
+**Since BeamNG 0.40 a mod cannot reach any external HTTPS host by itself**, all proven in the real game through
+`BeamNG.log` (`%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log` — CEF console errors are written there;
+ask for it first whenever a network bug is reported): the CEF UI has a Content-Security-Policy `connect-src 'self'
+localhost 127.0.0.1` (set by the engine, in no game file) so `fetch()` to Supabase = "Failed to fetch" (v2.1.5–2.1.7
+wrongly chased firewalls/DNS); the engine's `SecureComm.apiCall` only serves BeamNG's own API and never answered
+(v2.1.8); the game ships LuaSocket 3.0-rc1 but **no LuaSec**, so Lua has no TLS (v2.1.9; `copas.http` needs LuaSec
+too); the UI cannot load an external page even in a hidden iframe (`BeamNGCefApp::OnBeforeNavigation | DENIED`,
+v2.1.10). **Do not retry any of these.** The only open door is localhost, so (mod 2.2.0+) `net.js` sends every
+request to **GRNFR CMP Launcher** at `http://127.0.0.1:30815` (`launcher/core/src/proxy.rs`), which relays only
+`/rest/v1/*` and `/auth/v1/*` to the Supabase URL compiled into it (never an open proxy, loopback only, CORS +
+`Access-Control-Allow-Private-Network` answered for Chromium — verified from a real Chromium `file://` page).
+If nothing listens there, `net.js` throws `launcher_missing` with a message telling the player to start the
+launcher; a relay-side failure to reach Supabase comes back as HTTP 502 `launcher_upstream`. Port `30815` is
+hardcoded on both sides (`LAUNCHER_URL` in `net.js`, `DEFAULT_ADDR` in `proxy.rs`) — change both or neither.
 `grnfr_online.call(fn, args, cb)` (`online.lua`) is a
 **generic RPC bridge**: any Supabase RPC can be invoked through it without adding new event plumbing — this
 is how `garage.lua`, `chat.lua`, and `drag.lua` talk to the backend. `grnfr.lua`'s `M.ui(name, json)` is the
@@ -209,8 +220,9 @@ checked by the release script.
 `core_groundMarkers`, etc.) are always wrapped in `pcall` and documented as unverified in comments — this is
 deliberate, not an oversight; keep the pattern for new game-API calls instead of assuming they work.
 
-**Testing-environment caveat**: `psql`, `texlua`, and `cargo`/`rustc` are not guaranteed to be present in the
-environment Claude Code runs in (none of them are, as of this writing). Check for the tool before assuming a
+**Testing-environment caveat**: `psql` and `texlua` are not guaranteed to be present in the environment Claude
+Code runs in (`cargo`/`rustc`, `go` and `node` were, as of the launcher work; Lua syntax can be checked with the
+npm `luaparse` package and pure-Lua logic run under the npm `fengari` VM). Check for the tool before assuming a
 test suite can be executed, and say so explicitly if it can't — don't claim something passed without having
 actually run it. For SQL specifically, prefer the Supabase MCP tools (`execute_sql`/`apply_migration`) over
 claiming untested SQL "should work" — they let you actually verify against the real project.
@@ -263,3 +275,36 @@ which design is actually in place.
   plainly when discussing this code; don't imply it's been tested end-to-end.
 - **Not connected to the mod** — `net.js` only ever talks to Supabase directly, never to a `host/` relay.
   Wiring them together is unstarted, separate work.
+
+## `launcher/` (GRNFR CMP Launcher) specifics
+
+- **Releases**: `.github/workflows/launcher-release.yml`, on `launcher-v*` tags **or manual dispatch** with a
+  `version` input (the dispatch creates the tag itself — Claude's GitHub App can push branches but its tag pushes
+  were refused with 403, so use `workflow_dispatch` via the GitHub MCP `actions_run_trigger` instead of asking the
+  user to tag). A `check` job fails if the tag ≠ `launcher/src-tauri/tauri.conf.json` version and runs the core
+  tests. `host-release.yml` got the same dispatch input + check. Bump `version` in `launcher/package.json`,
+  `launcher/src-tauri/Cargo.toml` and `tauri.conf.json` together.
+- **Two apps, one repo — keep these or something breaks**: launcher releases are GitHub **prereleases**, so the
+  repo's "Latest" release stays the host's (host updater reads `releases/latest/download/latest.json`; the site's
+  host download reads `/releases/latest`). The launcher's own `latest.json` is copied by the `updater-channel` job
+  into a fixed prerelease named `launcher-latest`, which is the launcher updater endpoint. The site finds the
+  newest `launcher-v*` in the release list.
+- **Signing**: same Tauri key/pubkey as the host (`TAURI_SIGNING_PRIVATE_KEY` secret, still no password variable).
+- **Mod install** (`core/src/modsync.rs`): reads `get_latest_release`, downloads from the public `releases` bucket,
+  checks `sha256`, writes `mods/grnfr-online-v<version>.zip` (mods root, not `mods/repo`), then deletes every other
+  `grnfr-online*.zip` in `mods/` and `mods/repo/` (two loaded copies conflict). Never touches other mods. Runs on
+  "Mettre à jour le mod" and before each launch when `auto_update_mod` is on (default); a failure there is a
+  warning, the game still launches. So publishing a mod release (`npm run release`) is what players receive.
+- **Detection** (`core/src/detect.rs` + `app.rs::SystemPaths`): Steam path from `reg query HKCU\Software\Valve\Steam`
+  + `Program Files` defaults, all libraries from `steamapps/libraryfolders.vdf`, BeamNG exe at
+  `steamapps/common/BeamNG.drive/BeamNG.drive.exe` (or `Bin64/BeamNG.drive.x64.exe`); mods folder
+  `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\mods` (0.40) or newest `%LOCALAPPDATA%\BeamNG.drive\<ver>\mods`;
+  BeamMP Launcher at `%APPDATA%`/`%LOCALAPPDATA%`/`Program Files` `\BeamMP-Launcher\BeamMP-Launcher.exe` — the
+  BeamMP location is a guess (unverified on a real install); the wizard lets the user browse for it.
+- **Launch** (`core/src/launch.rs`): Steam = `cmd /C start "" steam://rungameid/284160` (no window), direct = the
+  BeamNG exe, BeamMP = BeamMP Launcher (which starts BeamNG itself).
+- **Verified**: core tests, both Tauri apps compiled in the sandbox, launcher run under Xvfb (wizard → home,
+  settings saved, relay `/health`), real Chromium page → relay with the mod's headers, `tests/launcher_e2e.mjs`.
+  **Not verified**: anything on Windows (detection on a real machine, launching, SmartScreen — the exe is unsigned
+  by Microsoft so Windows shows "Windows a protégé votre ordinateur"), and the mod talking to it from inside the
+  real BeamNG. Say so plainly.

@@ -21,13 +21,34 @@ on:
   push:
     tags:
       - "host-v*"
-  workflow_dispatch: {}
+  # Déclenchement manuel (Actions > Run workflow) avec le numéro de version : crée lui-même le tag host-vX.Y.Z,
+  # utile quand on ne peut pas pousser de tag. Sans numéro, github.ref_name vaudrait "main" et la release serait fausse.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, identique à host/src-tauri/tauri.conf.json (ex. 0.5.2)"
+        required: true
 
 permissions:
   contents: write
 
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && format('host-v{0}', inputs.version) || github.ref_name }}
+
 jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version du tag = version de l'app
+        run: |
+          want="${TAG#host-v}"
+          have=$(node -p "require('./host/src-tauri/tauri.conf.json').version")
+          echo "tag $TAG / app $have"
+          [ "$want" = "$have" ] || { echo "::error::$TAG ne correspond pas à la version $have de tauri.conf.json"; exit 1; }
+
   publish:
+    needs: check
     strategy:
       fail-fast: false
       matrix:
@@ -70,8 +91,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           projectPath: host
-          tagName: ${{ github.ref_name }}
-          releaseName: "GRNFR Host CMP ${{ github.ref_name }}"
+          tagName: ${{ env.TAG }}
+          releaseName: "GRNFR Host CMP ${{ env.TAG }}"
           releaseBody: |
             Binaires de GRNFR Host CMP, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
             App native (Tauri — Rust + React/TypeScript) : au premier lancement, un assistant crée votre

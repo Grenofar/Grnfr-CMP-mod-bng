@@ -1,0 +1,114 @@
+name: GRNFR CMP Launcher — build & release
+
+# Compile launcher/ (app Tauri : Rust + React/TypeScript) sur Windows/Linux/macOS et publie les installeurs.
+# Déclenché par un tag "launcher-vX.Y.Z" OU à la main (Actions > Run workflow, avec le numéro de version) :
+# le déclenchement manuel crée lui-même le tag, utile quand on ne peut pas pousser de tag.
+#
+# Deux apps vivent dans ce dépôt (host et launcher), d'où deux précautions :
+# - les releases du launcher sont des PRÉVERSIONS : GitHub ne les marque donc jamais "Latest", sinon
+#   releases/latest pointerait sur le launcher et casserait la mise à jour du host et le lien du site ;
+# - latest.json (mise à jour auto) est recopié dans une release fixe "launcher-latest", que l'app consulte
+#   (launcher/src-tauri/tauri.conf.json -> plugins.updater.endpoints).
+#
+# Secrets requis (les mêmes que pour le host) : SUPABASE_URL / SUPABASE_ANON_KEY (embarqués à la compilation :
+# relais et installation du mod) et TAURI_SIGNING_PRIVATE_KEY (même clé que le host ; PAS de
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD, voir CLAUDE.md).
+on:
+  push:
+    tags:
+      - "launcher-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier, identique à launcher/src-tauri/tauri.conf.json (ex. 0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && format('launcher-v{0}', inputs.version) || github.ref_name }}
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version du tag = version de l'app
+        run: |
+          want="${TAG#launcher-v}"
+          have=$(node -p "require('./launcher/src-tauri/tauri.conf.json').version")
+          echo "tag $TAG / app $have"
+          [ "$want" = "$have" ] || { echo "::error::$TAG ne correspond pas à la version $have de tauri.conf.json"; exit 1; }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tests du cœur (relais, détection, installation du mod)
+        working-directory: launcher/core
+        run: cargo test
+
+  publish:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+          - platform: ubuntu-22.04
+          - platform: macos-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dépendances système (Linux uniquement)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: launcher/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "launcher/src-tauri -> target"
+
+      - name: Installe les dépendances du frontend
+        working-directory: launcher
+        run: npm install
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          projectPath: launcher
+          tagName: ${{ env.TAG }}
+          releaseName: "GRNFR CMP Launcher ${{ env.TAG }}"
+          releaseBody: |
+            GRNFR CMP Launcher : à lancer à côté de BeamNG pour que le mod GRNFR CMP puisse se connecter au serveur
+            (BeamNG 0.40 bloque le HTTPS des mods). Détecte BeamNG et BeamMP, installe et met à jour le mod, lance le
+            jeu (Steam, direct ou avec BeamMP). Se met à jour tout seul.
+          releaseDraft: false
+          prerelease: true
+
+  updater-channel:
+    needs: publish
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Copie latest.json vers la release fixe launcher-latest
+        run: |
+          gh release download "$TAG" --pattern latest.json --dir out
+          gh release view launcher-latest >/dev/null 2>&1 || gh release create launcher-latest --prerelease \
+            --title "GRNFR CMP Launcher — canal de mise à jour" \
+            --notes "Release technique : contient seulement latest.json, lu par la mise à jour automatique du launcher. Téléchargez le launcher depuis la release launcher-vX.Y.Z la plus récente."
+          gh release upload launcher-latest out/latest.json --clobber
