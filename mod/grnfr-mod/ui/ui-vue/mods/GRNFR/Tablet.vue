@@ -309,7 +309,7 @@
           <div class="tile wide">
             <div class="tname">{{ L('Livraisons', 'Deliveries') }}</div>
             <template v-if="delivery.active">
-              <div class="mut">{{ delivery.clientName || L('Client', 'Client') }} · {{ deliveryPhaseLabel(delivery.phase) }}
+              <div class="mut">{{ delivery.senderName || '?' }} → {{ delivery.recipientName || '?' }} · {{ deliveryPhaseLabel(delivery.phase) }}
                 <template v-if="delivery.dist != null"> · {{ delivery.dist }} m</template></div>
               <div class="price">{{ money(delivery.fare) }}</div>
               <div class="acts"><button type="button" class="btn dim" @click="ui('delivery.cancel')">{{ L('Annuler', 'Cancel') }}</button></div>
@@ -319,8 +319,8 @@
               <div class="acts"><button type="button" class="btn" @click="refreshDeliveries">{{ L('Chercher des livraisons', 'Find deliveries') }}</button></div>
               <p v-if="net.deliveryError" class="bad small">{{ net.deliveryError }}</p>
               <div v-for="o in net.deliveryOffers" :key="o.id" class="tile">
-                <div class="tname">{{ o.client_name || L('Colis', 'Package') }}</div>
-                <div class="mut">{{ (o.pickup && o.pickup.name) || '?' }} → {{ (o.dropoff && o.dropoff.name) || '?' }} · {{ Math.round(o.route_m / 100) / 10 }} km · {{ o.cargo_units }} {{ L('unité(s)', 'unit(s)') }}</div>
+                <div class="tname">{{ o.sender_name || '?' }} → {{ o.recipient_name || '?' }}</div>
+                <div class="mut">{{ (o.pickup && o.pickup.name) || '?' }} → {{ (o.dropoff && o.dropoff.name) || '?' }} · {{ Math.round(o.route_m / 100) / 10 }} km · {{ o.weight_kg }} kg</div>
                 <div class="price">{{ money(o.fare) }}</div>
                 <div class="acts">
                   <button type="button" class="btn" :disabled="!vehicleFor(o)" @click="acceptDelivery(o)">

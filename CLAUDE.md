@@ -382,9 +382,9 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.13.0** poussé sur `main-n8m0cl` **et publiée** (confirmé dans `mod_releases`, 22/10/2026 — toutes les
-  données ont aussi été réinitialisées ce jour-là à la demande de l'utilisateur : `wipe_all.sql` puis
-  `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
+- Mod : **2.14.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
+  à republier pour la 2.14.0 ; toutes les données ont aussi été réinitialisées ce jour-là à la demande de
+  l'utilisateur : `wipe_all.sql` puis `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -722,6 +722,29 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     `COMFORT_TOLERANCE`/`COMFORT_SCALE`) n'a jamais été calibrée contre une vraie conduite, les valeurs sont un
     point de départ raisonnable à ajuster une fois testé.
 
+- **Grand chantier Phase D (suite) — livraisons entre entreprises, prix au poids (mod 2.14.0)**.
+  - `supabase/migrations/0024_delivery_companies_weight.sql` : `client_name` (0016) renommée `sender_name`
+    (rétrocompatible, même colonne) + nouvelle colonne `recipient_name` ; nouvelle colonne `weight_kg`. Le prix
+    utilise maintenant le poids réel (`delivery_per_kg` × `weight_kg`) au lieu du nombre d'unités de capacité
+    demandées — `cargo_units`/`cargo_capacity` restent la condition d'ACCÈS (il faut assez de place dans le
+    véhicule), complètement séparée du calcul du PRIX désormais. `generate_deliveries`/`accept_delivery`/
+    `complete_delivery`/`list_deliveries`/`get_me()` mis à jour en conséquence. **Testé en direct contre le vrai
+    Supabase** (comme les comptes de test ont été effacés par le reset de données du jour, un compte temporaire a
+    été créé dans la même transaction pour le test) : cycle complet generate → list → accept → complete avec un
+    colis de 150 kg sur 2 km, prix vérifié exact (base 40 + 4/km×2km + 0,3/kg×150kg = 93), tout annulé après coup.
+  - `delivery.lua` : la liste figée `CLIENTS` (6 noms de sociétés de logistique génériques) devient `COMPANIES`
+    (16 noms variés demandés explicitement : restos, garages, hôpitaux, pharmacie, épicerie, hôtel, plus les
+    anciennes sociétés de logistique) ; l'envoyeur et le destinataire sont maintenant tirés INDÉPENDAMMENT de
+    cette liste (jamais les deux identiques) au lieu d'une seule société générique par colis ; le poids
+    (`weight_kg`) est calculé à partir des unités de capacité demandées (~15 à 40 kg par unité) plutôt
+    qu'inventé par le serveur.
+  - `Tablet.vue` : affiche maintenant « Envoyeur → Destinataire » au lieu d'un seul nom de société, et le poids
+    en kg au lieu des unités de capacité (toujours vérifiées en arrière-plan pour le bouton Accepter).
+  - **Pas fait** : le vrai catalogue de pièces de fret (toujours la détection par mot-clé de 0018, pas de
+    recherche menée sur les vraies pièces cargo de la carrière cette fois) — reste ouvert.
+  - Vérifié hors jeu : `luaparse` sur `delivery.lua`, `Tablet.vue` compile, `node tests/net_test.mjs` (30/30).
+    **Jamais ouvert dans le vrai jeu.**
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -863,14 +886,11 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
      véhicules personnels du joueur), car ça entre en tension avec la règle « on ne peut faire apparaître que les
      véhicules qu'on possède » (Phase M) — pas encore tranché.
 **Phase D — Livraison liée aux pièces de fret, entreprises** :
-   - Rechercher les vraies pièces « cargo »/fret de la carrière BeamNG (recherche web demandée explicitement par
-     l'utilisateur) pour remplacer/affiner la détection actuelle par mot-clé (0018, "4x Cargo Load Box…") par un
-     vrai système de pièces de fret identifiées.
-   - Bloquer toute livraison si aucune pièce de fret n'est équipée sur le véhicule (`accept_delivery` vérifie déjà
-     `cargo_capacity > 0` depuis 0015/0016 — à auditer si c'est suffisant une fois le vrai catalogue de fret en
-     place, ou s'il faut une colonne plus précise que juste une capacité en unités).
-   - Plusieurs entreprises comme points de collecte/dépôt (resto, garage, hôpital, etc. — à définir), le prix de la
-     livraison dépend du poids du colis ET de la distance entre les deux (pas juste la distance comme aujourd'hui).
+   - **Reste à faire** : rechercher les vraies pièces « cargo »/fret de la carrière BeamNG pour remplacer/affiner
+     la détection actuelle par mot-clé (0018, "4x Cargo Load Box…") par un vrai système de pièces de fret
+     identifiées ; auditer si `cargo_capacity > 0` (0015/0016) suffit comme condition de blocage, ou s'il faut une
+     colonne plus précise.
+   - ~~**Plusieurs entreprises, prix au poids et à la distance**~~ **Fait (mod 2.14.0, voir § Fait ci-dessus)**.
    - ~~**Système de salarié au garage**~~ **Fait (mod 2.10.0, avec niveaux, voir § Fait ci-dessus)** : revenu de
      fond tous les 100 km (temps réel, vitesse virtuelle), montant aléatoire par niveau, pas forcément gagnant.
 **Phase E — Bus** : reprendre/refaire les lignes de bus existantes (`taxi.lua`/anciennes lignes, voir Architecture)

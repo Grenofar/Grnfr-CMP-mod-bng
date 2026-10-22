@@ -9,9 +9,15 @@
 -- décide jamais d'un montant, et une seule livraison active à la fois par joueur (imposé aussi côté serveur).
 local M = {}
 
-local CLIENTS = { 'Quick Parcel', 'Metro Logistics', 'FastFreight', 'ValleyGoods', 'Harbor Supplies', 'Coastline Cargo' }
+-- Entreprises variées (demandé explicitement) : l'envoyeur et le destinataire sont tirés indépendamment de
+-- cette liste, jamais la même pour les deux dans une offre (voir buildOffers).
+local COMPANIES = {
+  'Resto Chez Mario', 'Pizzeria Luna', 'Café du Port', 'Garage Fontaine', 'Garage Rapido',
+  'Hôpital Sainte-Anne', 'Clinique du Nord', 'Pharmacie Centrale', 'Quick Parcel', 'Metro Logistics',
+  'FastFreight', 'ValleyGoods', 'Harbor Supplies', 'Coastline Cargo', 'Épicerie Bellevue', 'Hôtel Riviera',
+}
 
-local job = nil   -- { id, pickup={x,y,z,name}, dropoff={x,y,z,name}, clientName, fare, units, vehicleId, phase='pickup'|'dropoff' }
+local job = nil   -- { id, pickup={x,y,z,name}, dropoff={x,y,z,name}, senderName, recipientName, fare, units, weightKg, vehicleId, phase='pickup'|'dropoff' }
 local busy = false
 local offers = {} -- dernière liste reçue de list_deliveries
 local lastMsg = ''
@@ -37,12 +43,18 @@ local function buildOffers(max)
     if a ~= b then
       local d = grnfr_facilities.dist(a.pos, b.pos)
       if d >= 150 then
+        local units = 1 + math.random(0, 2)
+        local sender = COMPANIES[math.random(#COMPANIES)]
+        local recipient = sender
+        for _ = 1, 6 do recipient = COMPANIES[math.random(#COMPANIES)] if recipient ~= sender then break end end
         out[#out + 1] = {
           pickup = { x = a.pos.x, y = a.pos.y, z = a.pos.z, name = a.name },
           dropoff = { x = b.pos.x, y = b.pos.y, z = b.pos.z, name = b.name },
           distance_m = math.floor(d),
-          units = 1 + math.random(0, 2),
-          client_name = CLIENTS[math.random(#CLIENTS)],
+          units = units,
+          weight_kg = units * (15 + math.random(0, 25)), -- ~15 à 40 kg par unité de capacité demandée
+          sender_name = sender,
+          recipient_name = recipient,
         }
       end
     end
@@ -77,10 +89,12 @@ function M.accept(id, vehicleId, cb)
   o.call('accept_delivery', { p_delivery_id = id, p_vehicle_id = vehicleId }, function(ok, data)
     busy = false
     if not ok then if cb then cb(false, data) end return end
-    job = { id = data.id, pickup = data.pickup, dropoff = data.dropoff, clientName = data.client_name,
-      fare = data.fare, units = data.cargo_units, vehicleId = vehicleId, phase = 'pickup' }
+    job = { id = data.id, pickup = data.pickup, dropoff = data.dropoff, senderName = data.sender_name,
+      recipientName = data.recipient_name, fare = data.fare, units = data.cargo_units, weightKg = data.weight_kg,
+      vehicleId = vehicleId, phase = 'pickup' }
     grnfr_nav.set(job.pickup.x, job.pickup.y, job.pickup.z or 0, job.pickup.name or L('Ramassage', 'Pickup'), 25)
-    toast(L('Livraison acceptée : rendez-vous au point de ramassage (marqueur orange).', 'Delivery accepted: go to the pickup point (orange marker).'))
+    toast(L('Livraison acceptée pour ', 'Delivery accepted for ') .. tostring(job.recipientName or '?')
+      .. L(' : récupérez le colis chez ', ': pick up the parcel at ') .. tostring(job.senderName or '?') .. '.')
     slog('info', 'Delivery: accepted (' .. fmtMoney(job.fare) .. ').')
     if cb then cb(true, job) end
   end)
@@ -130,8 +144,9 @@ end
 function M.status()
   local d = job and grnfr_nav.distance()
   return { active = job ~= nil, phase = job and job.phase or nil, fare = job and job.fare or 0, units = job and job.units or nil,
-           clientName = job and job.clientName or nil, dist = d and math.floor(d) or nil, earned = earned, deliveries = deliveries,
-           msg = lastMsg, busy = busy }
+           weightKg = job and job.weightKg or nil, senderName = job and job.senderName or nil,
+           recipientName = job and job.recipientName or nil, dist = d and math.floor(d) or nil, earned = earned,
+           deliveries = deliveries, msg = lastMsg, busy = busy }
 end
 
 function M.reset()
