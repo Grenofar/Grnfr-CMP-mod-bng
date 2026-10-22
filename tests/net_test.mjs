@@ -20,21 +20,34 @@ fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
 
 // ---------- faux Supabase
-const users = {}, members = {}, calls = []
+const members = {}, calls = []
+const sessions = {} // token -> { username } ; un profil = juste un pseudo, choisi APRÈS la connexion anonyme
 const MAX = 4
-let signupCalls = 0
+let anonCalls = 0
 globalThis.fetch = async (url, opt) => {
   const p = url.replace("https://fake.supabase.co", "")
   const body = opt.body ? JSON.parse(opt.body) : undefined
   const auth = opt.headers.Authorization.replace("Bearer ", "")
   const ok = (d, status = 200) => ({ ok: status < 400, status, json: async () => d })
   calls.push(p)
-  if (p === "/auth/v1/signup") { signupCalls++; users[body.email] = { name: body.data.username }; return ok({ access_token: "tok_" + body.data.username, refresh_token: "ref_" + body.data.username, expires_in: 3600 }) }
-  if (p.startsWith("/auth/v1/token")) { const u = users[body.email]; if (!u) return ok({ error_description: "Invalid login credentials" }, 400); return ok({ access_token: "tok_" + u.name, refresh_token: "ref_" + u.name, expires_in: 3600 }) }
+  if (p === "/auth/v1/signup") {
+    anonCalls++
+    const tok = "tok_anon" + anonCalls
+    sessions[tok] = { username: null }
+    return ok({ access_token: tok, refresh_token: "ref_anon" + anonCalls, expires_in: 3600 })
+  }
   const fn = p.replace("/rest/v1/rpc/", "")
-  const me = auth.startsWith("tok_") ? auth.slice(4) : null
-  if (fn === "username_available") return ok(!Object.values(users).some(u => u.name.toLowerCase() === body.p_username.toLowerCase()))
-  if (!me) return ok({ message: "not_authenticated" }, 401)
+  const sess = sessions[auth]
+  if (fn === "username_available") return ok(!Object.values(sessions).some(s => s.username && s.username.toLowerCase() === body.p_username.toLowerCase()))
+  if (!sess) return ok({ message: "not_authenticated" }, 401)
+  if (fn === "set_username") {
+    const uname = body.p_username
+    if (Object.values(sessions).some(s => s !== sess && s.username && s.username.toLowerCase() === uname.toLowerCase())) return ok({ message: "username_taken" }, 400)
+    sess.username = uname
+    return ok(null)
+  }
+  if (fn === "start_session") return ok("session-" + auth)
+  const me = sess.username
   if (fn === "get_me") return ok({ profile: { username: me, balance: 25000 }, config: { sync_interval_ms: 300 }, vehicles: [] })
   if (fn === "join_server") { if (Object.keys(members).length >= MAX && !members[me]) return ok({ message: "server_full" }, 400); members[me] = {}; return ok({ id: "s1", name: "Serveur 1", max_players: MAX }) }
   if (fn === "server_sync") { if (!members[me]) return ok({ message: "not_in_server" }, 400); members[me] = body; return ok({ players: Object.keys(members).filter(n => n !== me).map(n => ({ username: n, pos: members[n].p_pos, veh: members[n].p_veh })) }) }
@@ -54,14 +67,13 @@ check(net.luaStr("é") === '"\\195\\169"', "luaStr écrit les accents en octets 
 await net.initNet()
 check(Object.keys(handlers).includes("GRNFRNetReq") && handlers.GRNFRSelf && handlers.GRNFRPos, "écouteurs d'événements du jeu installés")
 
-// inscription : pseudo invalide / pris refusés AVANT d'appeler signup
-await net.signUp("a@x.fr", "secret1", "ab")
-check(st.error.includes("invalide") && signupCalls === 0, "pseudo trop court refusé")
-users["z@x.fr"] = { name: "Alice" }
-await net.signUp("a@x.fr", "secret1", "alice")
-check(st.error.includes("déjà pris") && signupCalls === 0 && st.status === "out", "pseudo déjà pris (sans tenir compte de la casse) refusé, aucun compte créé")
-await net.signUp("a@x.fr", "secret1", "bob")
-check(st.status === "in" && st.username === "bob" && signupCalls === 1, "inscription avec un pseudo libre")
+// création de profil (pseudo seul, pas d'e-mail/mot de passe) : pseudo invalide refusé AVANT tout appel réseau
+check(await net.signUpAnonymous("ab") === false, "pseudo trop court refusé")
+check(st.error.includes("invalide") && anonCalls === 0, "aucune connexion anonyme tentée pour un pseudo invalide")
+check(await net.signUpAnonymous("alice") === true && st.status === "in" && st.username === "alice", "création de profil avec un pseudo libre")
+await net.signOut()
+check(await net.signUpAnonymous("alice") === false && st.error.includes("pris") && st.status === "out", "pseudo déjà pris (sans tenir compte de la casse) refusé, aucun profil créé en double")
+check(await net.signUpAnonymous("bob") === true && st.status === "in" && st.username === "bob", "profil suivant avec un pseudo libre")
 check(lcalls.some(c => c[1] === "auth" && JSON.parse(c[2]).loggedIn && JSON.parse(c[2]).username === "bob"), "le Lua est prévenu de la connexion (pseudo bob)")
 
 // serveur de jeu

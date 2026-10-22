@@ -28,35 +28,24 @@
           <p v-if="!net.configured" class="err">{{ t('conf_server') }}</p>
           <template v-else-if="!logged">
             <div class="form">
-              <h4>{{ t('quick_create') }}</h4>
-              <input v-model="f.pseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkPseudo" />
-              <small :class="hintClass(pseudoState)">{{ pseudoHint }}</small>
-              <button type="button" class="btn" :disabled="busy || pseudoState !== 'free'" @click="net_createProfile">{{ t('create_profile') }}</button>
-
-              <div class="row">
-                <button type="button" class="lnk" @click="toggleImport">{{ t('import_profile') }}</button>
-              </div>
-              <template v-if="showImport">
-                <p v-if="!net.profiles.length" class="mut">{{ t('no_profiles_found') }}</p>
+              <!-- Pas de compte au sens classique : un profil = juste un pseudo, stocké sur cette machine
+                   (settings/grnfr/profiles/*.grnfrprofile.json). On choisit un profil existant, ou on en
+                   crée un nouveau — jamais d'e-mail ni de mot de passe. -->
+              <template v-if="net.profiles.length && !showCreate">
+                <h4>{{ t('your_profiles') }}</h4>
                 <div v-for="p in net.profiles" :key="p.path" class="row">
                   <span>{{ p.username }}</span>
-                  <button type="button" class="btn dim" @click="importProfile(p.path)">{{ t('use_this') }}</button>
+                  <button type="button" class="btn" @click="importProfile(p.path)">{{ t('use_this') }}</button>
                 </div>
+                <button type="button" class="lnk" @click="showCreate = true">{{ t('create_new_instead') }}</button>
               </template>
 
-              <button type="button" class="lnk" @click="showEmail = !showEmail">{{ t('have_email_account') }}</button>
-              <template v-if="showEmail">
-                <input v-model="f.email" type="email" :placeholder="t('email')" autocomplete="off" />
-                <input v-model="f.password" type="password" :placeholder="t('password')" autocomplete="off" />
-                <template v-if="reg">
-                  <input v-model="f.username" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkName" />
-                  <small :class="hintClass(nameState)">{{ nameHint }}</small>
-                </template>
-                <div class="row">
-                  <button v-if="!reg" type="button" class="btn" :disabled="busy" @click="net_signIn">{{ t('signin') }}</button>
-                  <button v-else type="button" class="btn" :disabled="busy || nameState !== 'free'" @click="net_signUp">{{ t('signup') }}</button>
-                  <button type="button" class="lnk" @click="reg = !reg; net.error = ''; net.info = ''">{{ reg ? t('have_account') : t('no_account') }}</button>
-                </div>
+              <template v-else>
+                <h4>{{ t('quick_create') }}</h4>
+                <input v-model="f.pseudo" type="text" maxlength="20" :placeholder="t('username')" autocomplete="off" @input="checkPseudo" />
+                <small :class="hintClass(pseudoState)">{{ pseudoHint }}</small>
+                <button type="button" class="btn" :disabled="busy || pseudoState !== 'free'" @click="net_createProfile">{{ t('create_profile') }}</button>
+                <button v-if="net.profiles.length" type="button" class="lnk" @click="showCreate = false">{{ t('back_to_profiles') }}</button>
               </template>
             </div>
           </template>
@@ -250,7 +239,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
 import {
-  net, ui, rpc, errText, signIn, signUp, signUpAnonymous, signOut, refreshMe, usernameAvailable, chooseUsername, changeUsername,
+  net, ui, rpc, errText, signUpAnonymous, signOut, refreshMe, usernameAvailable, chooseUsername, changeUsername,
   listServers, joinServer, leaveServer, exportProfile as netExportProfile, requestProfiles, importProfile as netImportProfile,
 } from "./net.js"
 import { tr } from "./onlineI18n.js"
@@ -258,10 +247,10 @@ import GrnfrPanel from "./GrnfrPanel.vue"
 
 const t = k => tr(net.lang, k)
 const tab = ref("account")
-const reg = ref(false), busy = ref(false), msg = ref(""), needPseudo = ref(false)
-const showEmail = ref(false), showImport = ref(false)
+const busy = ref(false), msg = ref(""), needPseudo = ref(false)
+const showCreate = ref(false)
 const pseudoState = ref(""), newPseudoState = ref("")
-const nameState = ref(""), f = reactive({ email: "", password: "", username: "", pseudo: "", newPseudo: "", srvSearch: "", place: 0, offer: "", want: "", cash: 0 })
+const nameState = ref(""), f = reactive({ username: "", pseudo: "", newPseudo: "", srvSearch: "", place: 0, offer: "", want: "", cash: 0 })
 const d = reactive({ tx: [], servers: [], catalog: [], market: [], trades: [], theirs: [], board: [], reqs: [] })
 
 const logged = computed(() => net.status === "in")
@@ -288,16 +277,19 @@ const icons = {
 const money = n => "$" + Number(n || 0).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
 // États possibles : "" (rien saisi), "bad" (format invalide), "wait" (vérification en cours),
 // "error" (le serveur n'a pas pu être contacté pour vérifier — PAS un problème de format), "free", "taken".
-function hintFor(state) {
+// Pour "bad", on réaffiche le texte saisi tel que le code l'a reçu : si quelqu'un voit "« Rayan » : 3 à 20…"
+// alors que "Rayan" est clairement valide, c'est la preuve que le mod installé n'est pas cette version.
+function hintFor(state, raw) {
   if (state === "free") return t("free")
   if (state === "taken") return t("taken")
   if (state === "wait") return t("checking")
   if (state === "error") return t("checkerr")
+  if (state === "bad" && raw) return `« ${raw} » : ${t("badname")}`
   return t("badname")
 }
-const nameHint = computed(() => hintFor(nameState.value))
-const pseudoHint = computed(() => hintFor(pseudoState.value))
-const newPseudoHint = computed(() => hintFor(newPseudoState.value))
+const nameHint = computed(() => hintFor(nameState.value, f.username.trim()))
+const pseudoHint = computed(() => hintFor(pseudoState.value, f.pseudo.trim()))
+const newPseudoHint = computed(() => hintFor(newPseudoState.value, f.newPseudo.trim()))
 function hintClass(state) {
   if (state === "free") return "good"
   if (state === "wait") return "mut"
@@ -344,16 +336,13 @@ function checkNewPseudo() {
 }
 
 async function wrap(fn) { busy.value = true; try { await fn() } finally { busy.value = false } }
-const net_signIn = () => wrap(() => signIn(f.email, f.password))
-const net_signUp = () => wrap(() => signUp(f.email, f.password, f.username))
 const net_signOut = () => signOut()
 const net_createProfile = () => wrap(() => signUpAnonymous(f.pseudo))
 const net_changePseudo = () => wrap(async () => { if (await changeUsername(f.newPseudo)) { f.newPseudo = ""; newPseudoState.value = ""; msg.value = t("ok") } })
 
 function exportProfile() { netExportProfile() }
-function toggleImport() { showImport.value = !showImport.value; if (showImport.value) requestProfiles() }
 function importProfile(path) { netImportProfile(path) }
-async function switchProfile() { await signOut(); showImport.value = true; await requestProfiles() }
+async function switchProfile() { showCreate.value = false; await signOut(); await requestProfiles() }
 
 // Action quelconque : message d'erreur lisible, puis rafraîchissement du profil / de la liste.
 async function act(fn, after) {
@@ -388,6 +377,7 @@ watch(() => net.open, open => {
   autoTabDone = true
   if (!net.langChosen) tab.value = "settings"
   else if (!logged.value) tab.value = "account"
+  if (!logged.value) requestProfiles()
 })
 
 let poll = null

@@ -165,31 +165,7 @@ export async function refreshMe() {
   return me
 }
 
-export async function signIn(email, password) {
-  net.error = ""; net.status = "busy"
-  try {
-    setSession(await http("/auth/v1/token?grant_type=password", { email, password }))
-    net.email = email
-    await afterLogin()
-  } catch (e) { net.status = "out"; net.error = errText(e) }
-}
-
-// Inscription : le pseudo est OBLIGATOIRE et doit être libre (vérifié avant, puis refusé aussi par la base si besoin).
-export async function signUp(email, password, username) {
-  net.error = ""; net.info = ""
-  username = (username || "").trim()
-  if (!/^[A-Za-z0-9_]{3,20}$/.test(username)) { net.error = errText({ code: "username_invalid" }); return }
-  net.status = "busy"
-  try {
-    const free = await usernameAvailable(username)
-    if (free === false) { net.status = "out"; net.error = errText({ code: "username_taken" }); return }
-    const d = await http("/auth/v1/signup", { email, password, data: { username } })
-    if (d && d.access_token) { setSession(d); net.email = email; await afterLogin() }
-    else { net.status = "out"; net.info = net.lang === "en" ? "Account created. Confirm your e-mail, then sign in." : "Compte créé. Confirmez votre e-mail, puis connectez-vous." }
-  } catch (e) { net.status = "out"; net.error = errText(e) }
-}
-
-// Création de profil simplifiée : pas d'e-mail ni de mot de passe. Connexion anonyme Supabase (à activer :
+// Création de profil : pas d'e-mail ni de mot de passe, juste un pseudo. Connexion anonyme Supabase (à activer :
 // Authentication > Providers > Anonymous Sign-Ins), puis choix du pseudo (set_username). Ce qui prouve que
 // c'est vous ensuite, c'est le jeton de session gardé ici (voir exportProfile/importProfile) : à exporter
 // avant de changer de PC, sinon la progression reste associée à cette seule machine.
