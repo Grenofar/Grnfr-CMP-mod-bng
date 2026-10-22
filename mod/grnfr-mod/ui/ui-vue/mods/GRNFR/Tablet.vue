@@ -30,10 +30,6 @@
         <!-- MES VOITURES : sortir (sur une place du garage), ranger, verrouiller, assurance, vendre -->
         <main v-else-if="app === 'garage'">
           <p class="mut">{{ L('Places utilisées', 'Slots used') }} : {{ vehicles.length }}/{{ profile.garage_slots || 0 }}</p>
-          <div v-if="!vehicles.length" class="empty">
-            {{ L('Vous n\'avez pas encore de voiture.', 'You have no car yet.') }}<br />
-            <button type="button" class="btn" style="margin-top: 10px" @click="go('dealer')">{{ L('Aller à la concession', 'Go to the dealership') }}</button>
-          </div>
           <div class="grid">
             <div v-for="v in vehicles" :key="v.id" class="tile veh">
               <VehImg :info="vi(v.model_key, v.config_key)" />
@@ -57,8 +53,7 @@
                 <button type="button" class="btn dim" @click="insFor = insFor === v.id ? null : v.id">{{ L('Assurance', 'Insurance') }}</button>
                 <template v-if="!v.listed">
                   <button type="button" class="btn dim" @click="sellDealer(v)">{{ L('Vendre au concessionnaire', 'Sell to dealer') }}</button>
-                  <div class="inline"><input v-model.number="f['p' + v.id]" type="number" min="1" :placeholder="L('Prix', 'Price')" />
-                    <button type="button" class="btn dim" @click="act(() => rpc('create_listing', { p_vehicle_id: v.id, p_price: f['p' + v.id], p_description: null }))">{{ L('Mettre en vente', 'List') }}</button></div>
+                  <button type="button" class="btn dim" @click="sellVehicle(v)">{{ L('Vendre', 'Sell') }}</button>
                 </template>
               </div>
               <div v-if="insFor === v.id" class="plans small">
@@ -68,6 +63,10 @@
                   <span>{{ rank(pl.tier) > rank(v.insurance) ? money(premium(pl, v.value)) : L('gratuit', 'free') }}</span>
                 </button>
               </div>
+            </div>
+            <div v-for="n in emptySlots" :key="'empty' + n" class="tile veh empty-slot">
+              <div class="tname mut">{{ L('Place libre', 'Free slot') }}</div>
+              <button type="button" class="btn" @click="go('dealer')">{{ L('Aller à la concession', 'Go to the dealership') }}</button>
             </div>
           </div>
 
@@ -246,6 +245,17 @@
                   <button v-if="l.seller === net.username" type="button" class="btn dim" @click="act(() => rpc('cancel_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Retirer', 'Withdraw') }}</button>
                   <button v-else type="button" class="btn" @click="act(() => rpc('buy_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Acheter', 'Buy') }}</button>
                 </div>
+              </div>
+            </div>
+
+            <h4 class="submuted">{{ L('Mettre un de mes véhicules en vente', 'List one of my vehicles') }}</h4>
+            <p v-if="!sellableVehicles.length" class="empty">{{ L('Aucun véhicule disponible (déjà en vente, ou aucun véhicule).', 'No vehicle available (already listed, or no vehicle).') }}</p>
+            <div class="grid">
+              <div v-for="v in sellableVehicles" :key="v.id" class="tile">
+                <div class="tname">{{ v.nickname || v.model_key }}</div>
+                <div class="mut">{{ v.model_key }} · {{ L('valeur', 'value') }} {{ money(v.value) }}</div>
+                <div class="inline"><input v-model.number="f['v' + v.id]" type="number" min="1" :placeholder="L('Prix', 'Price')" />
+                  <button type="button" class="btn dim" @click="act(() => rpc('create_listing', { p_vehicle_id: v.id, p_price: f['v' + v.id], p_description: null }), loadMarket)">{{ L('Mettre en vente', 'List') }}</button></div>
               </div>
             </div>
           </div>
@@ -458,6 +468,8 @@ const marketTab = ref("vehicles")
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
+const emptySlots = computed(() => Math.max(0, (profile.value.garage_slots || 0) - vehicles.value.length))
+const sellableVehicles = computed(() => vehicles.value.filter(v => !v.listed))
 const employee = computed(() => net.me?.employee || { active: false, level: 0, distance_m: 0 })
 const km = m => (Number(m || 0) / 1000).toFixed(1)
 const out = v => !!(net.game.spawned && net.game.spawned[v.id])
@@ -679,6 +691,9 @@ async function installSpare(sp) {
   await act(() => rpc("install_spare_part", { p_spare_id: sp.id, p_vehicle_id: v.id }), loadPartMarket)
 }
 async function sellDealer(v) { await act(async () => { if (out(v)) await ui("garage.store", { id: v.id }); await rpc("sell_vehicle_to_dealer", { p_vehicle_id: v.id }) }) }
+// Vente à prix libre : juste "Vendre", pas de détail ici (demandé explicitement) -- la procédure (choisir un
+// prix) se passe dans son propre onglet (Annonces > Véhicules), même principe que la vente de pièces.
+function sellVehicle() { marketTab.value = "vehicles"; go("market") }
 
 async function pick(name) {
   sel.value = name; f.gift = ""; f.offer = ""; f.want = ""; f.cash = null; msg.value = ""; net.error = ""
@@ -729,6 +744,8 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
   .tags { display: flex; gap: 6px; min-height: 4px; } .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .inline { display: flex; gap: 6px; width: 100%; input { flex: 1; min-width: 0; } .btn { white-space: nowrap; flex: none; } } }
 .tag { padding: 1px 8px; font-size: 11px; border-radius: 10px; background: rgba(255, 102, 0, 0.2); color: var(--ac); &.on { background: rgba(74, 222, 128, 0.2); color: #4ade80; } }
 .tile.veh { padding-top: 0; overflow: hidden; :deep(.vimg) { margin: 0 -14px 6px; } }
+.tile.empty-slot { align-items: center; justify-content: center; text-align: center; min-height: 140px; padding-top: 14px;
+  border-style: dashed; opacity: 0.7; }
 .vhead { display: flex; gap: 16px; align-items: flex-start; .vtxt { flex: 1; min-width: 0; } }
 .specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; margin-top: 8px; font-size: 12px;
   div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding: 2px 0; } span { color: rgba(255, 255, 255, 0.55); } b { text-align: right; } }

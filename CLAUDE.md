@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.15.1** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
+- Mod : **2.16.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
   à republier pour la 2.14.0 ; toutes les données ont aussi été réinitialisées ce jour-là à la demande de
   l'utilisateur : `wipe_all.sql` puis `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -797,6 +797,30 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   - Vérifié hors jeu : `luaparse` sur `ghosts.lua`, `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le
     vrai jeu.**
 
+- **Grand chantier Phase G — places de garage vides visibles, vente simplifiée (mod 2.16.0)**.
+  - **Clarification importante** : relecture du code a montré que « 4 garages » dans la demande de l'utilisateur
+    désigne en réalité `profiles.garage_slots` (déjà 4 par défaut depuis 0001 — le nombre de VÉHICULES qu'on peut
+    posséder), pas 4 emplacements physiques sur la carte (il n'y en a qu'un seul par joueur par serveur, voir
+    `claim_garage_spot`/0017). « Mes voitures » affichait déjà le compte (« Places utilisées : 1/4 ») mais ne
+    montrait AUCUNE tuile pour les places vides — d'où « on ne voit pas les 3 autres », qui n'étaient pas des
+    garages manquants mais des places de son propre garage_slots jamais affichées.
+  - `Tablet.vue` (« Mes voitures ») : affiche maintenant une tuile « Place libre → Aller à la concession » pour
+    chaque place vide (`garage_slots - vehicles.length`), en plus des véhicules possédés.
+  - **Vente simplifiée** (demandé explicitement, « on doit voir juste vendre, pas les détails, qui ouvre un
+    nouvel onglet ») : le bouton « Vendre » dans Mes voitures n'affiche plus l'entrée de prix sur place — il
+    ouvre directement l'onglet Annonces > Véhicules, où une nouvelle section « Mettre un de mes véhicules en
+    vente » (même principe que « Mes pièces de rechange » pour les pièces) permet de choisir le prix et publier.
+    Le bouton « Vendre au concessionnaire » (rachat instantané, déjà un seul clic) reste inchangé à côté — ce
+    n'est pas la même action.
+  - **Pas fait, pas vérifiable sans le jeu** : revérifier que le garage d'un joueur parti redevient bien « non
+    pris » (fix 2.6.1, jamais re-testé en jeu) ; et la demande « le nom du garage reste affiché H24 » — les
+    labels `debugDrawer` de `garage.lua` sont de toute façon limités par la distance de rendu du jeu, pas un
+    vrai système d'affichage permanent depuis n'importe où sur la carte ; non traité ce coup-ci (changerait de
+    système d'affichage entièrement, à clarifier avec l'utilisateur ce qu'il veut dire exactement avant de s'y
+    lancer).
+  - Vérifié hors jeu : `Tablet.vue` compile, `node tests/net_test.mjs` (30/30, aucun changement SQL — réutilise
+    `create_listing` tel quel). **Jamais ouvert dans le vrai jeu.**
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -952,11 +976,12 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - **Reste ouvert, pas deviné** : voir le joueur À L'INTÉRIEUR de son véhicule + le passager pendant une course
      taxi — aucune vraie API trouvée, à statuer avec le `BeamNG.log`/une clarification avant de coder (voir le
      détail dans § Fait ci-dessus).
-**Phase G — Garages** :
-   - 4 garages par joueur, tous visibles dans « Mes voitures » (actuellement un seul à la fois ? à vérifier).
-   - Vente simplifiée : un bouton « Vendre » qui ouvre directement un nouvel onglet dans la tablette pour la
-     procédure (pas de détail de négociation affiché à cet endroit) — même principe que la vente de pièces.
-   - Revérifier que le garage d'un joueur qui part redevient bien « non pris » (fix 2.6.1, jamais revérifié en jeu).
+~~**Phase G — Garages**~~ **Fait pour les deux points qui pouvaient l'être (mod 2.16.0, voir § Fait ci-dessus)** :
+   - ~~4 garages par joueur, tous visibles~~ **Fait** — clarifié : c'était `garage_slots` (places de véhicules),
+     pas des garages physiques ; places vides maintenant affichées dans Mes voitures.
+   - ~~Vente simplifiée~~ **Fait** — bouton « Vendre » qui ouvre l'onglet Annonces, procédure de prix déplacée là.
+   - **Reste ouvert, pas vérifiable sans le jeu** : revérifier que le garage d'un joueur qui part redevient bien
+     « non pris » (fix 2.6.1) ; « le nom du garage reste affiché H24 » pas traité, à clarifier.
 **Phase H — Recherche de pièces** : ajouter une recherche dans l'onglet Pièces de l'ordinateur du garage.
 **Phase I — Sécurité routière** : radars + amendes aux feux rouges (pas systématique à chaque feu).
 **Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
