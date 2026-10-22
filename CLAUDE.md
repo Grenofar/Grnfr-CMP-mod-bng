@@ -14,7 +14,7 @@ Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
-  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0018).
+  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0019).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
 - `host/` — a standalone Tauri app (Rust backend + React/TypeScript frontend, one native window — not a
   local web server you open in a browser, and not the old egui/eframe version from earlier in this project's
@@ -365,13 +365,13 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.7.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.8.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
   à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
   input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
-- Migrations appliquées en prod : 0001 → 0018 (0015 à 0018 appliquées via l'outil MCP `apply_migration` ; 0017 et
+- Migrations appliquées en prod : 0001 → 0019 (0015 à 0019 appliquées via l'outil MCP `apply_migration` ; 0017 et
   0018 ont dû passer par un `drop function` pour changer une signature de paramètres, accepté sans confirmation
   interactive cette fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait
   viser surtout delete/drop sur des données ou des tables, 0018 contient 1405 lignes d'insertion appliquées en
@@ -513,6 +513,25 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     valide, `node scripts/build.mjs` (mode test non relié) confirme que `partsCatalog.json` (297 Ko) est bien
     inclus dans le zip. **Jamais ouvert dans le vrai jeu.**
 
+- **Chat dans la tablette (mod 2.8.0, TODO point 2sexies fait)** : nouvel onglet « Chat » dans `Tablet.vue`,
+  même salon que la fenêtre rapide (`net.game.chat.messages`, `ui('chat.send', {text})`) — aucun changement
+  côté Lua/SQL nécessaire, c'était déjà poussé, juste pas affiché dans la tablette avant.
+- **Vente de pièces à prix libre entre joueurs (mod 2.8.0, TODO point 2quinquies fait)**.
+  - `supabase/migrations/0019_part_market.sql` : `remove_vehicle_part` (0018) ne fait plus disparaître la pièce
+    retirée — elle va dans un nouveau « stock de pièces détachées » (`garage_spare_parts`, par joueur). De là :
+    `install_spare_part` (gratuit, sur un AUTRE véhicule du même modèle — déjà payée une fois), ou
+    `create_part_listing`/`buy_part_listing`/`cancel_part_listing`/`get_part_market` (même principe que
+    `listings`/`buy_listing` pour les véhicules entiers : prix **toujours choisi par le vendeur**, jamais une
+    formule serveur ; le vendeur ne possède plus la pièce dès la mise en vente, l'acheteur la reçoit dans SON
+    propre stock de pièces détachées, charge à lui de l'installer). Même commission que le marché de véhicules
+    (`market_fee_percent`). **Testé en direct contre le vrai Supabase** : cycle complet acheter une vraie pièce
+    → la retirer (stock) → la mettre en vente → un autre vrai joueur l'achète → vérifié dans son stock — tout
+    dans une transaction annulée volontairement, soldes des deux comptes vérifiés après coup.
+  - `Tablet.vue` (app Annonces) : nouveau sous-onglet « Pièces » (à côté de « Véhicules ») — annonces de pièces
+    ouvertes + « Mes pièces de rechange » (prix libre + bouton Installer sur le premier véhicule compatible du
+    même modèle trouvé dans le garage, pas besoin qu'il soit sorti).
+  - Vérifié hors jeu : `node tests/net_test.mjs` (30/30), `Tablet.vue` compile. **Jamais ouvert dans le vrai jeu.**
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
    mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
@@ -550,20 +569,9 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
    fantôme. Si l'utilisateur voulait dire que ça ne marche pas (fantômes absents/invisibles) ou autre chose
    (voir le modèle réel du véhicule sur le fantôme, pas juste un repère générique ?), **à clarifier avec lui et/ou
    vérifier en jeu avant de coder quoi que ce soit** — pas assez d'information pour agir cette fois-ci.
-2quinquies. **Vente de pièces à prix libre, dans une boutique privée** (demandé par l'utilisateur, **non
-   commencé**). Le système d'annonces existant (`listings`, `0001_grnfr_online.sql`, onglet Annonces de la
-   tablette) ne vend que des véhicules entiers (`vehicle_id`). Pour vendre une PIÈCE (déjà posée sur un véhicule
-   via 0018, ou achetée en double ?) il faudrait soit une colonne supplémentaire sur `listings` (`part_slot`/
-   `part_key` au lieu de `vehicle_id`, ou les deux en nullable avec une contrainte « l'un ou l'autre »), soit une
-   table séparée ; prix fixé par le vendeur comme pour les véhicules déjà (`create_listing`), donc pas une
-   nouveauté côté sécurité — mais il faut d'abord décider CE qui peut être revendu (une pièce retirée d'un
-   véhicule existe-t-elle encore quelque part, ou disparaît-elle comme c'est le cas aujourd'hui avec
-   `remove_vehicle_part` qui ne fait que l'enlever sans la stocker ?). À concevoir avant de coder.
-2sexies. **Chat accessible depuis la tablette** (demandé par l'utilisateur, **non commencé**). Le chat existe déjà
-   (`chat.lua`, `0005_chat.sql`) mais seulement dans la petite fenêtre rapide (touche J, `QuickPanel.vue`), pas
-   dans `Tablet.vue`. Ajouter un onglet/app "Chat" à la tablette qui réutilise le même état (`net.game.chat` ou
-   équivalent déjà poussé pour `QuickPanel.vue` — à vérifier son nom exact dans `online.lua`/`chat.lua`) serait
-   une petite tâche bornée.
+2quinquies. ~~**Vente de pièces à prix libre, dans une boutique privée**~~ **Fait (mod 2.8.0, voir § Fait
+   ci-dessus)**.
+2sexies. ~~**Chat accessible depuis la tablette**~~ **Fait (mod 2.8.0, voir § Fait ci-dessus)**.
 3bis. **Dégâts persistants + sauvegarde périodique** (demandé par l'utilisateur, **non commencé**) :
    - Les dégâts du véhicule doivent survivre au rangement/à la reconnexion (aujourd'hui : rien n'est enregistré,
      lié à la phase 3 "réparation" déjà prévue plus bas — probablement à faire ensemble plutôt que deux fois).

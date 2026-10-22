@@ -199,16 +199,57 @@
 
         <!-- ANNONCES -->
         <main v-else-if="app === 'market'">
-          <p v-if="!d.market.length" class="empty">{{ L('Aucune annonce.', 'No listing.') }}</p>
-          <div class="grid">
-            <div v-for="l in d.market" :key="l.id" class="tile">
-              <div class="tname">{{ l.nickname || l.model_key }}</div>
-              <div class="mut">{{ l.model_key }} · {{ l.seller }}</div>
-              <div class="price">{{ money(l.price) }}</div>
-              <div v-if="l.description" class="mut">{{ l.description }}</div>
-              <div class="acts">
-                <button v-if="l.seller === net.username" type="button" class="btn dim" @click="act(() => rpc('cancel_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Retirer', 'Withdraw') }}</button>
-                <button v-else type="button" class="btn" @click="act(() => rpc('buy_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Acheter', 'Buy') }}</button>
+          <div class="seg">
+            <button type="button" :class="{ on: marketTab === 'vehicles' }" @click="marketTab = 'vehicles'">{{ L('Véhicules', 'Vehicles') }}</button>
+            <button type="button" :class="{ on: marketTab === 'parts' }" @click="marketTab = 'parts'">{{ L('Pièces', 'Parts') }}</button>
+          </div>
+
+          <div v-if="marketTab === 'vehicles'">
+            <p v-if="!d.market.length" class="empty">{{ L('Aucune annonce.', 'No listing.') }}</p>
+            <div class="grid">
+              <div v-for="l in d.market" :key="l.id" class="tile">
+                <div class="tname">{{ l.nickname || l.model_key }}</div>
+                <div class="mut">{{ l.model_key }} · {{ l.seller }}</div>
+                <div class="price">{{ money(l.price) }}</div>
+                <div v-if="l.description" class="mut">{{ l.description }}</div>
+                <div class="acts">
+                  <button v-if="l.seller === net.username" type="button" class="btn dim" @click="act(() => rpc('cancel_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Retirer', 'Withdraw') }}</button>
+                  <button v-else type="button" class="btn" @click="act(() => rpc('buy_listing', { p_listing_id: l.id }), loadMarket)">{{ L('Acheter', 'Buy') }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else>
+            <h4 class="submuted">{{ L('Annonces de pièces', 'Part listings') }}</h4>
+            <p v-if="!d.partMarket.length" class="empty">{{ L('Aucune pièce en vente.', 'No part for sale.') }}</p>
+            <div class="grid">
+              <div v-for="l in d.partMarket" :key="l.id" class="tile">
+                <div class="tname">{{ l.name }}</div>
+                <div class="mut">{{ l.model_key }} · {{ slotLabel(l.slot) }} · {{ l.seller }}</div>
+                <div class="price">{{ money(l.price) }}</div>
+                <div v-if="l.description" class="mut">{{ l.description }}</div>
+                <div class="acts">
+                  <button v-if="l.seller === net.username" type="button" class="btn dim" @click="act(() => rpc('cancel_part_listing', { p_listing_id: l.id }), loadPartMarket)">{{ L('Retirer', 'Withdraw') }}</button>
+                  <button v-else type="button" class="btn" @click="act(() => rpc('buy_part_listing', { p_listing_id: l.id }), loadPartMarket)">{{ L('Acheter', 'Buy') }}</button>
+                </div>
+              </div>
+            </div>
+
+            <h4 class="submuted">{{ L('Mes pièces de rechange', 'My spare parts') }}</h4>
+            <p v-if="!d.spareParts.length" class="empty">{{ L('Rien en stock (retirez une pièce à l\'ordinateur du garage pour la garder ici).', 'Nothing in stock (remove a part at the garage computer to keep it here).') }}</p>
+            <div class="grid">
+              <div v-for="sp in d.spareParts" :key="sp.id" class="tile">
+                <div class="tname">{{ sp.name }}</div>
+                <div class="mut">{{ sp.model_key }} · {{ slotLabel(sp.slot) }} · {{ L('valeur', 'value') }} {{ money(sp.value) }}</div>
+                <div class="acts">
+                  <button type="button" class="btn dim" :disabled="!compatibleVehicle(sp)" @click="installSpare(sp)">
+                    {{ L('Installer', 'Install') }}<template v-if="compatibleVehicle(sp)"> ({{ compatibleVehicle(sp).nickname || compatibleVehicle(sp).model_key }})</template>
+                  </button>
+                  <div class="inline"><input v-model.number="f['sp' + sp.id]" type="number" min="1" :placeholder="L('Prix', 'Price')" />
+                    <button type="button" class="btn dim" @click="act(() => rpc('create_part_listing', { p_spare_id: sp.id, p_price: f['sp' + sp.id], p_description: null }), loadPartMarket)">{{ L('Mettre en vente', 'List') }}</button></div>
+                </div>
+                <p v-if="!compatibleVehicle(sp)" class="mut small">{{ L('Aucun véhicule du même modèle pour l\'installer.', 'No vehicle of the same model to install it on.') }}</p>
               </div>
             </div>
           </div>
@@ -330,6 +371,18 @@
           </div>
         </main>
 
+        <!-- CHAT : même salon que la fenêtre rapide (touche J), juste accessible aussi depuis la tablette -->
+        <main v-else-if="app === 'chat'" class="chatapp">
+          <div class="log" ref="chatLogEl">
+            <p v-if="!chatMessages.length" class="empty">{{ L('Aucun message pour l\'instant.', 'No messages yet.') }}</p>
+            <div v-for="m in chatMessages" :key="m.id" class="msg"><b>{{ m.username }}</b> {{ m.text }}</div>
+          </div>
+          <div class="inline">
+            <input v-model="chatText" type="text" maxlength="200" :placeholder="L('Écrire un message…', 'Write a message…')" @keyup.enter="sendChat" />
+            <button type="button" class="btn" :disabled="!chatText.trim()" @click="sendChat">{{ L('Envoyer', 'Send') }}</button>
+          </div>
+        </main>
+
         <!-- HISTORIQUE -->
         <main v-else-if="app === 'history'">
           <table class="tb"><tr v-for="x in d.tx" :key="x.id"><td class="mut">{{ x.created_at.slice(0, 16).replace('T', ' ') }}</td><td>{{ x.ref || x.kind }}</td><td :class="x.amount < 0 ? 'bad' : 'good'">{{ x.amount > 0 ? '+' : '' }}{{ money(x.amount) }}</td></tr></table>
@@ -340,7 +393,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue"
 import { net, ui, rpc, errText, refreshMe } from "./net.js"
 import VehImg from "./VehImg.vue"
 
@@ -353,18 +406,21 @@ const apps = [
   { id: "dealer", color: "#22c55e", path: "M6 7h12l-1 13H7L6 7zM9 7V5a3 3 0 016 0v2" },
   { id: "market", color: "#eab308", path: "M4 4h10l6 6-10 10-6-6V4zM8.5 8.5h.01" },
   { id: "work", color: "#ef4444", path: "M4 8h16v11H4zM9 8V5h6v3M4 13h16" },
+  { id: "chat", color: "#06b6d4", path: "M4 4h16v12H9l-5 4V4z" },
   { id: "history", color: "#64748b", path: "M12 7v5l3 2M21 12a9 9 0 11-3-6.7M21 4v5h-5" },
 ]
 const NAMES = {
   garage: ["Mes voitures", "My cars"], players: ["Joueurs", "Players"], trades: ["Échanges", "Trades"], dealer: ["Concession", "Dealership"],
   market: ["Annonces", "Listings"], work: ["Travail", "Work"], history: ["Historique", "History"], customize: ["Ordinateur", "Computer"],
+  chat: ["Chat", "Chat"],
 }
 const appName = id => L(...NAMES[id])
 const modeName = m => ({ money: L("Argent", "Money"), car: L("Donner une voiture", "Give a car"), trade: L("Échange", "Trade") })[m]
 
 const app = ref(null), msg = ref(""), sel = ref(null), mode = ref("money"), insFor = ref(null)
 const f = reactive({ amount: null, gift: "", offer: "", want: "", cash: null })
-const d = reactive({ trades: [], catalog: [], market: [], tx: [] })
+const d = reactive({ trades: [], catalog: [], market: [], tx: [], partMarket: [], spareParts: [] })
+const marketTab = ref("vehicles")
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
@@ -551,6 +607,17 @@ const deliveryPhaseLabel = p => (DELIVERY_PHASE_NAMES[p] ? L(...DELIVERY_PHASE_N
 const vehicleFor = o => vehicles.value.find(v => out(v) && (v.cargo_capacity || 0) >= o.cargo_units)
 function refreshDeliveries() { net.deliveryError = ""; ui("delivery.refresh") }
 function acceptDelivery(o) { const v = vehicleFor(o); if (!v) return; net.deliveryError = ""; ui("delivery.accept", { id: o.id, vehicle_id: v.id }) }
+
+// ------------------------------------------------------------------ chat (même salon que QuickPanel.vue, touche J)
+const chatText = ref(""), chatLogEl = ref(null)
+const chatMessages = computed(() => net.game.chat?.messages || [])
+function sendChat() {
+  const v = chatText.value.trim()
+  if (!v) return
+  ui("chat.send", { text: v })
+  chatText.value = ""
+}
+watch(chatMessages, async () => { await nextTick(); if (chatLogEl.value) chatLogEl.value.scrollTop = chatLogEl.value.scrollHeight })
 const incoming = computed(() => d.trades.filter(x => x.direction === "in").length)
 
 const clock = ref("")
@@ -565,6 +632,16 @@ async function act(fn, after) {
 const safe = async fn => { try { await fn() } catch (e) { net.error = errText(e) } }
 const loadTrades = () => safe(async () => { d.trades = await rpc("get_trades") })
 const loadMarket = () => safe(async () => { d.market = await rpc("get_market", { p_limit: 50, p_offset: 0 }) })
+const loadPartMarket = () => safe(async () => {
+  d.partMarket = await rpc("get_part_market", { p_limit: 50, p_offset: 0 })
+  d.spareParts = await rpc("get_my_spare_parts")
+})
+const compatibleVehicle = sp => vehicles.value.find(v => v.model_key === sp.model_key)
+async function installSpare(sp) {
+  const v = compatibleVehicle(sp)
+  if (!v) return
+  await act(() => rpc("install_spare_part", { p_spare_id: sp.id, p_vehicle_id: v.id }), loadPartMarket)
+}
 async function sellDealer(v) { await act(async () => { if (out(v)) await ui("garage.store", { id: v.id }); await rpc("sell_vehicle_to_dealer", { p_vehicle_id: v.id }) }) }
 
 async function pick(name) {
@@ -580,7 +657,7 @@ function go(id) {
   app.value = id; msg.value = ""; net.error = ""
   if (id === "trades" || id === "players") loadTrades()
   else if (id === "dealer") { buy.c = null; safe(async () => { d.catalog = await rpc("get_catalog") }) }
-  else if (id === "market") loadMarket()
+  else if (id === "market") { loadMarket(); loadPartMarket() }
   else if (id === "history") safe(async () => { d.tx = await rpc("get_my_transactions", { p_limit: 40 }) })
   if (id === "garage" || id === "players") refreshMe().catch(() => {})
 }
@@ -653,6 +730,13 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 input[type="color"] { width: 46px; height: 32px; padding: 2px; border-radius: 8px; cursor: pointer; }
 input[type="range"] { width: 100%; max-width: 320px; accent-color: var(--ac); }
 .customize .vhead { margin-bottom: 4px; }
+.chatapp { display: flex; flex-direction: column; }
+.chatapp .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); margin-bottom: 10px; }
+.chatapp .msg { font-size: 13px; word-break: break-word; }
+.chatapp .msg b { color: var(--ac); margin-right: 4px; }
+.chatapp .inline input { flex: 1; }
+h4.submuted { margin: 18px 0 10px; font: 700 13px "Overpass", sans-serif; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.5); }
+h4.submuted:first-child { margin-top: 0; }
 .chips, .pickrow { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip, .pk { padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.05); color: #fff; font: 600 13px inherit; cursor: pointer;
   display: flex; flex-direction: column; align-items: flex-start; small { font-weight: 400; color: rgba(255, 255, 255, 0.6); } &.on, &:hover { border-color: var(--ac); background: rgba(255, 102, 0, 0.15); } }
