@@ -21,7 +21,7 @@
   <p class="mut">Les données envoyées au serveur : e-mail, pseudo, argent, véhicules du garage, carte et position pendant que vous êtes connecté. Rien d'autre.</p>
 
   <h2>Héberger votre propre serveur (GRNFR Host CMP)</h2>
-  <p class="mut">Un programme séparé (pas encore relié au mod) : relais réseau auto-hébergé, <b>sans limite de joueurs</b>, avec un nom et un mot de passe facultatif. Premier lancement = assistant de configuration ; une page web locale permet de la modifier ensuite. Compilé automatiquement à chaque version par GitHub Actions.</p>
+  <p class="mut">Une application de bureau séparée (pas encore reliée au mod) : relais réseau auto-hébergé, <b>sans limite de joueurs</b>, avec un nom et un mot de passe facultatif. Premier lancement = assistant de configuration dans l'app elle-même ; tout reste modifiable ensuite depuis le même tableau de bord. Compilée automatiquement à chaque version par GitHub Actions.</p>
   <p id="host-dl" class="mut">Chargement…</p>
 
   <h2>Classement des fortunes</h2>
@@ -62,20 +62,28 @@
   } catch (e) { hist.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
 })()
 
-// GRNFR Host CMP : binaires construits par GitHub Actions (host/, jamais compilé localement), publiés en
-// pièces jointes de la dernière GitHub Release du dépôt (tag "host-vX.Y.Z"). Lecture publique, sans jeton.
+// GRNFR Host CMP : installeurs construits par GitHub Actions (host/, app Tauri, jamais compilé localement),
+// publiés en pièces jointes de la dernière GitHub Release du dépôt (tag "host-vX.Y.Z"). Lecture publique,
+// sans jeton. Les noms de fichiers embarquent la version (ex. "GRNFR Host CMP_0.4.0_x64-setup.exe") : on
+// reconnaît l'OS par l'extension plutôt que par un nom fixe.
 ;(async () => {
   const el = document.getElementById("host-dl"), verHost = document.getElementById("ver-host")
-  const LABELS = { "grnfr-host-windows.exe": "Windows (.exe)", "grnfr-host-linux": "Linux", "grnfr-host-macos": "macOS" }
+  const BY_EXT = [
+    { test: n => n.endsWith(".exe"), label: "Windows (.exe)" },
+    { test: n => n.endsWith(".dmg"), label: "macOS (.dmg)" },
+    { test: n => n.endsWith(".AppImage"), label: "Linux (.AppImage)" },
+  ]
   try {
     const res = await fetch("https://api.github.com/repos/Grenofar/Grnfr-CMP-mod-bng/releases/latest")
     if (!res.ok) throw new Error("http_" + res.status)
     const rel = await res.json()
     if (verHost) verHost.textContent = rel.tag_name || "?"
-    const assets = (rel.assets || []).filter(a => LABELS[a.name])
+    const assets = (rel.assets || [])
+      .map(a => ({ a, kind: BY_EXT.find(k => k.test(a.name)) }))
+      .filter(x => x.kind)
     if (!assets.length) { el.textContent = "Aucun binaire publié pour l'instant."; return }
     el.innerHTML = `<span class="mut">${GRNFR.esc(rel.tag_name)} : </span>` +
-      assets.map(a => `<a class="btn" href="${GRNFR.esc(a.browser_download_url)}" download>${GRNFR.esc(LABELS[a.name])}</a>`).join(" ")
+      assets.map(({ a, kind }) => `<a class="btn" href="${GRNFR.esc(a.browser_download_url)}" download>${GRNFR.esc(kind.label)}</a>`).join(" ")
   } catch (e) { el.textContent = "Binaires indisponibles pour l'instant (voir le dépôt GitHub, dossier host/)."; if (verHost) verHost.textContent = "?" }
 })()
 </script></body></html>

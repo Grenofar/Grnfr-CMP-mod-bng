@@ -4,15 +4,15 @@
 // base de données ni limite de joueurs. L'intégration du mod GRNFR (net.js) avec CE relais (plutôt que /
 // en complément de Supabase) n'a pas été faite dans cette session : voir host/README.md.
 //
-// État partagé avec l'assistant web (httpd.rs) : ServerState expose running/clients/cfg pour que la page
-// React puisse afficher qui est connecté, démarrer/arrêter le relais et expulser un joueur, sans redémarrer
-// le programme (seul le changement de port/mot de passe nécessite un arrêt puis un redémarrage du relais,
-// pas du processus entier).
+// État partagé avec le frontend (commands.rs) via ServerState : running/clients/cfg/configured, pour que la
+// fenêtre React puisse afficher qui est connecté, démarrer/arrêter le relais, expulser un joueur, et savoir
+// si l'assistant de configuration doit s'afficher (configured = None tant qu'on ne sait pas encore).
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use futures_util::{SinkExt, StreamExt};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
@@ -31,6 +31,7 @@ struct ClientInfo {
     tx: Tx,
 }
 
+#[derive(Serialize, Clone)]
 pub struct ClientSummary {
     pub id: u64,
     pub username: String,
@@ -48,6 +49,9 @@ pub struct ServerState {
     listener_task: Mutex<Option<JoinHandle<()>>>,
     running: Mutex<bool>,
     cfg: Mutex<Config>,
+    // None = pas encore su (vérification Supabase en cours) ; Some(false) = premier lancement, assistant à
+    // afficher ; Some(true) = config trouvée, tableau de bord à afficher.
+    configured: Mutex<Option<bool>>,
 }
 
 impl ServerState {
@@ -57,12 +61,15 @@ impl ServerState {
             listener_task: Mutex::new(None),
             running: Mutex::new(false),
             cfg: Mutex::new(cfg),
+            configured: Mutex::new(None),
         })
     }
 
     pub fn is_running(&self) -> bool { *self.running.lock().unwrap() }
     pub fn config(&self) -> Config { self.cfg.lock().unwrap().clone() }
     pub fn set_config(&self, cfg: Config) { *self.cfg.lock().unwrap() = cfg; }
+    pub fn configured(&self) -> Option<bool> { *self.configured.lock().unwrap() }
+    pub fn set_configured(&self, v: bool) { *self.configured.lock().unwrap() = Some(v); }
 
     pub fn players(&self) -> Vec<ClientSummary> {
         let clients = self.shared.clients.lock().unwrap();

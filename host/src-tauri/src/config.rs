@@ -1,22 +1,22 @@
 // Configuration du host : nom, mot de passe (facultatif), port. Pas de nombre de joueurs maximum.
 //
-// Depuis v0.3.0, la config vit dans Supabase (voir supabase.rs et supabase/migrations/0011_host_config.sql),
-// pas dans un fichier local. Pas de compte joueur requis : au premier lancement, un identifiant aléatoire
-// (UUID v4) est généré et gardé dans grnfr-host.id, à côté de l'exécutable — connaître cet identifiant
-// suffit à lire/écrire CETTE config (sécurité "limitée, pas infaillible", voir le commentaire de la
-// migration 0011). Un petit cache local (grnfr-host.cache) garde la dernière config connue pour pouvoir
-// démarrer même hors ligne (Supabase injoignable) ; toujours écrasé par ce qui vient de Supabase quand
-// c'est possible.
+// La config vit dans Supabase (voir supabase.rs et supabase/migrations/0011_host_config.sql), pas dans un
+// fichier local. Pas de compte joueur requis : au premier lancement, un identifiant aléatoire (UUID v4) est
+// généré et gardé dans grnfr-host.id, à côté de l'exécutable — connaître cet identifiant suffit à lire/écrire
+// CETTE config (sécurité "limitée, pas infaillible", voir le commentaire de la migration 0011). Un petit
+// cache local (grnfr-host.cache) garde la dernière config connue pour pouvoir démarrer même hors ligne ;
+// toujours écrasé par ce qui vient de Supabase quand c'est possible.
 use std::fs;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const HOST_ID_PATH: &str = "grnfr-host.id";
 const CACHE_PATH: &str = "grnfr-host.cache";
 pub const DEFAULT_PORT: u16 = 30814;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub name: String,
     pub password: Option<String>,

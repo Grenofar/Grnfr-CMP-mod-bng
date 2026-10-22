@@ -1,0 +1,25 @@
+[package]
+name = "grnfr-host"
+version = "0.4.0"
+edition = "2021"
+description = "GRNFR Host CMP : app native (Tauri — Rust + React/TypeScript) pour un serveur auto-hébergé du mod GRNFR CMP, config stockée dans Supabase."
+
+[lib]
+name = "grnfr_host_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[profile.release]
+opt-level = 2

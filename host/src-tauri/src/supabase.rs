@@ -20,10 +20,10 @@ fn creds() -> Result<(&'static str, &'static str), String> {
     }
 }
 
-fn rpc(name: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
+async fn rpc(name: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
     let (url, key) = creds()?;
     let endpoint = format!("{}/rest/v1/rpc/{}", url, name);
-    let client = reqwest::blocking::Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(8))
         .build()
         .map_err(|e| e.to_string())?;
@@ -34,18 +34,19 @@ fn rpc(name: &str, body: serde_json::Value) -> Result<serde_json::Value, String>
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
+        .await
         .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
-        let text = resp.text().unwrap_or_default();
+        let text = resp.text().await.unwrap_or_default();
         return Err(format!("http_{} {}", status, text));
     }
-    resp.json::<serde_json::Value>().map_err(|e| e.to_string())
+    resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
 // None = pas d'erreur réseau, mais pas encore de config enregistrée pour cet host_id (premier lancement).
-pub fn fetch_config(host_id: Uuid) -> Result<Option<Config>, String> {
-    let v = rpc("host_config_get", serde_json::json!({ "p_host_id": host_id }))?;
+pub async fn fetch_config(host_id: Uuid) -> Result<Option<Config>, String> {
+    let v = rpc("host_config_get", serde_json::json!({ "p_host_id": host_id })).await?;
     if v.is_null() {
         return Ok(None);
     }
@@ -56,7 +57,7 @@ pub fn fetch_config(host_id: Uuid) -> Result<Option<Config>, String> {
     }))
 }
 
-pub fn save_config(host_id: Uuid, cfg: &Config) -> Result<(), String> {
+pub async fn save_config(host_id: Uuid, cfg: &Config) -> Result<(), String> {
     rpc(
         "host_config_set",
         serde_json::json!({
@@ -65,6 +66,7 @@ pub fn save_config(host_id: Uuid, cfg: &Config) -> Result<(), String> {
             "p_password": cfg.password.clone().unwrap_or_default(),
             "p_port": cfg.port,
         }),
-    )?;
+    )
+    .await?;
     Ok(())
 }

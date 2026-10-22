@@ -1,13 +1,13 @@
 name: GRNFR Host CMP — build & release
 
-# Compile host/ (Rust, app native egui/eframe — pas de HTML) sur de vraies machines Windows/Linux/macOS avec
-# un vrai toolchain Rust — nécessaire car aucun cargo/rustc n'était disponible dans l'environnement qui a
-# écrit ce code (voir host/README.md). Déclenché par un tag "host-vX.Y.Z" : construit host/ sur chaque OS,
-# et publie les binaires en pièces jointes d'une GitHub Release du même nom.
+# Compile host/ (app Tauri : Rust + React/TypeScript) sur de vraies machines Windows/Linux/macOS — aucun
+# cargo/rustc/node n'est disponible dans l'environnement qui a écrit ce code (voir host/README.md).
+# Déclenché par un tag "host-vX.Y.Z" : construit le frontend (Vite) puis empaquette l'app native avec
+# tauri-action, qui publie les installeurs en pièces jointes d'une GitHub Release du même nom.
 #
 # Secrets requis (Settings > Secrets and variables > Actions, sur ce dépôt) : SUPABASE_URL et
-# SUPABASE_ANON_KEY — embarqués À LA COMPILATION dans le binaire (voir host/src/supabase.rs). Sans eux, le
-# binaire compile quand même mais ne peut pas lire/écrire sa config dans Supabase.
+# SUPABASE_ANON_KEY — embarqués À LA COMPILATION dans le binaire (voir host/src-tauri/src/supabase.rs).
+# Sans eux, l'app compile quand même mais ne peut pas lire/écrire sa config dans Supabase.
 on:
   push:
     tags:
@@ -18,68 +18,54 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  publish:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            bin_name: grnfr-host.exe
-            asset_name: grnfr-host-windows.exe
-          - os: ubuntu-latest
-            bin_name: grnfr-host
-            asset_name: grnfr-host-linux
-          - os: macos-latest
-            bin_name: grnfr-host
-            asset_name: grnfr-host-macos
-    runs-on: ${{ matrix.os }}
+          - platform: windows-latest
+          - platform: ubuntu-22.04
+          - platform: macos-latest
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Dépendances système de la fenêtre native (Linux uniquement)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Dépendances système (Linux uniquement)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: host/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build du serveur (host/, Rust)
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "host/src-tauri -> target"
+
+      - name: Installe les dépendances du frontend
         working-directory: host
+        run: npm install
+
+      - uses: tauri-apps/tauri-action@v1
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: cargo build --release
-
-      - name: Renomme le binaire pour la release
-        shell: bash
-        run: cp "host/target/release/${{ matrix.bin_name }}" "${{ matrix.asset_name }}"
-
-      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: ${{ matrix.asset_name }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/host-v')
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Rassemble les binaires
-        run: |
-          mkdir -p release
-          find artifacts -type f -exec cp {} release/ \;
-          ls -la release
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: "GRNFR Host CMP ${{ github.ref_name }}"
-          files: release/*
-          body: |
+          projectPath: host
+          tagName: ${{ github.ref_name }}
+          releaseName: "GRNFR Host CMP ${{ github.ref_name }}"
+          releaseBody: |
             Binaires de GRNFR Host CMP, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
-            App native (pas de web) : au premier lancement, un assistant configure le serveur (nom, mot de
-            passe facultatif, port — 30814 par défaut) et enregistre tout dans Supabase. Voir host/README.md.
+            App native (Tauri — Rust + React/TypeScript) : au premier lancement, un assistant configure le
+            serveur (nom, mot de passe facultatif, port — 30814 par défaut) et enregistre tout dans Supabase.
+            Voir host/README.md.
+          releaseDraft: false
+          prerelease: false
