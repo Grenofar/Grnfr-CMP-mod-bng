@@ -65,9 +65,15 @@ async function http(path, body, token, method = "POST") {
     } catch (e) { lastErr = e }
   }
   if (lastErr) {
-    // La cause réelle (DNS, TLS, pare-feu, CORS...) est précieuse pour diagnostiquer à distance : on la
-    // garde dans net.lastNetworkDetail pour l'afficher, plutôt que de la jeter comme avant.
-    net.lastNetworkDetail = (lastErr.message || lastErr.name) || String(lastErr)
+    // fetch() ne donne jamais plus de détail que "Failed to fetch", que la cause soit DNS, pare-feu, TLS
+    // ou CORS — c'est volontaire côté navigateur (anti-fingerprinting). Pour distinguer un blocage réseau
+    // total d'un souci plus spécifique (CORS/preflight/en-têtes, potentiellement réparable sans rien
+    // demander au joueur), on retente une requête minimale SANS les en-têtes personnalisés (apikey,
+    // Authorization) : si elle passe, le problème vient des en-têtes/du preflight, pas du réseau en entier.
+    let probe = "sonde impossible"
+    try { await fetch(cfg.url + "/rest/v1/", { method: "GET" }); probe = "une requête nue (sans en-têtes) passe : probablement CORS/preflight, pas un blocage réseau total" }
+    catch (e2) { probe = "même une requête nue échoue : blocage réseau complet (pare-feu/DNS/antivirus)" }
+    net.lastNetworkDetail = ((lastErr.message || lastErr.name) || String(lastErr)) + " — " + probe
     throw new NetError("network", 0, net.lastNetworkDetail)
   }
   let data = null
