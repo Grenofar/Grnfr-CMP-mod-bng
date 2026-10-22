@@ -2,9 +2,9 @@
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
   'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
-  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo' }
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer' }
 
-local VERSION = '2.4.3'
+local VERSION = '2.5.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -251,6 +251,9 @@ local ROUTES = {
     end
   end,
   ['garage.lock']     = function(a) grnfr_online.setLocked(a.id, a.on) end,
+  ['computer.paint']  = function(a) grnfr_computer.applyPaint(a.id, a.paint) end,
+  ['computer.parts']  = function(a) grnfr_computer.applyParts(a.id, a.parts) end,
+  ['computer.tuning'] = function(a) grnfr_computer.applyTuning(a.id, a.tuning) end,
   ['garage.store']    = function(a)
     if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
     grnfr_online.storeVehicle(a.id)

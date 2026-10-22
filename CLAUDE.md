@@ -14,7 +14,7 @@ Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
-  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0014).
+  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0015).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
 - `host/` — a standalone Tauri app (Rust backend + React/TypeScript frontend, one native window — not a
   local web server you open in a browser, and not the old egui/eframe version from earlier in this project's
@@ -365,10 +365,12 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.4.3** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2). Host : **0.6.0** dans le code, **pas
-  encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de `host-release.yml`, input
-  `version` = 0.6.0, quand l'utilisateur le demande). Launcher : 0.1.1.
-- Migrations appliquées en prod : 0001 → 0014 (0014 collée à la main par l'utilisateur dans le SQL Editor).
+- Mod : **2.5.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+  dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
+  `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : 0.1.1.
+- Migrations appliquées en prod : 0001 → 0015 (0015 appliquée via l'outil MCP `apply_migration`, aucun
+  delete/drop dedans donc pas besoin de la coller à la main ; testée en direct dans une transaction annulée
+  volontairement — voir plus bas).
 - L'utilisateur publie le mod lui-même : `git fetch origin main-n8m0cl && git reset --hard origin/main-n8m0cl` puis
   `.\release.local.bat` (note de version modifiée à la main dans ce .bat, sans accents). Son `main` local a divergé
   par le passé : toujours lui donner ces deux commandes, jamais `git pull` seul.
@@ -378,23 +380,48 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   carrière, `facilities.lua`) → dans sa voiture, ou à pied devant la tablette si aucune voiture ; voiture du jeu
   libre supprimée. Bandeau serveur en haut (`ServerBar.vue`). Bouton « Aller à mon garage » (touche J).
 - Tablette (touche O devant son garage, `Tablet.vue`) : Mes voitures (sortir sur une place du garage, ranger,
-  verrouiller, assurance, vendre/annoncer, photo + fiche), Joueurs (argent / donner voiture / échange en choisissant
-  dans la liste), Échanges, Concession (négociation bot serveur + 4 assurances + photo + fiche), Annonces, Travail
-  (taxi/bus anciens), Historique.
+  verrouiller, assurance, vendre/annoncer, photo + fiche, **bouton « Personnaliser » → ordinateur du garage**),
+  Joueurs (argent / donner voiture / échange en choisissant dans la liste), Échanges, Concession (négociation bot
+  serveur + 4 assurances + photo + fiche), Annonces, Travail (taxi/bus anciens), Historique.
+- **Ordinateur du garage (mod 2.5.0, TODO point 1 fait) = nouvel écran « Personnaliser » de la tablette** (pas de
+  fenêtre séparée, pas de nouvelle touche), accessible seulement sur un véhicule déjà sorti (`out(v)`) :
+  - Backend (`supabase/migrations/0015_vehicle_customization.sql`) : `garage_vehicles` a 4 nouvelles colonnes
+    (`parts jsonb`, `tuning jsonb`, `paint jsonb`, `cargo_capacity int`) qui survivent au rangement. RPC
+    `get_part_categories`, `buy_vehicle_part`, `remove_vehicle_part`, `save_vehicle_tuning`, `repaint_vehicle`,
+    `buy_cargo_module` ; `get_me()` renvoie maintenant `parts`/`tuning`/`paint`/`cargo_capacity` par véhicule. Prix
+    = % de la valeur du véhicule par catégorie (cosmétique 3 %, performance 6 %, suspension 4 %, peinture 2 %,
+    stockage 5 % par unité, plancher 200), **jamais un prix envoyé par le client** — comme `private.insurance_plan`
+    (0014). Il n'existe PAS de vrai catalogue de pièces BeamNG côté serveur (des milliers de pièces par véhicule,
+    dans les jbeam du jeu) : « slot » et « part_name » sont de simples libellés choisis par l'UI (10 emplacements
+    fixes dans `Tablet.vue` : moteur, turbo, échappement, freins, suspension, jantes, pare-chocs avant/arrière,
+    capot, kit carrosserie), pas de vrais chemins jbeam. **Testé en direct contre le vrai projet Supabase** : les 6
+    RPC + `get_me()` appelées dans une transaction (`do $$ ... raise exception ... $$`, auth simulée via
+    `set_config('request.jwt.claims', ...)`) qui s'annule elle-même à la fin — aucune n'a échoué, rien n'a été
+    modifié pour de vrai (solde/colonnes vérifiés identiques après coup).
+  - UI (`Tablet.vue`, app `customize`, 4 onglets) : **Pièces** (nom de pièce libre + bouton Acheter/Retirer par
+    emplacement), **Réglages** (hauteur de caisse, pression des pneus — gratuit, juste enregistré), **Peinture**
+    (1 à 3 couches, sélecteurs de couleur natifs), **Stockage** (+1/2/3/5 unités, max 20).
+  - Lua (`computer.lua`, nouvelle extension, ROUTES `computer.paint`/`computer.parts`/`computer.tuning`) : essaie de
+    refléter l'achat sur le véhicule déjà sorti. **Peinture** : `obj:setColor(r,g,b,a)` pour la couche de base (API
+    assez établie, confiance raisonnable), `setColorPalette0/1` pour les couches 2/3 (hypothèse non vérifiée).
+    **Pièces et réglages : AUCUN effet en jeu réel pour l'instant** — l'achat/enregistrement serveur fonctionne,
+    mais `core_vehicle_partmgmt` (vraie API de changement de pièces) n'a été ni trouvée ni testée dans cette
+    session (pas d'accès au jeu) ; `computer.lua` se contente de vérifier sa présence et de journaliser, voir le
+    commentaire en tête du fichier. **Première session en jeu : priorité à vérifier** (voir § Règles à garder et
+    Divers en attente point 5).
+  - Vérifié hors jeu : migration appliquée + testée en direct (ci-dessus), `node tests/net_test.mjs` (30
+    vérifications, aucune régression — ce module n'y touche pas), `Tablet.vue` compile (`@vue/compiler-sfc`,
+    script + template), `computer.lua` et `grnfr.lua` syntaxiquement valides (`luaparse` via npx, texlua absent de
+    cette session). **Jamais ouvert dans le vrai jeu.**
 - Host 0.6.0 : « Carte en direct » (serveurs du mod, joueurs, carte 2D des routes envoyées par le mod).
 - Confirmé en jeu par l'utilisateur : arrivée au garage OK (2.4.x).
 
 ### TODO — dans l'ordre demandé par l'utilisateur
-1. **Ordinateur du garage = personnalisation de la voiture** (demandé explicitement). S'ouvre UNIQUEMENT dans son
-   garage (même test de proximité que la tablette, `garage.isNear()`), touche dédiée ou bouton sur la tablette.
-   UI maison (pas l'UI BeamNG). Contenu visé, comme l'ordinateur de la carrière : pièces (changer des pièces du
-   véhicule sorti : `core_vehicle_partmgmt` / `vehicle.partConfig` — API à vérifier, voir les copies RLS dans
-   le scratchpad de l'agent ou https://github.com/RLS-Modding/rls_career_overhaul `career/modules/partShopping`,
-   `tuning`, `painting`), réglages (tuning), peinture, et **ajout d'espaces de stockage pour colis** (pièces
-   `cargo_load_*` / section jbeam `cargoStorage`). Tout achat de pièce passe par une RPC serveur (argent côté
-   serveur, `private.add_money`) ; enregistrer la config choisie dans `garage_vehicles.config_key` ou une nouvelle
-   colonne `parts jsonb` pour qu'elle survive au rangement.
-2. **Phase 2 — missions / livraisons comme la carrière, en multi** :
+1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
+   mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
+   (`core_vehicle_partmgmt` ou équivalent) pour que « Pièces »/« Réglages » changent vraiment le véhicule, pas
+   seulement la base de données ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
+2. **Phase 2 — missions / livraisons comme la carrière, en multi** (prochaine étape demandée) :
    - Points de ramassage/dépôt = `deliveryProvider` facilities de la carte (`freeroam_facilities.getFacilitiesByType
      ('deliveryProvider')`, `manualAccessPoints` → `parkingSpots.byName`), comme `career/modules/delivery/generator.lua`.
    - Colis (selon la capacité cargo du véhicule : `core_vehicleBridge.requestValue(veh, cb, 'getCargoContainers')`),
@@ -413,7 +440,8 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
 4. **Phase 4** : négociation aussi à la revente et entre joueurs (annonces), personnalisation « pour une tâche »
    (ex. kit cargo, attelage) proposée depuis la mission.
 5. Divers en attente : publier host 0.6.0 ; vérifier en jeu l'unité de `Power` des fiches véhicules (supposée kW)
-   et l'affichage des images `/vehicles/...` dans le CEF ; `host/` toujours non relié au mod.
+   et l'affichage des images `/vehicles/...` dans le CEF ; `host/` toujours non relié au mod ; **vérifier l'ordinateur
+   du garage en jeu réel** (point 1 ci-dessus) — peinture, et surtout trouver la vraie API de changement de pièces.
 
 ### Règles à garder
 - Toute API du jeu non vérifiée sous `pcall`, avec repli, et des logs `Garage:`/`Travel:`/... dans BeamNG.log

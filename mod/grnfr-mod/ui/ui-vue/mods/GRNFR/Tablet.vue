@@ -51,6 +51,7 @@
                 <template v-else>
                   <button type="button" class="btn" @click="ui('garage.store', { id: v.id })">{{ L('Ranger', 'Store') }}</button>
                   <button type="button" class="btn dim" @click="ui('garage.lock', { id: v.id, on: !locked(v) })">{{ locked(v) ? '🔓 ' + L('Déverrouiller', 'Unlock') : '🔒 ' + L('Verrouiller', 'Lock') }}</button>
+                  <button type="button" class="btn dim" @click="openCustomize(v)">🛠️ {{ L('Personnaliser', 'Customize') }}</button>
                 </template>
                 <button type="button" class="btn dim" @click="insFor = insFor === v.id ? null : v.id">{{ L('Assurance', 'Insurance') }}</button>
                 <template v-if="!v.listed">
@@ -233,6 +234,61 @@
           </div>
         </main>
 
+        <!-- ORDINATEUR DU GARAGE : personnalisation du véhicule sorti (pièces, réglages, peinture, stockage) -->
+        <main v-else-if="app === 'customize' && cust.v" class="customize">
+          <div class="vhead">
+            <VehImg :info="vi(cust.v.model_key, cust.v.config_key)" big />
+            <div class="vtxt">
+              <h3>{{ cust.v.nickname || fullName(vi(cust.v.model_key, cust.v.config_key), cust.v.model_key) }}</h3>
+              <div class="mut">{{ L('Valeur', 'Value') }} : {{ money(cust.v.value) }}</div>
+            </div>
+          </div>
+          <div class="seg">
+            <button v-for="t in ['parts', 'tuning', 'paint', 'cargo']" :key="t" type="button" :class="{ on: cust.tab === t }" @click="cust.tab = t">{{ custTabName(t) }}</button>
+          </div>
+
+          <div v-if="cust.tab === 'parts'" class="panel wide">
+            <div v-for="s in SLOTS" :key="s.key" class="tile wide">
+              <div class="tname">{{ L(s.fr, s.en) }} <span class="mut">· {{ catName(s.cat) }}</span></div>
+              <div class="mut">{{ (cust.v.parts && cust.v.parts[s.key]) ? (cust.v.parts[s.key].part_name || L('Pièce posée', 'Part fitted')) : L('Pièce d\'origine', 'Stock part') }}</div>
+              <div class="inline">
+                <input v-model="partNames[s.key]" type="text" :placeholder="L('Nom de la pièce', 'Part name')" maxlength="60" />
+                <button type="button" class="btn" :disabled="!partNames[s.key] || cust.busy" @click="buyPart(s)">{{ L('Acheter', 'Buy') }} ({{ money(priceFor(s.cat)) }})</button>
+                <button v-if="cust.v.parts && cust.v.parts[s.key]" type="button" class="btn dim" :disabled="cust.busy" @click="removePart(s.key)">{{ L('Retirer', 'Remove') }}</button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="cust.tab === 'tuning'" class="panel">
+            <p class="mut">{{ L('Réglages gratuits. Effet en jeu non encore vérifié (voir CLAUDE.md).', 'Free settings. In-game effect not verified yet (see CLAUDE.md).') }}</p>
+            <label>{{ L('Hauteur de caisse (mm)', 'Ride height (mm)') }} : {{ cust.tuning.ride }}</label>
+            <input v-model.number="cust.tuning.ride" type="range" min="-30" max="30" />
+            <label>{{ L('Pression des pneus (psi)', 'Tire pressure (psi)') }} : {{ cust.tuning.tire }}</label>
+            <input v-model.number="cust.tuning.tire" type="range" min="20" max="40" />
+            <button type="button" class="btn" :disabled="cust.busy" @click="saveTuning">{{ L('Enregistrer', 'Save') }}</button>
+          </div>
+
+          <div v-else-if="cust.tab === 'paint'" class="panel">
+            <div v-for="i in cust.paintLayers" :key="i" class="inline">
+              <label>{{ L('Couche', 'Layer') }} {{ i }}</label>
+              <input v-model="cust.paintHex[i - 1]" type="color" />
+            </div>
+            <div class="chips">
+              <button type="button" class="chip" :disabled="cust.paintLayers >= 3" @click="cust.paintLayers = Math.min(3, cust.paintLayers + 1)">{{ L('+ Couche', '+ Layer') }}</button>
+              <button type="button" class="chip" :disabled="cust.paintLayers <= 1" @click="cust.paintLayers = Math.max(1, cust.paintLayers - 1)">{{ L('- Couche', '- Layer') }}</button>
+            </div>
+            <button type="button" class="btn" :disabled="cust.busy" @click="repaint">{{ L('Repeindre', 'Repaint') }} ({{ money(priceFor('paint')) }})</button>
+          </div>
+
+          <div v-else class="panel">
+            <p class="mut">{{ L('Capacité de stockage actuelle', 'Current storage capacity') }} : <b>{{ cust.v.cargo_capacity || 0 }}</b> / 20</p>
+            <div class="chips">
+              <button v-for="n in [1, 2, 3, 5]" :key="n" type="button" class="chip" :class="{ on: cust.cargoAmount === n }" @click="cust.cargoAmount = n">+{{ n }}</button>
+            </div>
+            <button type="button" class="btn" :disabled="cust.busy || (cust.v.cargo_capacity || 0) + cust.cargoAmount > 20" @click="buyCargo">{{ L('Ajouter', 'Add') }} ({{ money(priceFor('cargo') * cust.cargoAmount) }})</button>
+          </div>
+        </main>
+
         <!-- HISTORIQUE -->
         <main v-else-if="app === 'history'">
           <table class="tb"><tr v-for="x in d.tx" :key="x.id"><td class="mut">{{ x.created_at.slice(0, 16).replace('T', ' ') }}</td><td>{{ x.ref || x.kind }}</td><td :class="x.amount < 0 ? 'bad' : 'good'">{{ x.amount > 0 ? '+' : '' }}{{ money(x.amount) }}</td></tr></table>
@@ -260,14 +316,14 @@ const apps = [
 ]
 const NAMES = {
   garage: ["Mes voitures", "My cars"], players: ["Joueurs", "Players"], trades: ["Échanges", "Trades"], dealer: ["Concession", "Dealership"],
-  market: ["Annonces", "Listings"], work: ["Travail", "Work"], history: ["Historique", "History"],
+  market: ["Annonces", "Listings"], work: ["Travail", "Work"], history: ["Historique", "History"], customize: ["Ordinateur", "Computer"],
 }
 const appName = id => L(...NAMES[id])
 const modeName = m => ({ money: L("Argent", "Money"), car: L("Donner une voiture", "Give a car"), trade: L("Échange", "Trade") })[m]
 
 const app = ref(null), msg = ref(""), sel = ref(null), mode = ref("money"), insFor = ref(null)
 const f = reactive({ amount: null, gift: "", offer: "", want: "", cash: null })
-const d = reactive({ trades: [], catalog: [], market: [], tx: [] })
+const d = reactive({ trades: [], catalog: [], market: [], tx: [], partCats: [] })
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
@@ -352,6 +408,95 @@ async function purchase() {
   await act(() => rpc("buy_vehicle_insured", { p_catalog_id: buy.c.id, p_insurance: buy.ins, p_color: null }), () => { buy.c = null; go("garage") })
   buy.busy = false
 }
+// ------------------------------------------------------------------ ordinateur du garage (personnalisation)
+const SLOTS = [
+  { key: "engine", cat: "performance", fr: "Moteur", en: "Engine" },
+  { key: "turbo", cat: "performance", fr: "Turbo", en: "Turbo" },
+  { key: "exhaust", cat: "performance", fr: "Échappement", en: "Exhaust" },
+  { key: "brakes", cat: "performance", fr: "Freins", en: "Brakes" },
+  { key: "suspension", cat: "suspension", fr: "Suspension", en: "Suspension" },
+  { key: "wheels", cat: "cosmetic", fr: "Jantes", en: "Wheels" },
+  { key: "bumper_front", cat: "cosmetic", fr: "Pare-chocs avant", en: "Front bumper" },
+  { key: "bumper_rear", cat: "cosmetic", fr: "Pare-chocs arrière", en: "Rear bumper" },
+  { key: "hood", cat: "cosmetic", fr: "Capot", en: "Hood" },
+  { key: "bodykit", cat: "cosmetic", fr: "Kit carrosserie", en: "Body kit" },
+]
+const CAT_NAMES = { cosmetic: ["Esthétique", "Cosmetic"], performance: ["Performance", "Performance"], suspension: ["Suspension", "Suspension"], paint: ["Peinture", "Paint"], cargo: ["Stockage", "Storage"] }
+const catName = c => L(...(CAT_NAMES[c] || CAT_NAMES.cosmetic))
+const TAB_NAMES = { parts: ["Pièces", "Parts"], tuning: ["Réglages", "Tuning"], paint: ["Peinture", "Paint"], cargo: ["Stockage", "Storage"] }
+const custTabName = t => L(...TAB_NAMES[t])
+
+const cust = reactive({ v: null, tab: "parts", busy: false, paintLayers: 1, paintHex: ["#ffffff", "#ffffff", "#ffffff"], tuning: { ride: 0, tire: 30 }, cargoAmount: 1 })
+const partNames = reactive({})
+const rateFor = cat => (d.partCats.find(c => c.category === cat) || {}).rate || 0
+const priceFor = cat => Math.max(200, Math.ceil(((cust.v && cust.v.value) || 0) * rateFor(cat) / 100))
+
+function hexToRgb(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "")
+  if (!m) return { r: 1, g: 1, b: 1, a: 1 }
+  return { r: parseInt(m[1], 16) / 255, g: parseInt(m[2], 16) / 255, b: parseInt(m[3], 16) / 255, a: 1 }
+}
+function rgbToHex(c) {
+  const ch = v => Math.max(0, Math.min(255, Math.round((Number(v) || 0) * 255))).toString(16).padStart(2, "0")
+  return c ? "#" + ch(c.r) + ch(c.g) + ch(c.b) : "#ffffff"
+}
+function refreshCustVeh() {
+  if (!cust.v) return
+  const updated = vehicles.value.find(x => x.id === cust.v.id)
+  if (updated) cust.v = updated
+}
+function openCustomize(v) {
+  cust.v = v; cust.tab = "parts"; cust.busy = false
+  cust.paintLayers = (v.paint && v.paint.length) || 1
+  cust.paintHex = [0, 1, 2].map(i => rgbToHex(v.paint && v.paint[i]))
+  cust.tuning = Object.assign({ ride: 0, tire: 30 }, v.tuning || {})
+  cust.cargoAmount = 1
+  for (const k in partNames) delete partNames[k]
+  app.value = "customize"; msg.value = ""; net.error = ""
+  if (!d.partCats.length) safe(async () => { d.partCats = await rpc("get_part_categories") })
+}
+async function buyPart(s) {
+  const name = (partNames[s.key] || "").trim()
+  if (!name || !cust.v) return
+  cust.busy = true
+  await act(() => rpc("buy_vehicle_part", { p_vehicle_id: cust.v.id, p_category: s.cat, p_slot: s.key, p_part_name: name }), async () => {
+    partNames[s.key] = ""; refreshCustVeh()
+    await ui("computer.parts", { id: cust.v.id, parts: cust.v.parts })
+  })
+  cust.busy = false
+}
+async function removePart(slotKey) {
+  cust.busy = true
+  await act(() => rpc("remove_vehicle_part", { p_vehicle_id: cust.v.id, p_slot: slotKey }), async () => {
+    refreshCustVeh()
+    await ui("computer.parts", { id: cust.v.id, parts: cust.v.parts })
+  })
+  cust.busy = false
+}
+async function saveTuning() {
+  cust.busy = true
+  await act(() => rpc("save_vehicle_tuning", { p_vehicle_id: cust.v.id, p_tuning: cust.tuning }), async () => {
+    refreshCustVeh()
+    await ui("computer.tuning", { id: cust.v.id, tuning: cust.v.tuning })
+  })
+  cust.busy = false
+}
+async function repaint() {
+  cust.busy = true
+  const paint = []
+  for (let i = 0; i < cust.paintLayers; i++) paint.push(hexToRgb(cust.paintHex[i]))
+  await act(() => rpc("repaint_vehicle", { p_vehicle_id: cust.v.id, p_paint: paint }), async () => {
+    refreshCustVeh()
+    await ui("computer.paint", { id: cust.v.id, paint: cust.v.paint })
+  })
+  cust.busy = false
+}
+async function buyCargo() {
+  cust.busy = true
+  await act(() => rpc("buy_cargo_module", { p_vehicle_id: cust.v.id, p_capacity: cust.cargoAmount }), () => refreshCustVeh())
+  cust.busy = false
+}
+
 const giftable = computed(() => vehicles.value.filter(v => !v.listed && !out(v)))
 const taxi = computed(() => net.game.taxi || {})
 const bus = computed(() => net.game.bus || {})
@@ -453,7 +598,10 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .pact { flex: 1; overflow-y: auto; padding: 14px 20px 14px 0; h3 { margin: 0 0 10px; font: 700 22px "Overpass", sans-serif; } &.empty { display: flex; align-items: center; justify-content: center; } }
 .seg { display: inline-flex; padding: 3px; margin-bottom: 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.06);
   button { border: 0; padding: 7px 14px; border-radius: 8px; background: none; color: rgba(255, 255, 255, 0.7); font: 600 13px inherit; cursor: pointer; &.on { background: var(--ac); color: #fff; } } }
-.panel { display: flex; flex-direction: column; gap: 8px; max-width: 560px; label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.6); margin-top: 6px; } }
+.panel { display: flex; flex-direction: column; gap: 8px; max-width: 560px; label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.6); margin-top: 6px; } &.wide { max-width: none; } }
+input[type="color"] { width: 46px; height: 32px; padding: 2px; border-radius: 8px; cursor: pointer; }
+input[type="range"] { width: 100%; max-width: 320px; accent-color: var(--ac); }
+.customize .vhead { margin-bottom: 4px; }
 .chips, .pickrow { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip, .pk { padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.05); color: #fff; font: 600 13px inherit; cursor: pointer;
   display: flex; flex-direction: column; align-items: flex-start; small { font-weight: 400; color: rgba(255, 255, 255, 0.6); } &.on, &:hover { border-color: var(--ac); background: rgba(255, 102, 0, 0.15); } }
