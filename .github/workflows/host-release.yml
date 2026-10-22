@@ -9,9 +9,14 @@ name: GRNFR Host CMP — build & release
 # - SUPABASE_URL / SUPABASE_ANON_KEY — embarqués À LA COMPILATION dans le binaire (voir
 #   host/src-tauri/src/supabase.rs). Sans eux, l'app compile quand même mais ne peut pas lire/écrire ses
 #   serveurs dans Supabase.
-# - TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD — pour signer les artefacts de mise à
-#   jour (voir host/README.md, "Mises à jour signées"). Sans eux, l'app compile et tourne quand même, juste
-#   sans fichiers .sig / latest.json : la mise à jour automatique ne trouve rien à proposer.
+# - TAURI_SIGNING_PRIVATE_KEY — pour signer les artefacts de mise à jour (voir host/README.md, "Mises à
+#   jour signées"). Sans lui, l'app compile et tourne quand même, juste sans fichiers .sig / latest.json :
+#   la mise à jour automatique ne trouve rien à proposer.
+#   PAS de TAURI_SIGNING_PRIVATE_KEY_PASSWORD : la clé a été générée sans mot de passe, et GitHub ne peut pas
+#   stocker un secret vide — passer quand même la variable (vide) à tauri-action fait planter la signature
+#   NSIS/AppImage avec "incorrect updater private key password: Missing comment in secret key", alors que la
+#   même clé se signe sans erreur côté dmg (bug connu : tauri-apps/tauri-action#658 et consorts). Ne pas
+#   réintroduire cette variable tant que la clé n'a pas un vrai mot de passe.
 on:
   push:
     tags:
@@ -63,7 +68,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: host
           tagName: ${{ github.ref_name }}

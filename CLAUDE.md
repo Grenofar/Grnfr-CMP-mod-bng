@@ -215,17 +215,25 @@ which design is actually in place.
   The private signing key lives at `.tauri-keys/grnfr-host.key` at the repo root, **gitignored, never
   commit it** (losing it means you can never publish an update your existing users' apps will accept again —
   keep a backup somewhere safe outside the repo). The public key is embedded in
-  `host/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`). CI needs `TAURI_SIGNING_PRIVATE_KEY` /
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` as GitHub repo secrets (Settings → Secrets and variables → Actions) —
-  without them the build still succeeds but produces no `.sig` files / `latest.json`, so the updater has
-  nothing to check against. `tauri-apps/tauri-action` auto-generates and uploads `latest.json` to the
-  GitHub Release when signing is configured; the updater's configured endpoint is
-  `https://github.com/Grenofar/Grnfr-CMP-mod-bng/releases/latest/download/latest.json`.
+  `host/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`). CI needs `TAURI_SIGNING_PRIVATE_KEY` as a
+  GitHub repo secret (Settings → Secrets and variables → Actions) — without it the build still succeeds but
+  produces no `.sig` files / `latest.json`, so the updater has nothing to check against. `tauri-apps/tauri-action`
+  auto-generates and uploads `latest.json` to the GitHub Release when signing is configured; the updater's
+  configured endpoint is `https://github.com/Grenofar/Grnfr-CMP-mod-bng/releases/latest/download/latest.json`.
+  **Deliberately no `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`**: the key was generated without a password, and
+  GitHub secrets can't store an empty value — passing the variable anyway (resolving to `""`) made
+  `host-v0.5.0`'s CI fail on `ubuntu-22.04` and `windows-latest` with `incorrect updater private key
+  password: Missing comment in secret key`, while macOS (dmg) signed fine with the exact same key (known
+  upstream bug class, e.g. tauri-apps/tauri-action#658 — NSIS/AppImage's updater-artifact signing path
+  mishandles an empty password differently from dmg's inline one). Fixed by removing the env line from
+  `host-release.yml` entirely rather than setting it empty. Only re-add it if the key is ever regenerated
+  *with* a real password.
 - **CI**: `.github/workflows/host-release.yml`, triggered by `host-v*` tags, uses `tauri-apps/tauri-action`
   (not a hand-rolled build+upload — far simpler and handles per-OS bundle formats automatically: NSIS `.exe`
   on Windows, `.dmg` on macOS, `.AppImage` on Linux). Required repo secrets: `SUPABASE_URL`,
-  `SUPABASE_ANON_KEY` (compile-time, for talking to the DB), `TAURI_SIGNING_PRIVATE_KEY`,
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (for signed updates). Asset filenames embed the version
+  `SUPABASE_ANON_KEY` (compile-time, for talking to the DB), `TAURI_SIGNING_PRIVATE_KEY` (for signed
+  updates — see the gotcha above on why `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is intentionally absent).
+  Asset filenames embed the version
   (e.g. `GRNFR Host CMP_0.4.0_x64-setup.exe`) so both `public/index.html`'s download section and any
   in-app version-matching logic key off the file **extension**, not the exact name.
 - **Never been run in real conditions** — only CI compilation (Rust) and a local `npm run build` + browser
