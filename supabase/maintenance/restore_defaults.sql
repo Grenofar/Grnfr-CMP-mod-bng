@@ -109,3 +109,69 @@ select * from (values
   ('citybus',   'rambus',                         'Wentward DT40L (bus) — rambus',                  835000)
 ) as v(model_key, config_key, name, price)
 where not exists (select 1 from public.dealership_catalog c where c.model_key = v.model_key and c.config_key = v.config_key);
+
+-- ------------------------------------------------------------------ classes perf/confort (0023) : toujours
+-- réappliquées (pas de "on conflict"/"where not exists" ici), pour que les colonnes gardent leurs vraies valeurs
+-- même sur un catalogue déjà peuplé — sans ça, les lignes insérées ci-dessus garderaient le défaut 3/3.
+with classes (model_key, config_key, perf, comfort) as (
+  values
+    ('barstow',   'i6a',                              2, 3),
+    ('barstow',   null,                                3, 3),
+    ('barstow',   '423a',                              4, 3),
+    ('barstow',   'drag',                              5, 1),
+    ('bastion',   null,                                3, 4),
+    ('bastion',   'base_v6_awd_A',                     4, 4),
+    ('bastion',   'police_v8_awd_A',                   4, 3),
+    ('bastion',   'drag',                              5, 1),
+    ('bolide',    null,                                5, 2),
+    ('bolide',    'polizia',                           5, 2),
+    ('bolide',    '320gtt_us',                         5, 1),
+    ('bolide',    'race',                              5, 1),
+    ('citybus',   'base',                               1, 4),
+    ('citybus',   null,                                1, 4),
+    ('citybus',   'highway',                           1, 5),
+    ('citybus',   'rambus',                            2, 2),
+    ('covet',     'covet_tutorial',                    1, 2),
+    ('covet',     null,                                2, 3),
+    ('covet',     '15zxi_M',                           3, 3),
+    ('covet',     'turbo_rally',                       5, 1),
+    ('etk800',    '844_150_M',                         2, 4),
+    ('etk800',    null,                                3, 4),
+    ('etk800',    '856xc_300_A',                       4, 5),
+    ('etk800',    '846_ttSport_custom_DCT',            5, 3),
+    ('fullsize',  'fleet',                             2, 3),
+    ('fullsize',  null,                                2, 4),
+    ('fullsize',  'drift',                             4, 2),
+    ('fullsize',  'track',                             5, 1),
+    ('miramar',   null,                                2, 3),
+    ('miramar',   'base_facelift_M',                   2, 3),
+    ('miramar',   'luxe_coupe_export_early_A',         3, 4),
+    ('miramar',   'miramighty',                        3, 1),
+    ('moonhawk',  'i6m',                               2, 3),
+    ('moonhawk',  null,                                4, 3),
+    ('moonhawk',  'detective',                         3, 3),
+    ('moonhawk',  'drag',                              5, 1),
+    ('pessima',   'DX_A',                              2, 4),
+    ('pessima',   null,                                2, 4),
+    ('pessima',   'GTz',                               4, 3),
+    ('pessima',   'hillclimb',                         5, 1),
+    ('pickup',    'd15_fleet_M_facelift',              1, 2),
+    ('pickup',    null,                                2, 3),
+    ('pickup',    'd25_ext_longbed_4wd_A_facelift',    2, 3),
+    ('pickup',    'deserttruck_prerunner_A',           5, 1),
+    ('scintilla', 'gt',                                5, 2),
+    ('scintilla', null,                                5, 2),
+    ('scintilla', 'custom',                            5, 1),
+    ('scintilla', 'race',                              5, 1),
+    ('sunburst2', 'base_EU_M',                         2, 3),
+    ('sunburst2', 'sport_S_wagon_DCT',                 3, 3),
+    ('sunburst2', null,                                3, 4),
+    ('sunburst2', 'track_attack',                      5, 1),
+    ('vivace',    'vivace_110_M',                      1, 3),
+    ('vivace',    'vivace_S_270_DCT',                  4, 2),
+    ('vivace',    null,                                2, 4),
+    ('vivace',    'ardente_rally',                     5, 1)
+)
+update public.dealership_catalog c set perf_class = classes.perf, comfort_class = classes.comfort
+from classes
+where c.model_key = classes.model_key and coalesce(c.config_key, '') = coalesce(classes.config_key, '');
