@@ -2,6 +2,7 @@ public/config.js
 public/downloads/
 node_modules/
 .env
+release.local.bat
 .vercel
 
 # GRNFR Host CMP (host/) : artefacts de build (Tauri) et fichiers locaux créés à l'exécution
