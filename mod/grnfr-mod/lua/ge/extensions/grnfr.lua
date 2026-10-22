@@ -4,7 +4,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile' }
 
-local VERSION = '2.1.9'
+local VERSION = '2.1.10'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false

@@ -1,7 +1,7 @@
 // GRNFR Online : client Supabase (HTTP) + pont vers le Lua du jeu.
-// La logique (session, jetons, erreurs) vit ici ; l'envoi HTTPS passe par le moteur (grnfr/http.lua), car
-// l'interface de BeamNG 0.40 n'a pas le droit de contacter un hôte extérieur (voir http() plus bas).
-//   Lua --GRNFRNetReq--> ici --grnfr_http/GRNFRHttp--> Supabase --> ici --engineLua(onNetResult)--> Lua
+// La logique (session, jetons, erreurs) vit ici ; l'envoi HTTPS passe par un relais (public/bridge.html en cadre
+// invisible), car l'interface de BeamNG 0.40 n'a pas le droit de contacter un hôte extérieur (voir http() plus bas).
+//   Lua --GRNFRNetReq--> ici --postMessage--> bridge.html --> Supabase --> ici --engineLua(onNetResult)--> Lua
 //   Lua --GRNFRSelf (ma position)--> ici --server_sync--> ici --engineLua(onSync)--> Lua (fantômes + pseudos)
 // Sans effet de bord au chargement : tout démarre dans initNet().
 import { reactive } from "vue"
@@ -47,27 +47,75 @@ class NetError extends Error { constructor(code, status, detail) { super(code); 
 
 // Depuis BeamNG 0.40, l'interface (CEF) refuse toute connexion vers un hôte extérieur (Content-Security-Policy
 // "connect-src 'self' localhost 127.0.0.1") : fetch() vers Supabase échoue en jeu avec "Failed to fetch", pour
-// tous les joueurs. En jeu, la requête part donc par le client HTTP du moteur (lua/ge/extensions/grnfr/http.lua),
-// qui renvoie la réponse par l'événement GRNFRHttp. fetch() ne sert plus qu'hors du jeu.
-// Le moteur ne permet qu'un seul en-tête (Authorization) : la clé anon passe en paramètre d'URL (?apikey=).
+// tous les joueurs. Et le Lua du jeu n'a pas de HTTPS (LuaSocket oui, LuaSec non). En jeu, les requêtes passent
+// donc par un relais : la page public/bridge.html du site, chargée dans un cadre invisible, fait l'appel à
+// Supabase hors des règles du jeu et renvoie la réponse par postMessage. Si le relais ne se charge pas (cadres
+// bloqués par une future version du jeu ?), repli sur grnfr/http.lua (Lua, ne marche que si le jeu fournit
+// LuaSec). fetch() direct ne sert plus qu'hors du jeu.
+const BRIDGE_URL = "https://careermp.vercel.app/bridge.html"
+const BRIDGE_LOAD_MS = 10000
 let gameHttp = false, httpSeq = 0
+let bridgeState = "off", bridgeWin = null, bridgeErr = ""  // off | loading | ready | failed
+const bridgeWaiters = []
 const httpWait = new Map()
 const HTTP_TIMEOUT = 20000
 
-function onHttp(d) {
-  const r = unwrapObj(d)
+function settle(r) {
   const w = r && httpWait.get(Number(r.id))
   if (!w) return
   httpWait.delete(Number(r.id)); clearTimeout(w.timer); w.resolve(r)
 }
+function onHttp(d) { settle(unwrapObj(d)) }
 
-function sendViaGame(method, url, body, authorization) {
+function bridgeDone(state, err) {
+  if (bridgeState !== "loading") return
+  bridgeState = state; bridgeErr = err || ""
+  bridgeWaiters.splice(0).forEach(f => f())
+}
+function onBridgeMessage(ev) {
+  const m = ev && ev.data
+  if (!m || m.grnfr !== "bridge" || ev.source !== bridgeWin) return
+  if (m.ready) bridgeDone(m.configured ? "ready" : "failed", m.configured ? "" : "relais sans configuration Supabase")
+  else settle(m)
+}
+function bridgeReady() {
+  if (bridgeState === "off") {
+    bridgeState = "loading"
+    try {
+      window.addEventListener("message", onBridgeMessage)
+      const f = document.createElement("iframe")
+      f.style.display = "none"
+      f.setAttribute("aria-hidden", "true")
+      f.src = BRIDGE_URL
+      document.body.appendChild(f)
+      bridgeWin = f.contentWindow
+      setTimeout(() => bridgeDone("failed", "relais " + new URL(BRIDGE_URL).host + " non chargé en " + BRIDGE_LOAD_MS / 1000 + " s (cadre bloqué par le jeu ?)"), BRIDGE_LOAD_MS)
+    } catch (e) { bridgeDone("failed", "relais impossible à créer : " + ((e && e.message) || e)) }
+  }
+  return bridgeState === "loading" ? new Promise(r => bridgeWaiters.push(r)) : Promise.resolve()
+}
+
+function waitReply(send) {
   return new Promise(resolve => {
     const id = ++httpSeq
-    const timer = setTimeout(() => { httpWait.delete(id); resolve({ status: 0, error: "pas de réponse du jeu en " + HTTP_TIMEOUT / 1000 + " s" }) }, HTTP_TIMEOUT)
+    const timer = setTimeout(() => { httpWait.delete(id); resolve({ status: 0, error: "pas de réponse en " + HTTP_TIMEOUT / 1000 + " s" }) }, HTTP_TIMEOUT)
     httpWait.set(id, { resolve, timer })
-    engineLua("extensions.grnfr_http.request(" + id + "," + luaStr(method) + "," + luaStr(url) + "," + luaStr(body) + "," + luaStr(authorization) + ")")
+    send(id)
   })
+}
+
+const sendViaBridge = (method, path, body, authorization) =>
+  waitReply(id => bridgeWin.postMessage({ grnfr: "req", id, method, path, body, authorization }, "*"))
+
+const sendViaGame = (method, url, body, authorization) =>
+  waitReply(id => engineLua("extensions.grnfr_http.request(" + id + "," + luaStr(method) + "," + luaStr(url) + "," + luaStr(body) + "," + luaStr(authorization) + ")"))
+
+async function sendInGame(method, path, body, authorization) {
+  await bridgeReady()
+  if (bridgeState === "ready") return sendViaBridge(method, path, body, authorization)
+  const r = await sendViaGame(method, cfg.url + path + (path.includes("?") ? "&" : "?") + "apikey=" + encodeURIComponent(cfg.anonKey), body, authorization)
+  if (!r.status) r.error = bridgeErr + " ; Lua : " + (r.error || "aucune réponse")
+  return r
 }
 
 async function sendViaFetch(method, url, body, authorization) {
@@ -82,9 +130,7 @@ async function http(path, body, token, method = "POST") {
   const authorization = "Bearer " + (token || cfg.anonKey)
   const payload = body === undefined ? "" : JSON.stringify(body)
   const m = method.toLowerCase()
-  const r = gameHttp
-    ? await sendViaGame(m, cfg.url + path + (path.includes("?") ? "&" : "?") + "apikey=" + encodeURIComponent(cfg.anonKey), payload, authorization)
-    : await sendViaFetch(m, cfg.url + path, payload, authorization)
+  const r = gameHttp ? await sendInGame(m, path, payload, authorization) : await sendViaFetch(m, cfg.url + path, payload, authorization)
   if (!r.status) {
     net.lastNetworkDetail = r.error || "aucune réponse"
     throw new NetError("network", 0, net.lastNetworkDetail)
