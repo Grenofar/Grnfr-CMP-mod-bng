@@ -1,7 +1,7 @@
 // GRNFR Online : client Supabase (HTTP) + pont vers le Lua du jeu.
-// La logique (session, jetons, erreurs) vit ici ; l'envoi HTTPS passe par un relais (public/bridge.html en cadre
-// invisible), car l'interface de BeamNG 0.40 n'a pas le droit de contacter un hôte extérieur (voir http() plus bas).
-//   Lua --GRNFRNetReq--> ici --postMessage--> bridge.html --> Supabase --> ici --engineLua(onNetResult)--> Lua
+// La logique (session, jetons, erreurs) vit ici ; en jeu, les requêtes passent par GRNFR CMP Launcher sur
+// localhost, car BeamNG 0.40 interdit à un mod tout HTTPS vers l'extérieur (voir http() plus bas).
+//   Lua --GRNFRNetReq--> ici --http://127.0.0.1:30815--> GRNFR CMP Launcher --HTTPS--> Supabase --> ici --engineLua(onNetResult)--> Lua
 //   Lua --GRNFRSelf (ma position)--> ici --server_sync--> ici --engineLua(onSync)--> Lua (fantômes + pseudos)
 // Sans effet de bord au chargement : tout démarre dans initNet().
 import { reactive } from "vue"
@@ -45,80 +45,16 @@ function loadAuth() { try { const a = JSON.parse(localStorage.getItem(KEY) || "n
 // ------------------------------------------------------------------ HTTP
 class NetError extends Error { constructor(code, status, detail) { super(code); this.code = code; this.status = status; this.detail = detail } }
 
-// Depuis BeamNG 0.40, l'interface (CEF) refuse toute connexion vers un hôte extérieur (Content-Security-Policy
-// "connect-src 'self' localhost 127.0.0.1") : fetch() vers Supabase échoue en jeu avec "Failed to fetch", pour
-// tous les joueurs. Et le Lua du jeu n'a pas de HTTPS (LuaSocket oui, LuaSec non). En jeu, les requêtes passent
-// donc par un relais : la page public/bridge.html du site, chargée dans un cadre invisible, fait l'appel à
-// Supabase hors des règles du jeu et renvoie la réponse par postMessage. Si le relais ne se charge pas (cadres
-// bloqués par une future version du jeu ?), repli sur grnfr/http.lua (Lua, ne marche que si le jeu fournit
-// LuaSec). fetch() direct ne sert plus qu'hors du jeu.
-const BRIDGE_URL = "https://careermp.vercel.app/bridge.html"
-const BRIDGE_LOAD_MS = 10000
-let gameHttp = false, httpSeq = 0
-let bridgeState = "off", bridgeWin = null, bridgeErr = ""  // off | loading | ready | failed
-const bridgeWaiters = []
-const httpWait = new Map()
-const HTTP_TIMEOUT = 20000
+// Depuis BeamNG 0.40, un mod ne peut plus joindre un serveur extérieur en HTTPS : l'interface (CEF) n'a le droit
+// de contacter que localhost (Content-Security-Policy connect-src), elle ne peut pas ouvrir de page extérieure
+// (même en cadre invisible : OnBeforeNavigation DENIED), et le Lua du jeu n'a pas de TLS (pas de LuaSec). Tout
+// a été vérifié dans BeamNG.log (v2.1.5 à 2.1.10, voir CLAUDE.md). En jeu, les requêtes passent donc par
+// GRNFR CMP Launcher (dossier launcher/ du dépôt), un programme qui tourne à côté du jeu, écoute sur
+// http://127.0.0.1:30815 et relaie vers Supabase en HTTPS. Hors du jeu (tests), fetch() direct vers Supabase.
+const LAUNCHER_URL = "http://127.0.0.1:30815"
+let inGame = false
 
-function settle(r) {
-  const w = r && httpWait.get(Number(r.id))
-  if (!w) return
-  httpWait.delete(Number(r.id)); clearTimeout(w.timer); w.resolve(r)
-}
-function onHttp(d) { settle(unwrapObj(d)) }
-
-function bridgeDone(state, err) {
-  if (bridgeState !== "loading") return
-  bridgeState = state; bridgeErr = err || ""
-  bridgeWaiters.splice(0).forEach(f => f())
-}
-function onBridgeMessage(ev) {
-  const m = ev && ev.data
-  if (!m || m.grnfr !== "bridge" || ev.source !== bridgeWin) return
-  if (m.ready) bridgeDone(m.configured ? "ready" : "failed", m.configured ? "" : "relais sans configuration Supabase")
-  else settle(m)
-}
-function bridgeReady() {
-  if (bridgeState === "off") {
-    bridgeState = "loading"
-    try {
-      window.addEventListener("message", onBridgeMessage)
-      const f = document.createElement("iframe")
-      f.style.display = "none"
-      f.setAttribute("aria-hidden", "true")
-      f.src = BRIDGE_URL
-      document.body.appendChild(f)
-      bridgeWin = f.contentWindow
-      setTimeout(() => bridgeDone("failed", "relais " + new URL(BRIDGE_URL).host + " non chargé en " + BRIDGE_LOAD_MS / 1000 + " s (cadre bloqué par le jeu ?)"), BRIDGE_LOAD_MS)
-    } catch (e) { bridgeDone("failed", "relais impossible à créer : " + ((e && e.message) || e)) }
-  }
-  return bridgeState === "loading" ? new Promise(r => bridgeWaiters.push(r)) : Promise.resolve()
-}
-
-function waitReply(send) {
-  return new Promise(resolve => {
-    const id = ++httpSeq
-    const timer = setTimeout(() => { httpWait.delete(id); resolve({ status: 0, error: "pas de réponse en " + HTTP_TIMEOUT / 1000 + " s" }) }, HTTP_TIMEOUT)
-    httpWait.set(id, { resolve, timer })
-    send(id)
-  })
-}
-
-const sendViaBridge = (method, path, body, authorization) =>
-  waitReply(id => bridgeWin.postMessage({ grnfr: "req", id, method, path, body, authorization }, "*"))
-
-const sendViaGame = (method, url, body, authorization) =>
-  waitReply(id => engineLua("extensions.grnfr_http.request(" + id + "," + luaStr(method) + "," + luaStr(url) + "," + luaStr(body) + "," + luaStr(authorization) + ")"))
-
-async function sendInGame(method, path, body, authorization) {
-  await bridgeReady()
-  if (bridgeState === "ready") return sendViaBridge(method, path, body, authorization)
-  const r = await sendViaGame(method, cfg.url + path + (path.includes("?") ? "&" : "?") + "apikey=" + encodeURIComponent(cfg.anonKey), body, authorization)
-  if (!r.status) r.error = bridgeErr + " ; Lua : " + (r.error || "aucune réponse")
-  return r
-}
-
-async function sendViaFetch(method, url, body, authorization) {
+async function send(url, method, body, authorization) {
   try {
     const res = await fetch(url, { method: method.toUpperCase(), headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: authorization }, body: body || undefined })
     return { status: res.status, body: await res.text() }
@@ -129,9 +65,12 @@ async function http(path, body, token, method = "POST") {
   if (!net.configured) throw new NetError("not_configured", 0)
   const authorization = "Bearer " + (token || cfg.anonKey)
   const payload = body === undefined ? "" : JSON.stringify(body)
-  const m = method.toLowerCase()
-  const r = gameHttp ? await sendInGame(m, path, payload, authorization) : await sendViaFetch(m, cfg.url + path, payload, authorization)
+  const r = await send((inGame ? LAUNCHER_URL : cfg.url) + path, method, payload, authorization)
   if (!r.status) {
+    if (inGame) { // rien n'écoute sur 127.0.0.1:30815 : le launcher n'est pas ouvert
+      net.lastNetworkDetail = errText({ code: "launcher_missing" })
+      throw new NetError("launcher_missing", 0, r.error)
+    }
     net.lastNetworkDetail = r.error || "aucune réponse"
     throw new NetError("network", 0, net.lastNetworkDetail)
   }
@@ -139,7 +78,8 @@ async function http(path, body, token, method = "POST") {
   try { data = r.body ? JSON.parse(r.body) : null } catch (e) { /* corps vide ou non JSON */ }
   if (r.status >= 400) {
     const code = (data && (data.message || data.msg || data.error_description || data.error)) || ("http_" + r.status)
-    throw new NetError(String(code), r.status)
+    if (code === "launcher_upstream") net.lastNetworkDetail = errText({ code })
+    throw new NetError(String(code), r.status, data && data.detail)
   }
   return data
 }
@@ -193,7 +133,9 @@ export const ui = (name, args) => callLua("ui", name, JSON.stringify(args || {})
 // ------------------------------------------------------------------ messages d'erreur lisibles
 const ERR = {
   fr: {
-    network: "Impossible de joindre le serveur (réseau).", not_configured: "Ce mod n'est pas relié à un serveur (voir le site).",
+    network: "Impossible de joindre le serveur (réseau).",
+    launcher_missing: "GRNFR CMP Launcher n'est pas ouvert : téléchargez-le sur careermp.vercel.app, lancez-le, puis réessayez.",
+    launcher_upstream: "GRNFR CMP Launcher n'arrive pas à joindre le serveur (connexion internet ?).", not_configured: "Ce mod n'est pas relié à un serveur (voir le site).",
     username_taken: "Ce pseudo est déjà pris.", username_invalid: "Pseudo invalide : 3 à 20 lettres, chiffres ou _.",
     username_required: "Choisissez un pseudo avant de rejoindre un serveur.", username_already_set: "Pseudo déjà choisi.",
     server_full: "Ce serveur est complet (4 joueurs).", server_not_found: "Serveur introuvable.", not_in_server: "Vous n'êtes plus dans le serveur.",
@@ -208,7 +150,9 @@ const ERR = {
     username_change_cooldown: "Vous avez déjà changé de pseudo récemment : réessayez plus tard.",
   },
   en: {
-    network: "Cannot reach the server (network).", not_configured: "This mod is not linked to a server (see the website).",
+    network: "Cannot reach the server (network).",
+    launcher_missing: "GRNFR CMP Launcher is not running: download it from careermp.vercel.app, start it, then try again.",
+    launcher_upstream: "GRNFR CMP Launcher cannot reach the server (internet connection?).", not_configured: "This mod is not linked to a server (see the website).",
     username_taken: "This username is already taken.", username_invalid: "Invalid username: 3 to 20 letters, digits or _.",
     username_required: "Pick a username before joining a server.", username_already_set: "Username already chosen.",
     server_full: "This server is full (4 players).", server_not_found: "Server not found.", not_in_server: "You are no longer in the server.",
@@ -422,8 +366,7 @@ export async function initNet() {
   started = true
   let b; try { b = useBridge() } catch (e) { started = false; return }
   const on = (name, fn) => { b.events.on(name, fn); offs.push(() => b.events.off(name, fn)) }
-  on("GRNFRHttp", onHttp)
-  gameHttp = true
+  inGame = true
   on("GRNFRNetReq", onNetReq)
   on("GRNFRSelf", onSelf)
   on("GRNFRConvoySelf", onConvoySelf)
@@ -456,5 +399,5 @@ export async function initNet() {
 
 export function stopNet() {
   offs.forEach(f => { try { f() } catch (e) { /* ignoré */ } })
-  offs = []; started = false; gameHttp = false
+  offs = []; started = false; inGame = false
 }

@@ -1,0 +1,24 @@
+[package]
+name = "grnfr-launcher"
+version = "0.1.0"
+edition = "2021"
+description = "GRNFR CMP Launcher : app native (Tauri — Rust + React/TypeScript) qui relaie le mod GRNFR CMP vers son serveur (BeamNG 0.40 bloque le HTTPS des mods), installe le mod et lance BeamNG (Steam, direct ou BeamMP)."
+
+[lib]
+name = "grnfr_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+grnfr-launcher-core = { path = "../core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2
