@@ -35,9 +35,10 @@
             <button type="button" class="btn" style="margin-top: 10px" @click="go('dealer')">{{ L('Aller à la concession', 'Go to the dealership') }}</button>
           </div>
           <div class="grid">
-            <div v-for="v in vehicles" :key="v.id" class="tile">
-              <div class="tname">{{ v.nickname || v.model_key }}</div>
-              <div class="mut">{{ v.model_key }}<template v-if="v.config_key"> · {{ v.config_key }}</template></div>
+            <div v-for="v in vehicles" :key="v.id" class="tile veh">
+              <VehImg :info="vi(v.model_key, v.config_key)" />
+              <div class="tname">{{ v.nickname || fullName(vi(v.model_key, v.config_key), v.model_key) }}</div>
+              <div class="mut">{{ specLine(vi(v.model_key, v.config_key)) || v.model_key }}</div>
               <div class="price">{{ money(v.value) }}</div>
               <div class="tags">
                 <span class="tag" :class="'ins-' + (v.insurance || 'none')">{{ planName(v.insurance) }}</span>
@@ -140,9 +141,10 @@
         <!-- CONCESSION : choisir un véhicule, négocier avec le vendeur (bot côté serveur), choisir l'assurance -->
         <main v-else-if="app === 'dealer' && !buy.c">
           <div class="grid">
-            <div v-for="c in d.catalog" :key="c.id" class="tile click" @click="openBuy(c)">
+            <div v-for="c in d.catalog" :key="c.id" class="tile click veh" @click="openBuy(c)">
+              <VehImg :info="vi(c.model_key, c.config_key)" />
               <div class="tname">{{ c.name }}</div>
-              <div class="mut">{{ c.model_key }}</div>
+              <div class="mut">{{ specLine(vi(c.model_key, c.config_key)) }}</div>
               <div class="price">{{ money(c.price) }}</div>
             </div>
           </div>
@@ -150,8 +152,17 @@
         <main v-else-if="app === 'dealer'" class="buy">
           <section class="nego">
             <button type="button" class="back" @click="buy.c = null">‹ {{ L('Catalogue', 'Catalogue') }}</button>
-            <h3>{{ buy.c.name }}</h3>
-            <div class="mut">{{ L('Prix affiché', 'List price') }} : <b>{{ money(buy.c.price) }}</b></div>
+            <div class="vhead">
+              <VehImg :info="vi(buy.c.model_key, buy.c.config_key)" big />
+              <div class="vtxt">
+                <h3>{{ buy.c.name }}</h3>
+                <div class="mut">{{ L('Prix affiché', 'List price') }} : <b>{{ money(buy.c.price) }}</b></div>
+                <div class="specs">
+                  <div v-for="sp in specs(vi(buy.c.model_key, buy.c.config_key))" :key="sp[0]"><span>{{ sp[0] }}</span><b>{{ sp[1] }}</b></div>
+                </div>
+              </div>
+            </div>
+            <p v-if="vi(buy.c.model_key, buy.c.config_key).description" class="desc">{{ vi(buy.c.model_key, buy.c.config_key).description }}</p>
             <div class="chat">
               <div v-for="(m, i) in buy.log" :key="i" class="bubble" :class="m.who">{{ m.text }}</div>
             </div>
@@ -234,6 +245,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
 import { net, ui, rpc, errText, refreshMe } from "./net.js"
+import VehImg from "./VehImg.vue"
 
 const L = (fr, en) => (net.lang === "en" ? en : fr)
 const money = n => (Number(n) < 0 ? "-$" : "$") + Math.abs(Number(n || 0)).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
@@ -261,6 +273,33 @@ const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
 const out = v => !!(net.game.spawned && net.game.spawned[v.id])
 const locked = v => !!(net.game.spawned && net.game.spawned[v.id] && net.game.spawned[v.id].locked)
+
+// ------------------------------------------------------------------ fiches véhicules (lues dans le jeu, vehinfo.lua)
+const askedInfo = new Set()
+function needInfo(list) {
+  const want = list.filter(x => x.model && !askedInfo.has(x.model + "|" + (x.config || "")))
+  want.forEach(x => askedInfo.add(x.model + "|" + (x.config || "")))
+  if (want.length) ui("veh.info", { list: want })
+}
+const vi = (model, config) => net.vehInfo[model + "|" + (config || "")] || {}
+const fullName = (i, fallback) => [i.brand, i.name].filter(Boolean).join(" ") || fallback
+const kmh = ms => Math.round(ms * 3.6)
+// Puissance : les fiches du jeu la donnent en kW (supposé, non vérifié) ; affichée aussi en ch.
+const power = p => `${Math.round(p)} kW · ${Math.round(p * 1.341)} ch`
+function specLine(i) {
+  return [i.configName, i.type, i.weight ? Math.round(i.weight) + " kg" : null, i.power ? Math.round(i.power * 1.341) + " ch" : null].filter(Boolean).join(" · ")
+}
+function specs(i) {
+  return [
+    [L("Marque", "Brand"), i.brand], [L("Modèle", "Model"), i.name], [L("Version", "Trim"), i.configName], [L("Type", "Type"), i.type || i.body],
+    [L("Années", "Years"), i.years], [L("Pays", "Country"), i.country], [L("Poids", "Weight"), i.weight && Math.round(i.weight) + " kg"],
+    [L("Puissance", "Power"), i.power && power(i.power)], [L("Couple", "Torque"), i.torque && Math.round(i.torque) + " N·m"],
+    [L("Transmission", "Drivetrain"), [i.drivetrain, i.transmission].filter(Boolean).join(" · ")], [L("Carburant", "Fuel"), i.fuel],
+    [L("Vitesse max", "Top speed"), i.topSpeed && kmh(i.topSpeed) + " km/h"], ["0–100 km/h", i.accel && i.accel.toFixed(1) + " s"],
+  ].filter(x => x[1])
+}
+watch(() => d.catalog, list => needInfo(list.map(c => ({ model: c.model_key, config: c.config_key }))))
+watch(vehicles, list => needInfo(list.map(v => ({ model: v.model_key, config: v.config_key }))), { immediate: true })
 
 // ------------------------------------------------------------------ assurances (mêmes valeurs que private.insurance_plan, 0014)
 const plans = ref([
@@ -380,6 +419,11 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
   &.wide { margin-bottom: 12px; } .tname { font: 700 16px "Overpass", sans-serif; } .price { font: 800 20px "Overpass", sans-serif; color: var(--ac); }
   .tags { display: flex; gap: 6px; min-height: 4px; } .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } .inline { display: flex; gap: 6px; width: 100%; input { flex: 1; min-width: 0; } .btn { white-space: nowrap; flex: none; } } }
 .tag { padding: 1px 8px; font-size: 11px; border-radius: 10px; background: rgba(255, 102, 0, 0.2); color: var(--ac); &.on { background: rgba(74, 222, 128, 0.2); color: #4ade80; } }
+.tile.veh { padding-top: 0; overflow: hidden; :deep(.vimg) { margin: 0 -14px 6px; } }
+.vhead { display: flex; gap: 16px; align-items: flex-start; .vtxt { flex: 1; min-width: 0; } }
+.specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 14px; margin-top: 8px; font-size: 12px;
+  div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding: 2px 0; } span { color: rgba(255, 255, 255, 0.55); } b { text-align: right; } }
+.desc { margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.75); line-height: 1.45; }
 .tile.click { cursor: pointer; transition: border-color 0.15s, transform 0.15s; &:hover { border-color: var(--ac); transform: translateY(-2px); } }
 .tag.lock { background: rgba(239, 68, 68, 0.2); color: #f87171; } .tag.ins-none { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); }
 .tag.ins-basic { background: rgba(59, 130, 246, 0.2); color: #93c5fd; } .tag.ins-comfort { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; } .tag.ins-premium { background: rgba(234, 179, 8, 0.2); color: #fde047; }
