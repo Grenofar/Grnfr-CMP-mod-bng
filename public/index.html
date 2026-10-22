@@ -20,9 +20,6 @@
     <li>Cliquez sur <b>Lancer BeamNG</b> : le mod est installé ou mis à jour avant le démarrage du jeu. <b>Laissez le launcher ouvert</b> pendant que vous jouez.</li>
     <li>En jeu, lancez une carte en jeu libre, appuyez sur <b>O</b> : choisissez <b>un pseudo unique</b>, puis l'onglet <b>Serveurs</b> pour rejoindre un serveur (4 joueurs maximum).</li>
   </ol>
-  <p class="mut small">Installation manuelle du mod (sans le launcher, le mod ne pourra pas se connecter) :</p>
-  <p id="dl"><a class="btn dim" href="/downloads/grnfr-online.zip" download>Télécharger le mod seul (.zip)</a></p>
-  <p id="dl-notes" class="mut"></p>
   <p class="mut">Les données envoyées au serveur : pseudo, argent, véhicules du garage, carte et position pendant que vous êtes connecté. Rien d'autre.</p>
 
   <h2>Héberger votre propre serveur (GRNFR Host CMP)</h2>
@@ -46,19 +43,16 @@
   } catch (e) { t.innerHTML = "<tr><td class='err'>" + GRNFR.esc(GRNFR.msg(e)) + "</td></tr>" }
 })()
 
-// Bouton de téléchargement : pointe vers la dernière release publiée sur Supabase Storage (npm run release).
-// Repli propre sur le zip statique (celui construit par scripts/build.mjs à chaque déploiement) si aucune
-// release n'a encore été publiée, ou si le serveur ne répond pas.
+// Version du mod (dernière release publiée par npm run release) et historique. Pas de téléchargement du mod seul :
+// sans GRNFR CMP Launcher il ne peut pas se connecter, et le launcher l'installe / le met à jour lui-même.
 ;(async () => {
-  const dl = document.getElementById("dl"), notes = document.getElementById("dl-notes"), hist = document.getElementById("releases"), verMod = document.getElementById("ver-mod")
+  const hist = document.getElementById("releases"), verMod = document.getElementById("ver-mod")
   try {
     const latest = await GRNFR.rpcPublic("get_latest_release", {})
     if (latest) {
-      dl.innerHTML = `<a class="btn dim" href="${GRNFR.esc(GRNFR.releaseUrl(latest.file_path))}" download>Télécharger le mod seul v${GRNFR.esc(latest.version)} (.zip)</a>`
-      if (latest.notes) notes.textContent = latest.notes
       if (verMod) verMod.textContent = "v" + latest.version
     }
-  } catch (e) { if (verMod) verMod.textContent = "?" /* repli sur le lien statique déjà présent dans la page */ }
+  } catch (e) { if (verMod) verMod.textContent = "?" }
   try {
     const rows = await GRNFR.rpcPublic("get_releases", { p_limit: 20 })
     hist.innerHTML = "<tr><th>Version</th><th>Date</th><th>Notes</th></tr>" +
