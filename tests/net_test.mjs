@@ -73,7 +73,7 @@ async function fakeServer(url, opt) {
   const me = sess.username
   if (fn === "get_me") return ok({ profile: { username: me, balance: 25000 }, config: { sync_interval_ms: 300 }, vehicles: [] })
   if (fn === "join_server") { if (Object.keys(members).length >= MAX && !members[me]) return ok({ message: "server_full" }, 400); members[me] = {}; return ok({ id: "s1", name: "Serveur 1", max_players: MAX }) }
-  if (fn === "server_sync") { if (!members[me]) return ok({ message: "not_in_server" }, 400); members[me] = body; return ok({ players: Object.keys(members).filter(n => n !== me).map(n => ({ username: n, pos: members[n].p_pos, veh: members[n].p_veh })) }) }
+  if (fn === "server_sync") { if (!members[me]) return ok({ message: "not_in_server" }, 400); members[me] = body; return ok({ players: Object.keys(members).filter(n => n !== me).map(n => ({ username: n, level: members[n].p_level, pos: members[n].p_pos, veh: members[n].p_veh })) }) }
   if (fn === "leave_server") { delete members[me]; return ok(null, 200) }
   if (fn === "heartbeat") return ok(25000)
   return ok({ message: "unknown_fn" }, 404)
@@ -100,7 +100,11 @@ check(await net.signUpAnonymous("bob") === true && st.status === "in" && st.user
 check(lcalls.some(c => c[1] === "auth" && JSON.parse(c[2]).loggedIn && JSON.parse(c[2]).username === "bob"), "le Lua est prévenu de la connexion (pseudo bob)")
 
 // serveur de jeu
+members.zoe = { p_level: "italy", p_pos: { x: 10, y: 20, z: 30 }, p_veh: { model: "covet" } } // déjà là, sur Italy
 check(await net.joinServer("s1") === true && st.server.name === "Serveur 1", "serveur rejoint")
+const travel = lcalls.find(c => c[1] === "server.travel")
+check(travel && JSON.parse(travel[2]).level === "italy" && JSON.parse(travel[2]).pos.x === 10, "en rejoignant, le Lua reçoit la carte et la position du joueur déjà présent")
+delete members.zoe
 check(lcalls.some(c => c[1] === "server.state" && JSON.parse(c[2]).joined && JSON.parse(c[2]).intervalMs === 300), "le Lua reçoit l'état du serveur et la cadence (300 ms)")
 for (const n of ["carol", "dave", "erin"]) members[n] = { p_pos: { x: 1, y: 2, z: 3 }, p_veh: { model: "covet" } }
 await handlers.GRNFRSelf({ level: "west_coast_usa", pos: { x: 0, y: 0, z: 0 }, rot: [0, 0, 0, 1], vel: [0, 0, 0], veh: { model: "etk800" } })

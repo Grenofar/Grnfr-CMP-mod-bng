@@ -2,9 +2,9 @@
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
   'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
-  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile' }
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel' }
 
-local VERSION = '2.2.1'
+local VERSION = '2.3.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -211,8 +211,9 @@ local ROUTES = {
   ['server.state']    = function(a)
     grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs); grnfr_convoy.setServer(a.joined); grnfr_garage.setServer(a.joined)
     grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
-    if not a.joined then grnfr_track.clear() end
+    if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
   end,
+  ['server.travel']   = function(a) grnfr_travel.go(a.level, a.pos) end,
   ['typing']          = function(a) grnfr_online.setTyping(a.on) end,
   ['places.refresh']  = function() grnfr_online.requestPlaces() end,
   ['garage.spawn']    = function(a)
@@ -453,6 +454,7 @@ function M.tick(dtReal)
     grnfr_nav.update()
     grnfr_http.update(d0)
     grnfr_online.update(d0)
+    grnfr_travel.update(d0)
     if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_convoy.update(d0); grnfr_track.update() end
   end
   if wasSession then grnfr_sessionlog.update(tonumber(dtReal) or 0, (grnfr_perf.get() or {}).avg) end

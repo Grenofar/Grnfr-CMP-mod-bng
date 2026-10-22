@@ -343,8 +343,21 @@ export async function listServers() { return rpc("get_servers") }
 
 export async function joinServer(id) {
   net.error = ""
-  try { const srv = await rpc("join_server", { p_server: id }); setServerLocal(srv); return true }
+  try { const srv = await rpc("join_server", { p_server: id }); setServerLocal(srv); await travelToPlayers(); return true }
   catch (e) { net.error = errText(e); return e.code === "username_required" ? "pseudo" : false }
+}
+
+// Juste après être entré : où sont les joueurs déjà présents ? Le Lua charge leur carte (celle du plus ancien,
+// l'hôte) et place la voiture à côté de lui ; serveur vide = carte actuelle, ou carte par défaut depuis le menu.
+// server_sync sans position : ne fait que lire (et sert de battement de cœur).
+async function travelToPlayers() {
+  let players = []
+  try {
+    const r = await rpc("server_sync", { p_level: null, p_pos: null, p_rot: null, p_vel: null, p_veh: null, p_convoy: null, p_session: sessionToken })
+    players = (r && r.players) || []
+  } catch (e) { /* le déplacement est un confort : la synchro normale prendra le relais */ }
+  const host = players.find(p => p && typeof p.level === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(p.level) && p.level !== "unknown")
+  ui("server.travel", { level: host ? host.level : null, pos: host && host.pos ? host.pos : null })
 }
 
 export async function leaveServer() {

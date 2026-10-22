@@ -213,6 +213,13 @@ simulation. New gameplay RPCs that take a time or distance from the client shoul
 rather than trusting the client outright. The same "limited, not foolproof" philosophy applies to the host's
 `host_id`/`host_servers` design (see below): knowing the id is both the key and the secret, by design.
 
+**Joining a server travels to the other players** (mod 2.3.0+): right after `join_server`, `net.js`
+(`travelToPlayers`) does one read-only `server_sync` (all-null args), takes the oldest other member's `level`/`pos`
+and sends `server.travel` to Lua; `grnfr/travel.lua` loads that map in free roam (or, server empty, stays put —
+from the main menu loads `west_coast_usa`), then places the player's car a few metres from that player once the
+map and vehicle are ready. Load/teleport APIs (`freeroam_freeroam.startFreeroamByName`, `core_levels.startLevel`,
+`spawn.safeTeleport`) are unverified hypotheses under `pcall`.
+
 **Host election / handover needs no explicit state.** The shared-traffic "host" (`convoy.lua`,
 `0003_convoy.sql`) is just "the `server_members` row with the oldest `joined_at` still present" —
 recomputed on every `server_sync` call, so failover is automatic when the host leaves. Garage spots
