@@ -39,7 +39,6 @@ let sessionToken = null  // anti-partage : invalidé si une autre connexion a li
 let started = false
 let bridge = null
 let syncBusy = false, lastPos = null, lastHb = 0, rejoining = false
-let lastConvoy = null // dernière position des 2 voitures de trafic, envoyée par Lua si je suis l'hôte du serveur
 let offs = []
 
 // ------------------------------------------------------------------ stockage du jeton (jamais dans les logs)
@@ -320,7 +319,7 @@ function onProfileImport(d) {
 // ------------------------------------------------------------------ serveurs de jeu
 function setServerLocal(srv) {
   net.server = srv
-  if (!srv) { net.players = []; lastConvoy = null }
+  if (!srv) { net.players = [] }
   const interval = Math.max(150, Number(net.me?.config?.sync_interval_ms) || 300)
   ui("server.state", { joined: !!srv, name: srv?.name || "", intervalMs: interval })
 }
@@ -365,7 +364,7 @@ export async function joinServer(id) {
 async function travelToPlayers() {
   let players = []
   try {
-    const r = await rpc("server_sync", { p_level: null, p_pos: null, p_rot: null, p_vel: null, p_veh: null, p_convoy: null, p_session: sessionToken })
+    const r = await rpc("server_sync", { p_level: null, p_pos: null, p_rot: null, p_vel: null, p_veh: null, p_session: sessionToken })
     players = (r && r.players) || []
   } catch (e) { /* le déplacement est un confort : la synchro normale prendra le relais */ }
   const host = players.find(p => p && typeof p.level === "string" && /^[A-Za-z0-9_-]{1,60}$/.test(p.level) && p.level !== "unknown")
@@ -385,23 +384,16 @@ async function onArrived() {
   ui("server.arrive", { vehicle: v ? { id: v.id, model_key: v.model_key, config_key: v.config_key, nickname: v.nickname } : null })
 }
 
-// Position des 2 voitures de trafic partagé, envoyée par Lua uniquement si je suis l'hôte du serveur (voir convoy.lua).
-function onConvoySelf(d) {
-  const c = unwrapList(d)
-  if (Array.isArray(c)) lastConvoy = c
-}
-
-// Réception de ma position (Lua) -> server_sync -> envoi des autres joueurs (et du trafic partagé) au Lua.
+// Réception de ma position (Lua) -> server_sync -> envoi des autres joueurs au Lua.
 async function onSelf(d) {
   const s = unwrapObj(d)
   if (!s || !net.server || syncBusy || net.status !== "in") return
   syncBusy = true
   try {
-    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null, p_convoy: lastConvoy, p_session: sessionToken })
+    const r = await rpc("server_sync", { p_level: s.level || null, p_pos: s.pos || null, p_rot: s.rot || null, p_vel: s.vel || null, p_veh: s.veh || null, p_session: sessionToken })
     net.syncErr = ""
     net.players = r.players || []
     engineLua("extensions.grnfr_ghosts.onSync(" + luaStr(JSON.stringify({ players: net.players })) + ")")
-    engineLua("extensions.grnfr_convoy.onSync(" + luaStr(JSON.stringify({ isHost: r.is_host === true, convoy: r.convoy || null })) + ")")
   } catch (e) {
     if (e.code === "session_replaced") { forceSignOutReplaced() }
     else if (e.code === "not_in_server" && net.server && !rejoining) { // place libérée (coupure réseau) : on tente de revenir
@@ -440,7 +432,6 @@ export async function initNet() {
   inGame = true
   on("GRNFRNetReq", onNetReq)
   on("GRNFRSelf", onSelf)
-  on("GRNFRConvoySelf", onConvoySelf)
   on("GRNFRPos", onPos)
   on("GRNFROnline", d => { const g = unwrapObj(d); if (g) net.game = g })
   on("GRNFRPlaces", d => { const g = unwrapObj(d); if (g?.places) net.places = g.places })

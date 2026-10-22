@@ -358,6 +358,16 @@ which design is actually in place.
   **Not verified**: anything on Windows (detection on a real machine, launching, SmartScreen — the exe is unsigned
   by Microsoft so Windows shows "Windows a protégé votre ordinateur"), and the mod talking to it from inside the
   real BeamNG. Say so plainly.
+- **⚠️ VirusTotal : le launcher (et probablement `host/`, même binaire non signé) est détecté par plusieurs
+  moteurs antivirus** (confirmé par l'utilisateur, le fichier ne passe pas sur virustotal.com). Attendu pour un
+  exécutable Rust/Tauri tout neuf, non signé par un certificat reconnu (faux positif classique : heuristique sur
+  binaire rare/récent, pas forcément un vrai problème de code) — mais ça bloque concrètement l'installation côté
+  joueurs (antivirus Windows qui met en quarantaine, méfiance légitime à télécharger un .exe signalé). **Non
+  résolu, pas commencé.** Pistes possibles : acheter un certificat de signature de code (EV de préférence, règle
+  la réputation SmartScreen plus vite qu'un certificat standard, mais coûte de l'argent, à décider par
+  l'utilisateur) ; soumettre le binaire aux fournisseurs d'antivirus concernés pour analyse manuelle (gratuit mais
+  lent, à refaire à chaque nouvelle version) ; ou accepter le warning tant qu'il n'y a pas de budget pour un
+  certificat. À traiter avant une diffusion plus large à des joueurs qui n'ont pas confiance en Claude/le repo.
 
 ## État actuel et TODO (feuille de route — à lire en premier dans une nouvelle session)
 
@@ -365,7 +375,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.9.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.9.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -563,14 +573,9 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
    mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
    (`core_vehicle_partmgmt` ou équivalent) pour que « Pièces »/« Réglages » changent vraiment le véhicule, pas
    seulement la base de données ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
-2. **Phase 2 — missions / livraisons comme la carrière, en multi** — **colis fait (mod 2.6.0, voir ci-dessus),
-   reste à faire** :
-   - Remorques à livrer pour des entreprises (distinct des colis : probablement une variante de `deliveries` avec
-     un `kind`/une colonne en plus plutôt qu'une nouvelle table, à voir une fois les colis vérifiés en jeu).
-   - Passagers taxi : existe déjà séparément (`taxi_requests`, `taxi.lua`, entre joueurs) — voir si la demande
-     portait sur autre chose (taxi PNJ amélioré ?) ou si c'est déjà couvert.
-   - **Compte rendu de fin de mission** plus détaillé (bonus/malus de temps, dégâts) et marqueurs dédiés aux points
-     de dépôt (`core_groundMarkers`, déjà utilisé par `nav.lua` de façon générique).
+2. **Phase 2 — missions / livraisons comme la carrière, en multi** — **colis fait (mod 2.6.0, voir ci-dessus) ;
+   le reste est repris et élargi dans la Phase D du grand chantier plus bas** (entreprises, poids/distance,
+   salarié, blocage sans pièce de fret).
 2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — reste à vérifier en
    jeu que `core_vehicle_partmgmt` (ou l'API réelle, encore à trouver) applique vraiment la pièce achetée au
    véhicule, pas seulement en base.
@@ -590,11 +595,9 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
    vérifiée** pour des garages similaires (le mot-clé couvre probablement d'autres cartes avec circuit, non
    confirmé). Vérifié hors jeu : syntaxe Lua (`luaparse`), `node tests/net_test.mjs` (30/30). **Jamais revérifié en
    jeu.**
-2quater. **« On voit les voitures des autres »** (demande reformulée par l'utilisateur, sens exact pas encore
-   confirmé). Le principe existe déjà : `ghosts.lua` affiche la position + le pseudo de chaque joueur distant en
-   fantôme. Si l'utilisateur voulait dire que ça ne marche pas (fantômes absents/invisibles) ou autre chose
-   (voir le modèle réel du véhicule sur le fantôme, pas juste un repère générique ?), **à clarifier avec lui et/ou
-   vérifier en jeu avant de coder quoi que ce soit** — pas assez d'information pour agir cette fois-ci.
+2quater. ~~**« On voit les voitures des autres »**~~ **Précisé par l'utilisateur, repris et élargi dans la Phase F
+   du grand chantier plus bas** (trait + pseudo façon BeamMP, voir le joueur À L'INTÉRIEUR de son véhicule —
+   y compris un passager taxi).
 2quinquies. ~~**Vente de pièces à prix libre, dans une boutique privée**~~ **Fait (mod 2.8.0, voir § Fait
    ci-dessus)**.
 2sexies. ~~**Chat accessible depuis la tablette**~~ **Fait (mod 2.8.0, voir § Fait ci-dessus)**.
@@ -609,12 +612,161 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
    (`core_recoveryPrompt` / hook `onResetGameplay` — à vérifier), estimation des dommages (`core_vehicleBridge.
    requestValue(veh, cb, 'getPartConditions')`, pièce cassée = `integrityValue == 0`, coût = valeur des pièces),
    réparation payante au garage avec franchise selon l'assurance (`private.insurance_plan` : deductible, towing),
-   remorquage payant/offert.
+   remorquage payant/offert. **Fusionnée avec la Phase M (essence/réparation payante) du grand chantier plus bas.**
 4. **Phase 4** : négociation aussi à la revente et entre joueurs (annonces), personnalisation « pour une tâche »
-   (ex. kit cargo, attelage) proposée depuis la mission.
+   (ex. kit cargo, attelage) proposée depuis la mission. Pas encore commencé, pas repris dans le grand chantier
+   ci-dessous (hors-sujet de la demande du 22/10/2026) — à refaire une passe dédiée plus tard.
 5. Divers en attente : publier host 0.6.0 ; vérifier en jeu l'unité de `Power` des fiches véhicules (supposée kW)
-   et l'affichage des images `/vehicles/...` dans le CEF ; `host/` toujours non relié au mod ; **vérifier l'ordinateur
-   du garage en jeu réel** (point 1 ci-dessus) — peinture, et surtout trouver la vraie API de changement de pièces.
+   et l'affichage des images `/vehicles/...` dans le CEF ; **vérifier l'ordinateur du garage en jeu réel** (point 1
+   ci-dessus) — peinture, et surtout trouver la vraie API de changement de pièces ; **launcher/host détectés par
+   plusieurs antivirus sur VirusTotal** (voir § `launcher/` specifics ci-dessus), non résolu, nécessite un
+   certificat de signature de code ou une soumission aux éditeurs d'antivirus.
+
+### ⚠️ BUG CRITIQUE signalé le 22/10/2026 — chutes de FPS (92 → 1), même seul, pire à plusieurs — PRIORITÉ sur le
+### grand chantier ci-dessous
+
+Signalé par l'utilisateur (plusieurs joueurs se plaignent) : le FPS chute parfois de 92 à 1, **même en solo**, et
+le problème s'aggrave quand il y a plusieurs joueurs. **Pas encore de `BeamNG.log` fourni** — diagnostic basé
+uniquement sur lecture de code pour l'instant, à confirmer/corriger avec le log dès qu'il est disponible (règle du
+projet : toujours demander `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log` + ce que faisait le joueur au
+moment de la chute — seul/accompagné, tablette/chat ouverts, vitesse, juste après avoir rejoint un serveur ?).
+
+Deux suspects trouvés en lisant le code (aucun confirmé en jeu, toujours pas de `BeamNG.log` fourni) :
+- **`grnfr_convoy` (« trafic partagé », `convoy.lua`) — PROBABLEMENT LA VRAIE CAUSE, retiré entièrement.**
+  Contrairement au trafic adaptatif ci-dessous, celui-ci était ACTIF SANS RÉGLAGE, pour TOUT LE MONDE, dès qu'on
+  rejoint un serveur de jeu : le membre présent depuis le plus longtemps sur le serveur (« hôte », recalculé à
+  chaque `server_sync`) fait apparaître et pilote 2 vraies voitures IA (`core_vehicles.spawnNewVehicle` +
+  `ai.setMode('traffic')`). **Seul sur un serveur, on EST cet hôte** — ce qui explique directement la chute
+  « même seul, parfois » : si le jeu refuse ou que les voitures disparaissent, `updateHost()` les re-fait
+  apparaître en boucle toutes les 3 secondes (`lastSpawnTry + 3 <= clock`), et apparition/suppression de
+  véhicule est une opération connue pour causer de grosses saccades dans BeamNG. Explique aussi « pire à
+  plusieurs » : les autres joueurs du serveur affichent ces 2 voitures en fantômes (`ensureGhost`, encore du
+  spawn de véhicule) en plus de celles de `ghosts.lua`. **Supprimé entièrement** (`convoy.lua` effacé, plus
+  appelé depuis `grnfr.lua`, `net.js` n'envoie plus `p_convoy` ni ne lit `is_host`/`convoy` de `server_sync`) —
+  justifié indépendamment par le grand chantier ci-dessous (Phase M, « aucun trafic IA », confirmé par
+  l'utilisateur). Côté SQL : `server_sync` accepte toujours `p_convoy jsonb default null` (0003/0008) et renvoie
+  encore `is_host`/`convoy` — laissés tels quels (paramètre à valeur par défaut, aucune migration nécessaire),
+  juste plus utilisés par personne ; à nettoyer dans une migration future si on veut, pas urgent.
+- **`grnfr_traffic` (trafic adaptatif, `traffic.lua`)** — EN DÉVELOPPEMENT, désactivé PAR DÉFAUT (réglage
+  `traffic`, décoché de base) : moins susceptible d'être la cause vécue par la majorité des joueurs que
+  `convoy.lua` ci-dessus, mais même principe (spawn/suppression de véhicules de trafic réels) donc supprimé en
+  même temps par prudence et parce que demandé explicitement par l'utilisateur.
+- `ghosts.lua` (spawn à l'arrivée d'un nouveau joueur) et `sessionlog.lua` (réécriture du fichier log toutes les
+  5 s, plafonné à 600 lignes) restent des contributeurs mineurs possibles, pas supprimés (comportement normal et
+  nécessaire), à surveiller si le problème persiste après ce correctif.
+
+**Reste à faire dès que le `BeamNG.log` + contexte de repro sont fournis** (le mod n'a pas encore été ouvert dans
+le vrai jeu cette session, donc rien de ce qui précède n'est vérifié) : confirmer que la suppression de
+`convoy.lua` résout bien la chute solo ; si non, profiler plus avant (budget d'images pour `M.tick`, fréquence de
+`pushStatic`/`guihooks.trigger` si le payload grossit avec le nombre de joueurs).
+
+### Grand chantier du 22/10/2026 — demande massive de l'utilisateur, découpée par Claude en phases
+
+L'utilisateur a envoyé une très longue liste de demandes en plusieurs messages à la suite (brouillon qui s'est
+construit progressivement, par endroits contradictoire). Points clarifiés avec lui avant de commencer :
+- **Aucun trafic IA** (la dernière consigne du brouillon, « mets aucun trafic », prime sur une mention antérieure
+  de « 4 voitures de trafic par joueur » — confirmé explicitement par l'utilisateur).
+- **Le pivot d'architecture évoqué** (« enlever le launcher, mettre le mod dans BeamMP, tourner le host BeamMP sur
+  Supabase ») est **annulé pour l'instant** (confirmé explicitement : « annule finalement non ») — on garde
+  l'architecture actuelle (launcher = seul accès HTTPS, voir § Architecture) pour tout ce qui suit.
+- Ajouté en cours de route (messages suivants, pas dans le brouillon initial) : **la configuration du véhicule
+  (pièces/réglages/peinture) ne doit être possible QUE par l'ordinateur du garage GRNFR CMP**, jamais par le menu
+  de configuration natif de BeamNG (Phase B) ; et **optimiser aussi le serveur** (Phase M).
+- Les bindings clavier actuels (`mod/grnfr-mod/settings/inputmaps/keyboardGRNFR.json`) : `k` → `grnfr_toggle`
+  (grande fenêtre HUD, `M.toggleHud` dans `grnfr.lua`), `o` → `grnfr_online_toggle` (tablette/ordinateur du garage,
+  seulement à proximité, `M.toggleOnline`), `j` → `grnfr_quick_toggle` (petite fenêtre rapide ancrée dans un coin :
+  chat, joueurs, don d'argent, échange, drag — `QuickPanel.vue`, `M.toggleQuick`). Il n'existe aucun binding `e`
+  dans ce fichier : soit l'utilisateur veut dire une touche in-UI (bouton) et pas un binding clavier GRNFR, soit un
+  comportement natif BeamNG à neutraliser — **à clarifier en relisant les logs/`Tablet.vue` au moment de coder**,
+  ne pas supposer. `j` cause apparemment une pause involontaire chez l'utilisateur (peut-être un conflit avec une
+  touche native BeamNG sur sa configuration, pas un binding GRNFR qui pause le jeu à proprement parler) : prudence,
+  revérifier avec lui plutôt que deviner la cause exacte avant de choisir la nouvelle touche.
+
+**Phase A — Fondation clavier/HUD** (bloquant pour une bonne partie du reste) :
+   - Nouvelle disposition HUD basée sur le layout BeamNG « Basic Mission Layout », avec le chat intégré dedans.
+   - Touche **K = « téléphone »** : regroupe tout ce qui est social/mission à distance (courses taxi avec
+     accepter/refuser + distance/revenu affichés, échanges, don d'argent, chat, itinéraire vers un joueur ou vers
+     son garage) — remplace l'actuelle petite fenêtre rapide (`J`, `QuickPanel.vue`) et absorbe sa fonction
+     « Aller à mon garage ».
+   - Touche **O reste l'ordinateur du garage** (Personnaliser/achats de pièces), utilisable seulement à proximité
+     physique du garage — pas de changement de principe, juste s'assurer que ça reste cohérent avec le nouveau K.
+   - Binding `j` supprimé (sa fonction bascule dans le menu K).
+   - À l'arrivée sur un serveur près de son garage : afficher un message toast/alerte native indiquant les deux
+     touches (O = ordinateur, K = téléphone).
+**Phase B — Verrouillage de la configuration véhicule** :
+   - Empêcher toute configuration de pièces/réglages/peinture par le menu natif BeamNG (parts selector/configurateur
+     accessible depuis Échap ou le sélecteur de véhicule) tant qu'on est en ligne GRNFR — seul l'ordinateur du
+     garage (Personnaliser) doit pouvoir changer un véhicule. Mécanisme exact à investiguer (désactiver l'entrée de
+     menu, bloquer l'action clavier correspondante, ou intercepter l'ouverture de cette UI native) — pas encore de
+     piste technique vérifiée.
+   - Nettoyer le menu Échap en jeu : CLAUDE.md note déjà que taper Échap montre encore « l'ancien UI » au lieu de
+     rediriger proprement vers GRNFR CMP — à corriger en même temps (branding cohérent, pas de menu BeamNG résiduel
+     visible).
+**Phase C — Véhicules taxi/bus, classes perf/confort** :
+   - Chaque véhicule du catalogue reçoit une classe de performance et une classe de confort (nouvelles colonnes,
+     `dealership_catalog`/`garage_vehicles` probablement).
+   - Taxi : jauge de confort pendant la course liée aux G/à la vitesse réels du trajet ; le client peut refuser de
+     payer si c'est trop secoué ; plus la classe confort du véhicule est haute, plus le pourboire est élevé.
+   - Cooldown après avoir déposé un passager avant de proposer la prochaine course (actuellement : aucun délai,
+     une nouvelle course taxi arrive immédiatement après la dépose — à corriger).
+   - Clarifier avec l'utilisateur si taxi/bus utilisent OBLIGATOIREMENT un véhicule dédié de flotte (pas l'un des
+     véhicules personnels du joueur), car ça entre en tension avec la règle « on ne peut faire apparaître que les
+     véhicules qu'on possède » (Phase M) — pas encore tranché.
+**Phase D — Livraison liée aux pièces de fret, entreprises** :
+   - Rechercher les vraies pièces « cargo »/fret de la carrière BeamNG (recherche web demandée explicitement par
+     l'utilisateur) pour remplacer/affiner la détection actuelle par mot-clé (0018, "4x Cargo Load Box…") par un
+     vrai système de pièces de fret identifiées.
+   - Bloquer toute livraison si aucune pièce de fret n'est équipée sur le véhicule (`accept_delivery` vérifie déjà
+     `cargo_capacity > 0` depuis 0015/0016 — à auditer si c'est suffisant une fois le vrai catalogue de fret en
+     place, ou s'il faut une colonne plus précise que juste une capacité en unités).
+   - Plusieurs entreprises comme points de collecte/dépôt (resto, garage, hôpital, etc. — à définir), le prix de la
+     livraison dépend du poids du colis ET de la distance entre les deux (pas juste la distance comme aujourd'hui).
+   - **Système de salarié au garage** (nouvelle mécanique) : tous les 100 km parcourus par un salarié embauché, le
+     joueur lui paie un salaire ; le salarié livre/rapporte automatiquement en tâche de fond. Implique probablement
+     un minuteur côté serveur (cron Supabase ou calcul à la demande sur la distance cumulée) plutôt qu'une
+     simulation Lua en continu — à concevoir.
+**Phase E — Bus** : reprendre/refaire les lignes de bus existantes (`taxi.lua`/anciennes lignes, voir Architecture)
+   avec les mêmes bases que la Phase C (classes de véhicule, etc. si applicable).
+**Phase F — Multijoueur visible** :
+   - Voir les autres joueurs ET leur véhicule avec un trait + pseudo façon BeamMP (`ghosts.lua` existe déjà, montre
+     position + pseudo — à vérifier s'il manque le modèle réel du véhicule ou le lien visuel).
+   - Rendre visible le joueur À L'INTÉRIEUR de son véhicule (actuellement, d'après l'utilisateur, on ne le voit
+     plus une fois monté dans la voiture) — notamment pour voir un passager pendant une course taxi.
+**Phase G — Garages** :
+   - 4 garages par joueur, tous visibles dans « Mes voitures » (actuellement un seul à la fois ? à vérifier).
+   - Vente simplifiée : un bouton « Vendre » qui ouvre directement un nouvel onglet dans la tablette pour la
+     procédure (pas de détail de négociation affiché à cet endroit) — même principe que la vente de pièces.
+   - Revérifier que le garage d'un joueur qui part redevient bien « non pris » (fix 2.6.1, jamais revérifié en jeu).
+**Phase H — Recherche de pièces** : ajouter une recherche dans l'onglet Pièces de l'ordinateur du garage.
+**Phase I — Sécurité routière** : radars + amendes aux feux rouges (pas systématique à chaque feu).
+**Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
+   — demande peut-être déjà couverte.
+**Phase K — `host/`** :
+   - Démarrage à vide : aucun serveur GRNFR prédéfini avec ses paramètres déjà remplis — l'utilisateur doit créer
+     lui-même son serveur (nom, mot de passe, paramètres) depuis l'app.
+   - Un serveur créé dans `host/` doit apparaître dans la liste des serveurs du jeu (actuellement, voir § Live map
+     ci-dessus : les serveurs du mod sur Supabase et les relais `host/` sont deux systèmes totalement séparés —
+     gros morceau d'intégration, pas encore de conception détaillée).
+   - Wizard de première configuration + auto-mise à jour pour `host/`, même principe que GRNFR CMP Launcher
+     (`host/` a déjà l'updater Tauri officiel signé, mais pas de wizard first-run).
+**Phase L — Branding/nettoyage UI** : fusionnée avec la Phase B (menu Échap doit toujours rediriger proprement
+   vers GRNFR CMP, jamais montrer un résidu d'ancien UI).
+**Phase M — Performance et règles de jeu** :
+   - ~~Aucun trafic IA sur les routes~~ **Fait (mod 2.9.1)** : `convoy.lua` (trafic partagé, probable cause du bug
+     critique ci-dessus) et `traffic.lua` (trafic adaptatif, expérimental) supprimés entièrement — voir § BUG
+     CRITIQUE plus haut pour le détail.
+   - Enlever les effets « fun » qui coûtent en perf ou cassent l'économie (boost, destruction/explosion, etc.).
+   - Essence payante, réparation payante (fusion avec la Phase 3 ci-dessus).
+   - On ne peut faire apparaître QUE les véhicules qu'on possède déjà (vérifier qu'aucun autre chemin de spawn que
+     `grnfr_online.spawnVehicle` sur un véhicule du garage n'existe encore, en particulier le sélecteur de véhicule
+     natif bloqué par la Phase B).
+   - Continuer l'optimisation mod + launcher (déjà un peu fait, voir « Audit rapide des ressources du launcher »
+     ci-dessus) et **optimiser aussi le serveur** (RPC coûteuses, index SQL, fréquence `heartbeat`/polling à
+     revoir) — nouveau, pas encore audité.
+
+**Pas encore priorisé entre les phases** : l'utilisateur a demandé de proposer lui-même l'ordre complet avant de
+commencer à coder quoi que ce soit — voir la conversation pour la proposition faite et sa réponse, avant de
+commencer la Phase A.
 
 ### Règles à garder
 - Toute API du jeu non vérifiée sous `pcall`, avec repli, et des logs `Garage:`/`Travel:`/... dans BeamNG.log

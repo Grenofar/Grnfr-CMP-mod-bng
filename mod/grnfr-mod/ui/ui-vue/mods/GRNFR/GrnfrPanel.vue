@@ -34,18 +34,6 @@
         <span>{{ t('antistutter') }} <em class="badge">{{ t('badge_dev') }}</em></span><i class="sw" :class="{ on: st.settings.antiStutter }"></i>
       </div>
       <p class="note">{{ t('antistutter_note') }}</p>
-      <div class="row tg" @click="setSetting('traffic', !st.settings.traffic)">
-        <span>{{ t('traffic') }} <em class="badge">{{ t('badge_dev') }}</em></span><i class="sw" :class="{ on: st.settings.traffic }"></i>
-      </div>
-      <div class="row" :class="{ dim: !st.settings.traffic }">
-        <span>{{ t('traffic_min') }}</span>
-        <div class="limit">
-          <input type="range" min="10" max="300" step="1" v-model.number="minDraft" @change="commitMin" />
-          <input type="number" class="numbox" min="10" max="300" step="1" v-model.number="minDraft" @change="commitMin" @keyup.enter="commitMin" />
-        </div>
-      </div>
-      <p class="note">{{ t('traffic_note') }}</p>
-      <p v-if="trafficText" class="note" :class="trafficClass">{{ trafficText }}</p>
     </section>
 
     <section v-if="tab === 'settings'">
@@ -163,7 +151,7 @@ const modInfo = {}
 </script>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue"
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue"
 import { useBridge } from "@/bridge"
 import { BngButton } from "@/common/components/base"
 import { callLua, unwrapObj, stats as luaStats } from "./luaCall.js"
@@ -202,7 +190,7 @@ const tab = ref("dashboard")
 // Valeurs par défaut : l'onglet Paramètres s'affiche même si Lua n'a pas (encore) répondu.
 const DEFAULTS = {
   hudEnabled: true, hudPos: "top-left", showFps: true, showAvg: true, showMode: true, showGraph: true, compact: false,
-  antiStutter: false, traffic: false, trafficMinFps: 60,
+  antiStutter: false,
   refreshRate: 0, introShown: true, accent: "orange", opacity: 1, lang: "fr", langChosen: true,
   fpsOverlay: false, fpsBg: true, fpsPos: "top-right", fpsSize: "medium", fpsColor: "#ff6600", fpsOpacity: 0.9,
 }
@@ -243,26 +231,6 @@ const modeLabel = computed(() => {
 })
 
 const graphLabels = computed(() => ({ avg: t("avg_1s"), inst: t("perf_inst"), empty: t("graph_empty") }))
-
-// Trafic adaptatif : FPS minimum voulu (curseur + zone de texte synchronisés)
-const minDraft = ref(60)
-watch(() => st.settings?.trafficMinFps, v => { if (typeof v === "number") minDraft.value = v }, { immediate: true })
-function commitMin() {
-  let n = Math.round(Number(minDraft.value))
-  if (!isFinite(n)) n = st.settings?.trafficMinFps || 60
-  n = Math.min(300, Math.max(10, n))
-  minDraft.value = n
-  setSetting("trafficMinFps", n)
-}
-const trafficText = computed(() => {
-  const tr = st.traffic
-  if (!tr) return ""
-  if (tr.state === "running") return t("traffic_running").replace("{a}", tr.active).replace("{p}", tr.parked).replace("{ba}", tr.baseActive).replace("{bp}", tr.baseParked)
-  if (tr.state === "impossible") return t("traffic_impossible")
-  if (tr.state === "unavailable") return t("traffic_unavailable")
-  return ""
-})
-const trafficClass = computed(() => (st.traffic?.state === "running" ? "ok" : "bad"))
 
 function chooseLang(l) {
   if (st.settings) { st.settings.lang = l; st.settings.langChosen = true }

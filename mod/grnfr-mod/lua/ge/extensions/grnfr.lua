@@ -1,11 +1,11 @@
 -- GRNFR Mod : extension GE principale (orchestration uniquement).
 local M = {}
-M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
-  'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
+M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter',
+  'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
   'grnfr_delivery' }
 
-local VERSION = '2.9.0'
+local VERSION = '2.9.1'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -22,7 +22,6 @@ local modeAcc = 0
 local staticAcc = 0 -- secondes depuis le dernier envoi de l'état à l'UI (renvoi de sécurité chaque seconde)
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
 local wasSession, lastModeEn = false, nil
-local sessionAge = 0 -- secondes écoulées depuis le début de la partie (sert à réarmer le trafic adaptatif)
 
 local MODE_LABELS = {
   menu = { 'Menu principal', 'Main menu' }, career = { 'Carrière', 'Career' },
@@ -107,7 +106,6 @@ local function buildStatic()
     quickOpen = quickOpen,
     hudOpen = hudOpen,
     bigOpen = bigOpen,
-    traffic = grnfr_traffic.status(),
     hooks = cntPre + cntUpd,
     angular = consumers.angular == true, -- app HUD AngularJS placée par le joueur : le HUD Vue s'efface alors
     keyLabel = grnfr_keys.getDisplay(),
@@ -224,12 +222,12 @@ local ROUTES = {
   ['auth']            = function(a)
     grnfr_online.setAuth(a.loggedIn, a.username)
     if a.loggedIn ~= true then
-      grnfr_ghosts.setServer(false); grnfr_convoy.setServer(false); grnfr_garage.setServer(false)
+      grnfr_ghosts.setServer(false); grnfr_garage.setServer(false)
       grnfr_chat.setServer(false); grnfr_drag.setServer(false); grnfr_track.clear(); grnfr_roadmap.setServer(false)
     end
   end,
   ['server.state']    = function(a)
-    grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs); grnfr_convoy.setServer(a.joined); grnfr_garage.setServer(a.joined)
+    grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs); grnfr_garage.setServer(a.joined)
     grnfr_roadmap.setServer(a.joined)
     grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
     if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
@@ -341,8 +339,7 @@ local SETTING_NAMES = {
   showGraph = 'HUD: show FPS graph', compact = 'HUD: compact size', refreshRate = 'HUD refresh rate (0 = automatic)',
   accent = 'Accent color', opacity = 'HUD opacity', lang = 'Language', hudPos = 'HUD position',
   fpsOverlay = 'FPS counter', fpsBg = 'FPS counter background', fpsPos = 'FPS counter position', fpsSize = 'FPS counter size',
-  fpsColor = 'FPS counter color', fpsOpacity = 'FPS counter opacity', antiStutter = 'Anti-stutter', traffic = 'Adaptive traffic',
-  trafficMinFps = 'Adaptive traffic minimum FPS',
+  fpsColor = 'FPS counter color', fpsOpacity = 'FPS counter opacity', antiStutter = 'Anti-stutter',
 }
 local function valueText(v) if v == true then return 'ON' elseif v == false then return 'OFF' end return tostring(v) end
 
@@ -351,7 +348,6 @@ function M.setSetting(key, value)
     slog('info', 'Setting changed: ' .. (SETTING_NAMES[key] or tostring(key)) .. ' is now ' .. valueText(value) .. '.')
     if key == 'hudEnabled' and value == false then hudOpen = false; bigOpen = false end
     if key == 'antiStutter' then grnfr_stutter.apply(value) end
-    if key == 'traffic' then grnfr_traffic.setEnabled(value) end
     pushStatic()
   else
     slog('warn', 'A setting change was refused (' .. tostring(key) .. ' = ' .. tostring(value) .. ' is not a valid value).')
@@ -396,16 +392,13 @@ local function onStateEvent()
   pushStatic()
 end
 
--- Changement de carte : l'état en cours (trafic) est réinitialisé, mais le RÉGLAGE « trafic adaptatif »
--- reste enregistré tel que le joueur l'a choisi (il est réarmé automatiquement dans tick).
+-- Changement de carte : remet à zéro les modules de gameplay qui dépendent de la carte précédente.
 local function resetGameplayFeatures()
-  grnfr_traffic.reset()
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset); pcall(grnfr_facilities.reset)
-  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
   if onlineOpen then onlineOpen = false; guihooks.trigger('GRNFROnlineWin', { open = false }) end
   if tabletOpen then tabletOpen = false; guihooks.trigger('GRNFRTabletWin', { open = false }) end
   if quickOpen then quickOpen = false; guihooks.trigger('GRNFRQuickWin', { open = false }) end
-  sessionAge = 0
 end
 function M.onClientStartMission() notified, notifyAcc = false, 0; resetGameplayFeatures(); onStateEvent() end
 function M.onClientEndMission()
@@ -484,14 +477,6 @@ function M.tick(dtReal)
     pcall(function() timer:stopAndReset() end) -- garde le chronomètre synchronisé
   end
   grnfr_perf.sample(dtReal)
-  do -- option en développement : trafic adaptatif
-    local cfg0 = grnfr_settings.get()
-    local pm = grnfr_perf.get()
-    if cfg0.traffic then
-      grnfr_traffic.update(tonumber(dtReal) or 0, pm and pm.avg or nil, cfg0.trafficMinFps)
-      -- état « impossible » : on le laisse affiché (le réglage reste coché), le changement d'état est poussé à l'UI par la signature
-    end
-  end
   do -- GRNFR Online : actif seulement dans une partie où il est autorisé
     local d0 = tonumber(dtReal) or 0
     if d0 > 0.5 then d0 = 0.5 end
@@ -504,7 +489,7 @@ function M.tick(dtReal)
     grnfr_online.update(d0)
     grnfr_travel.update(d0)
     if tabletOpen and not grnfr_garage.isNear() then setTabletOpen(false) end -- on s'est éloigné du garage
-    if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_convoy.update(d0); grnfr_track.update() end
+    if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_track.update() end
   end
   if wasSession then grnfr_sessionlog.update(tonumber(dtReal) or 0, (grnfr_perf.get() or {}).avg) end
   if modeInfo.session then
@@ -521,7 +506,6 @@ function M.tick(dtReal)
   end
   local dt = tonumber(dtReal) or 0
   acc, modeAcc = acc + dt, modeAcc + dt
-  if modeInfo.session then sessionAge = sessionAge + dt else sessionAge = 0 end
   local cfg = grnfr_settings.get()
   -- cadence de mise à jour du HUD : 0 = automatique (à chaque image, aucune limite), sinon N fois par seconde
   local period = (cfg.refreshRate or 0) > 0 and 1 / cfg.refreshRate or 0
@@ -529,13 +513,7 @@ function M.tick(dtReal)
   if modeAcc >= 1 then -- le mode de jeu est relu une fois par seconde (pas à chaque image)
     modeAcc = 0
     refreshMode()
-    -- réglage trafic enregistré = coché : on (ré)arme le trafic adaptatif quelques secondes après l'entrée en partie
-    if modeInfo.session and sessionAge >= 5 and grnfr_settings.get().traffic and grnfr_traffic.status().state == 'off' then
-      grnfr_traffic.setEnabled(true)
-    end
-    local tr = grnfr_traffic.status()
     local sig = table.concat(modeInfo.ids or {}, '+') .. tostring(modeInfo.raw) .. tostring(modeInfo.session)
-      .. '|' .. tr.state .. tr.active .. '/' .. tr.parked
     staticAcc = staticAcc + 1
     if sig ~= lastSig or staticAcc >= 1 then lastSig = sig; staticAcc = 0; pushStatic() end
   end
@@ -562,7 +540,7 @@ function M.onExtensionUnloaded()
   wasSession = false
   pcall(grnfr_sessionlog.finish, 'The mod was unloaded.')
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset)
-  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
   pcall(grnfr_stutter.apply, false)
   if guihooks then guihooks.trigger('GRNFRStatic', { session = false, hudOpen = false }) end
   grnfr_perf.reset()

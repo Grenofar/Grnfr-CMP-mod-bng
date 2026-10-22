@@ -28,8 +28,6 @@ local SCHEMA = {
   introShown   = { t = 'bool', d = false }, -- notification « touche du HUD » affichée une seule fois, jamais réinitialisée
   -- Optimisation (en développement)
   antiStutter  = { t = 'bool', d = false },
-  traffic      = { t = 'bool', d = false },
-  trafficMinFps= { t = 'num', d = 60, min = 10, max = 300 },
   -- Position du HUD en jeu (touche K)
   hudPos       = { t = 'enum', d = 'top-left', values = { ['top-left'] = true, ['top-right'] = true, ['bottom-left'] = true, ['bottom-right'] = true } },
 }
