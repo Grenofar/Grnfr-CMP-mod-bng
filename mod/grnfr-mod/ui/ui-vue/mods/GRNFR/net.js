@@ -1,6 +1,7 @@
 // GRNFR Online : client Supabase (HTTP) + pont vers le Lua du jeu.
-// Le Lua de BeamNG ne sait pas faire de HTTPS : c'est l'interface (Chromium) qui parle à Supabase.
-//   Lua --GRNFRNetReq--> ici --fetch--> Supabase --> ici --engineLua(onNetResult)--> Lua
+// La logique (session, jetons, erreurs) vit ici ; l'envoi HTTPS passe par le moteur (grnfr/http.lua), car
+// l'interface de BeamNG 0.40 n'a pas le droit de contacter un hôte extérieur (voir http() plus bas).
+//   Lua --GRNFRNetReq--> ici --grnfr_http/GRNFRHttp--> Supabase --> ici --engineLua(onNetResult)--> Lua
 //   Lua --GRNFRSelf (ma position)--> ici --server_sync--> ici --engineLua(onSync)--> Lua (fantômes + pseudos)
 // Sans effet de bord au chargement : tout démarre dans initNet().
 import { reactive } from "vue"
@@ -44,43 +45,55 @@ function loadAuth() { try { const a = JSON.parse(localStorage.getItem(KEY) || "n
 // ------------------------------------------------------------------ HTTP
 class NetError extends Error { constructor(code, status, detail) { super(code); this.code = code; this.status = status; this.detail = detail } }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms))
+// Depuis BeamNG 0.40, l'interface (CEF) refuse toute connexion vers un hôte extérieur (Content-Security-Policy
+// "connect-src 'self' localhost 127.0.0.1") : fetch() vers Supabase échoue en jeu avec "Failed to fetch", pour
+// tous les joueurs. En jeu, la requête part donc par le client HTTP du moteur (lua/ge/extensions/grnfr/http.lua),
+// qui renvoie la réponse par l'événement GRNFRHttp. fetch() ne sert plus qu'hors du jeu.
+// Le moteur ne permet qu'un seul en-tête (Authorization) : la clé anon passe en paramètre d'URL (?apikey=).
+let gameHttp = false, httpSeq = 0
+const httpWait = new Map()
+const HTTP_TIMEOUT = 20000
+
+function onHttp(d) {
+  const r = unwrapObj(d)
+  const w = r && httpWait.get(Number(r.id))
+  if (!w) return
+  httpWait.delete(Number(r.id)); clearTimeout(w.timer); w.resolve(r)
+}
+
+function sendViaGame(method, url, body, authorization) {
+  return new Promise(resolve => {
+    const id = ++httpSeq
+    const timer = setTimeout(() => { httpWait.delete(id); resolve({ status: 0, error: "pas de réponse du jeu en " + HTTP_TIMEOUT / 1000 + " s" }) }, HTTP_TIMEOUT)
+    httpWait.set(id, { resolve, timer })
+    engineLua("extensions.grnfr_http.request(" + id + "," + luaStr(method) + "," + luaStr(url) + "," + luaStr(body) + "," + luaStr(authorization) + ")")
+  })
+}
+
+async function sendViaFetch(method, url, body, authorization) {
+  try {
+    const res = await fetch(url, { method: method.toUpperCase(), headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: authorization }, body: body || undefined })
+    return { status: res.status, body: await res.text() }
+  } catch (e) { return { status: 0, error: (e && (e.message || e.name)) || String(e) } }
+}
 
 async function http(path, body, token, method = "POST") {
   if (!net.configured) throw new NetError("not_configured", 0)
-  let res, lastErr = null
-  // Beaucoup de "Failed to fetch" viennent d'un antivirus/pare-feu qui bloque le PREMIER contact du
-  // processus BeamNG vers un hôte inconnu puis laisse passer la suite une fois la connexion inspectée —
-  // 2 nouvelles tentatives (0,5s puis 1,5s) absorbent silencieusement ce cas sans rien demander au joueur.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await sleep(500 * attempt)
-    try {
-      res = await fetch(cfg.url + path, {
-        method,
-        headers: { apikey: cfg.anonKey, "Content-Type": "application/json", Authorization: "Bearer " + (token || cfg.anonKey) },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      })
-      lastErr = null
-      break
-    } catch (e) { lastErr = e }
-  }
-  if (lastErr) {
-    // fetch() ne donne jamais plus de détail que "Failed to fetch", que la cause soit DNS, pare-feu, TLS
-    // ou CORS — c'est volontaire côté navigateur (anti-fingerprinting). Pour distinguer un blocage réseau
-    // total d'un souci plus spécifique (CORS/preflight/en-têtes, potentiellement réparable sans rien
-    // demander au joueur), on retente une requête minimale SANS les en-têtes personnalisés (apikey,
-    // Authorization) : si elle passe, le problème vient des en-têtes/du preflight, pas du réseau en entier.
-    let probe = "sonde impossible"
-    try { await fetch(cfg.url + "/rest/v1/", { method: "GET" }); probe = "une requête nue (sans en-têtes) passe : probablement CORS/preflight, pas un blocage réseau total" }
-    catch (e2) { probe = "même une requête nue échoue : blocage réseau complet (pare-feu/DNS/antivirus)" }
-    net.lastNetworkDetail = ((lastErr.message || lastErr.name) || String(lastErr)) + " — " + probe
+  const authorization = "Bearer " + (token || cfg.anonKey)
+  const payload = body === undefined ? "" : JSON.stringify(body)
+  const m = method.toLowerCase()
+  const r = gameHttp
+    ? await sendViaGame(m, cfg.url + path + (path.includes("?") ? "&" : "?") + "apikey=" + encodeURIComponent(cfg.anonKey), payload, authorization)
+    : await sendViaFetch(m, cfg.url + path, payload, authorization)
+  if (!r.status) {
+    net.lastNetworkDetail = r.error || "aucune réponse"
     throw new NetError("network", 0, net.lastNetworkDetail)
   }
   let data = null
-  try { data = await res.json() } catch (e) { /* corps vide */ }
-  if (!res.ok) {
-    const code = (data && (data.message || data.msg || data.error_description || data.error)) || ("http_" + res.status)
-    throw new NetError(String(code), res.status)
+  try { data = r.body ? JSON.parse(r.body) : null } catch (e) { /* corps vide ou non JSON */ }
+  if (r.status >= 400) {
+    const code = (data && (data.message || data.msg || data.error_description || data.error)) || ("http_" + r.status)
+    throw new NetError(String(code), r.status)
   }
   return data
 }
@@ -363,6 +376,8 @@ export async function initNet() {
   started = true
   let b; try { b = useBridge() } catch (e) { started = false; return }
   const on = (name, fn) => { b.events.on(name, fn); offs.push(() => b.events.off(name, fn)) }
+  on("GRNFRHttp", onHttp)
+  gameHttp = true
   on("GRNFRNetReq", onNetReq)
   on("GRNFRSelf", onSelf)
   on("GRNFRConvoySelf", onConvoySelf)
@@ -395,5 +410,5 @@ export async function initNet() {
 
 export function stopNet() {
   offs.forEach(f => { try { f() } catch (e) { /* ignoré */ } })
-  offs = []; started = false
+  offs = []; started = false; gameHttp = false
 }

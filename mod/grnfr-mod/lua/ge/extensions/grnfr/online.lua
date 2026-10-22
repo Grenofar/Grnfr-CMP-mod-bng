@@ -1,7 +1,7 @@
 -- GRNFR Online : pont jeu <-> Supabase.
 --
--- Le jeu (Lua) ne sait pas faire de HTTPS. C'est l'interface (ui/ui-vue/mods/GRNFR/net.js) qui parle à Supabase et qui
--- garde le jeton de connexion. Ce module :
+-- C'est l'interface (ui/ui-vue/mods/GRNFR/net.js) qui décide des appels à Supabase et qui garde le jeton de connexion ;
+-- l'envoi HTTPS lui-même passe par grnfr/http.lua (l'interface n'a pas le droit de joindre un hôte extérieur). Ce module :
 --   * envoie à l'interface les demandes réseau du jeu (événement GRNFRNetReq) et reçoit les réponses (onNetResult) ;
 --   * envoie périodiquement la position du joueur (événement GRNFRPos) pour la présence / le taxi ;
 --   * fait apparaître / range les véhicules du garage dans le monde ;

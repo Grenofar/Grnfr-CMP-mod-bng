@@ -13,9 +13,27 @@ code = code.replace('import { reactive } from "vue"', "const reactive = x => x")
   .replace('import cfg from "./serverConfig.js"', 'const cfg = { url: "https://fake.supabase.co", anonKey: "anon" }')
   .replace('import { callLua, unwrapObj, unwrapList } from "./luaCall.js"', 'import { callLua, unwrapObj, unwrapList } from "./lua_stub.mjs"')
 fs.writeFileSync(path.join(tmp, "net.mjs"), code)
-const lcalls = [], engine = [], handlers = {}
-globalThis.__t = { lcalls, engine, handlers }
-fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.engine.push(c) } })`)
+const lcalls = [], engine = [], handlers = {}, httpCalls = []
+// Faux grnfr/http.lua : les requêtes HTTP envoyées au jeu (extensions.grnfr_http.request(...)) sont rejouées sur le
+// faux Supabase ci-dessous, puis la réponse revient par l'événement GRNFRHttp, comme en jeu. Les autres appels Lua
+// sont seulement enregistrés (engine).
+const luaArgs = s => [...s.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => new TextDecoder().decode(Uint8Array.from(
+  m[1].match(/\\\d{3}|\\.|[^\\]/g) || [], t => t.length === 4 && t[0] === "\\" ? Number(t.slice(1)) : t.length === 2 ? t.charCodeAt(1) : t.charCodeAt(0))))
+function gameHttp(c) {
+  const id = Number(c.match(/^extensions\.grnfr_http\.request\((\d+),/)[1])
+  const [method, url, body, authorization] = luaArgs(c)
+  httpCalls.push({ method, url, authorization })
+  const u = new URL(url)
+  const apikey = u.searchParams.get("apikey")
+  u.searchParams.delete("apikey")
+  setTimeout(async () => {
+    const r = apikey !== "anon" ? { status: 401, body: '{"message":"no_apikey"}' }
+      : await fakeServer(u.origin + u.pathname + u.search, { method, headers: { Authorization: authorization }, body: body || undefined })
+    handlers.GRNFRHttp({ id, ...r })
+  }, 0)
+}
+globalThis.__t = { lcalls, engine, handlers, lua: c => c.startsWith("extensions.grnfr_http.request(") ? gameHttp(c) : engine.push(c) }
+fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.lua(c) } })`)
 fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d\nexport const unwrapList = d => d`)
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
 
@@ -24,11 +42,12 @@ const members = {}, calls = []
 const sessions = {} // token -> { username } ; un profil = juste un pseudo, choisi APRÈS la connexion anonyme
 const MAX = 4
 let anonCalls = 0
-globalThis.fetch = async (url, opt) => {
+globalThis.fetch = () => { throw new Error("fetch ne doit plus être utilisé en jeu (CSP de BeamNG 0.40)") }
+async function fakeServer(url, opt) {
   const p = url.replace("https://fake.supabase.co", "")
   const body = opt.body ? JSON.parse(opt.body) : undefined
   const auth = opt.headers.Authorization.replace("Bearer ", "")
-  const ok = (d, status = 200) => ({ ok: status < 400, status, json: async () => d })
+  const ok = (d, status = 200) => ({ status, body: JSON.stringify(d) })
   calls.push(p)
   if (p === "/auth/v1/signup") {
     anonCalls++
@@ -102,7 +121,9 @@ check(engine[1].includes("onNetResult(8,false,") && engine[1].includes("unknown_
 await handlers.GRNFRNetReq({ id: 9, fn: "drop table; --", args: {} })
 check(engine.length === 2, "nom de fonction suspect refusé")
 // jeton jamais écrit dans le texte envoyé au Lua
-check(!engine.join("").includes("tok_"), "le jeton n'est jamais transmis au Lua")
+check(!engine.join("").includes("tok_"), "le jeton n'est transmis au Lua que pour l'envoi HTTP (jamais dans les autres appels)")
+check(httpCalls.length > 0 && httpCalls.every(h => h.url.startsWith("https://fake.supabase.co/") && h.url.includes("apikey=anon")), "toutes les requêtes passent par le moteur du jeu, clé anon en paramètre d'URL")
+check(httpCalls.some(h => h.authorization === "Bearer tok_anon2"), "le jeton de session part en en-tête Authorization")
 await net.signOut()
 check(st.status === "out" && st.server === null && lcalls.some(c => c[1] === "auth" && !JSON.parse(c[2]).loggedIn), "déconnexion : quitte le serveur, prévient le Lua")
 console.log("=== TESTS CLIENT OK ===")

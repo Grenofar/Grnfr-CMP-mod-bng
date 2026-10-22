@@ -95,9 +95,10 @@ node scripts/build.mjs
 # fails loudly if it didn't actually persist (see the service_role gotcha above) — don't remove that check.
 npm run release -- "release notes"
 
-# Client network tests (fakes Supabase + the Lua bridge) — 18 checks, covers profile creation
+# Client network tests (fakes Supabase + the Lua bridge, including grnfr/http.lua's GRNFRHttp round trip;
+# fetch() throws, so any regression back to fetch fails) — 22 checks, covers profile creation
 # (signUpAnonymous — no e-mail/password path exists in the UI anymore, see below), server join/leave,
-# ghost sync, server-full, not_in_server recovery, Lua RPC bridge, session token never leaking to Lua
+# ghost sync, server-full, not_in_server recovery, Lua RPC bridge, token only sent to Lua for HTTP transport
 node tests/net_test.mjs
 
 # SQL tests, against a real local Postgres (not available in every environment — check before assuming
@@ -127,9 +128,20 @@ you're debugging.
 
 ## Architecture
 
-**Lua does game logic, JS does HTTP.** BeamNG's Lua can't make HTTPS calls, so every extension module under
-`mod/grnfr-mod/lua/ge/extensions/grnfr/` sends requests to `ui/ui-vue/mods/GRNFR/net.js` and gets results
-back via engine events (`GRNFRNetReq` → `onNetResult`). `grnfr_online.call(fn, args, cb)` (`online.lua`) is a
+**Lua does game logic, JS does the online logic, the engine does the HTTPS.** Every extension module under
+`mod/grnfr-mod/lua/ge/extensions/grnfr/` sends requests to `ui/ui-vue/mods/GRNFR/net.js` (which owns the
+session, tokens and error handling) and gets results back via engine events (`GRNFRNetReq` → `onNetResult`).
+**The UI must never `fetch()` an external host**: since BeamNG 0.40 the CEF UI has a Content-Security-Policy
+`connect-src 'self' localhost 127.0.0.1`, so every `fetch()` to Supabase failed with "Failed to fetch" for every
+player (diagnosed in v2.1.5–2.1.7 by wrongly chasing firewalls/DNS; the real proof was in `BeamNG.log`:
+`violates the following Content Security Policy directive`). `net.js`'s `http()` therefore sends each request to
+`grnfr/http.lua` (`extensions.grnfr_http.request(...)`), which calls the engine's native curl client
+`SecureComm.apiCall` (same as `core/online.lua` — hypothesis API, pcall-wrapped) and returns the response via the
+`GRNFRHttp` event. That client only takes one header (`authorizationHeader`), so the anon key goes in the URL
+(`?apikey=`). Consequence: the session token *does* reach Lua, but only in `grnfr_http.request` — `http.lua`
+must never log the URL or the Authorization value. When a network bug is reported, ask for `BeamNG.log`
+(`%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log`) first: CEF console errors are written there.
+`grnfr_online.call(fn, args, cb)` (`online.lua`) is a
 **generic RPC bridge**: any Supabase RPC can be invoked through it without adding new event plumbing — this
 is how `garage.lua`, `chat.lua`, and `drag.lua` talk to the backend. `grnfr.lua`'s `M.ui(name, json)` is the
 single whitelisted entry point for UI → Lua calls (`ROUTES` table).
