@@ -7,11 +7,13 @@
 -- refléter en jeu, sur le véhicule déjà sorti, ce qui vient d'être acheté/enregistré :
 --   * peinture : obj:setColor(r,g,b,a) est une API bien établie (déjà utilisée par des mods tiers) -> confiance
 --     raisonnable pour la couche de base ; les couches 2/3 (setColorPalette0/1) sont une hypothèse non vérifiée.
---   * pièces et réglages : nos « slots » (moteur, jantes...) sont de simples libellés choisis par l'UI, pas de
---     vrais chemins jbeam (le serveur ne connaît pas le catalogue réel de pièces de chaque véhicule BeamNG) ; faute
---     d'accès au jeu dans cette session pour vérifier les vrais noms d'API (core_vehicle_partmgmt), l'achat est
---     fiable (argent, enregistrement, réaffichage) mais l'effet visuel/mécanique réel en jeu N'EST PAS GARANTI.
---     À vérifier en conditions réelles (voir CLAUDE.md > Hypothesis APIs) et à affiner ensuite.
+--   * pièces : depuis 0018_vehicle_parts_catalog.sql, "slot" et "part_key" sont de VRAIS identifiants jbeam
+--     (extraits des fichiers du jeu par scripts/extract-parts-catalog.mjs), donc un vrai nom à passer à
+--     core_vehicle_partmgmt si cette API existe sous cette forme ; mais aucune de ses fonctions exactes
+--     (setPart ? setPartsConfig ? getConfig ?) n'a été vérifiée dans cette session (pas d'accès au jeu) : l'achat
+--     est fiable (argent, enregistrement, réaffichage côté tablette), l'effet réel en jeu NE L'EST PAS — un appel
+--     qui ne lève pas d'erreur ne prouve pas que la pièce a changé. À vérifier en conditions réelles (voir
+--     CLAUDE.md > Hypothesis APIs) et à corriger ici une fois les vraies fonctions connues (BeamNG.log).
 local M = {}
 
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
@@ -45,16 +47,38 @@ function M.applyPaint(vehicleId, paint)
   return true
 end
 
--- parts = { [slot] = { category, part_name, price } } (tel qu'enregistré côté serveur). Tentative de repérer
--- core_vehicle_partmgmt pour un usage futur ; aucune pièce réelle n'est changée tant que les vrais noms
--- d'emplacements/pièces du jeu n'ont pas été vérifiés (voir le commentaire en tête de fichier).
+-- parts = { [slot] = { part_key, name, price } } (vrais identifiants jbeam, 0018_vehicle_parts_catalog.sql).
+-- Essaie plusieurs formes d'appel à core_vehicle_partmgmt (aucune vérifiée en jeu) ; ne pas dire "ça a marché"
+-- juste parce qu'aucune n'a levé d'erreur — seul un essai en jeu réel (BeamNG.log) peut le confirmer.
 function M.applyParts(vehicleId, parts)
   local o = liveObj(vehicleId)
   if not o or type(parts) ~= 'table' then return false end
-  local hasPartmgmt = rawget(_G, 'core_vehicle_partmgmt') ~= nil
-  slog('info', 'Computer: parts purchase saved (' .. tostring(next(parts) and 'has slots' or 'empty')
-    .. '); in-game part swap not applied yet (core_vehicle_partmgmt ' .. (hasPartmgmt and 'present' or 'absent')
-    .. ', unverified in this session).')
+  local vehId
+  pcall(function() vehId = o:getID() end)
+  local tried, noError = 0, 0
+  for slot, info in pairs(parts) do
+    local partKey = type(info) == 'table' and info.part_key or nil
+    if partKey and vehId then
+      tried = tried + 1
+      local ok = pcall(function()
+        if core_vehicle_partmgmt and core_vehicle_partmgmt.setPart then
+          core_vehicle_partmgmt.setPart(vehId, slot, partKey)
+        elseif core_vehicle_partmgmt and core_vehicle_partmgmt.setPartsConfig and core_vehicle_partmgmt.getConfig then
+          local cfg = core_vehicle_partmgmt.getConfig(vehId)
+          if type(cfg) ~= 'table' then error('no config') end
+          cfg.parts = cfg.parts or {}
+          cfg.parts[slot] = partKey
+          core_vehicle_partmgmt.setPartsConfig(vehId, cfg)
+        else
+          error('core_vehicle_partmgmt not usable here')
+        end
+      end)
+      if ok then noError = noError + 1 end
+    end
+  end
+  slog('info', 'Computer: parts purchase saved server-side; tried to apply ' .. tried .. ' part(s) in game, '
+    .. noError .. ' call(s) did not error (core_vehicle_partmgmt function names unverified — not erroring is '
+    .. 'NOT proof the part actually changed, check visually/in BeamNG.log).')
   return true
 end
 

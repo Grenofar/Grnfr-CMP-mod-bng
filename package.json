@@ -1,8 +1,17 @@
 {
   "name": "grnfr-online",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "private": true,
   "description": "Site + build du mod BeamNG GRNFR CMP (backend Supabase)",
-  "scripts": { "build": "node scripts/build.mjs", "release": "node scripts/release.mjs", "test": "node tests/net_test.mjs" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "release": "node scripts/release.mjs",
+    "test": "node tests/net_test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.6.1"
+  }
 }

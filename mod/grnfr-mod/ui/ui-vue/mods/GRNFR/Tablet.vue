@@ -277,14 +277,18 @@
           </div>
 
           <div v-if="cust.tab === 'parts'" class="panel wide">
-            <div v-for="s in SLOTS" :key="s.key" class="tile wide">
-              <div class="tname">{{ L(s.fr, s.en) }} <span class="mut">· {{ catName(s.cat) }}</span></div>
-              <div class="mut">{{ (cust.v.parts && cust.v.parts[s.key]) ? (cust.v.parts[s.key].part_name || L('Pièce posée', 'Part fitted')) : L('Pièce d\'origine', 'Stock part') }}</div>
-              <div class="inline">
-                <input v-model="partNames[s.key]" type="text" :placeholder="L('Nom de la pièce', 'Part name')" maxlength="60" />
-                <button type="button" class="btn" :disabled="!partNames[s.key] || cust.busy" @click="buyPart(s)">{{ L('Acheter', 'Buy') }} ({{ money(priceFor(s.cat)) }})</button>
-                <button v-if="cust.v.parts && cust.v.parts[s.key]" type="button" class="btn dim" :disabled="cust.busy" @click="removePart(s.key)">{{ L('Retirer', 'Remove') }}</button>
+            <p v-if="cust.catalogLoading" class="mut">{{ L('Chargement du catalogue…', 'Loading catalog…') }}</p>
+            <p v-else-if="!catalogSlots.length" class="empty">{{ L('Aucune pièce connue pour ce véhicule.', 'No known parts for this vehicle.') }}</p>
+            <div v-for="s in catalogSlots" :key="s.slot" class="tile wide">
+              <div class="tname">{{ slotLabel(s.slot) }}</div>
+              <div class="mut">{{ currentPartName(s.slot) }}</div>
+              <div class="chips">
+                <button v-for="o in s.options" :key="o.part" type="button" class="chip" :class="{ on: isInstalled(s.slot, o.part) }"
+                        :disabled="cust.busy || isInstalled(s.slot, o.part)" @click="buyPart(s.slot, o.part)">
+                  {{ o.name }}<small>{{ money(o.price) }}</small>
+                </button>
               </div>
+              <button v-if="cust.v.parts && cust.v.parts[s.slot]" type="button" class="btn dim small" :disabled="cust.busy" @click="removePart(s.slot)">{{ L('Retirer', 'Remove') }}</button>
             </div>
           </div>
 
@@ -309,12 +313,20 @@
             <button type="button" class="btn" :disabled="cust.busy" @click="repaint">{{ L('Repeindre', 'Repaint') }} ({{ money(priceFor('paint')) }})</button>
           </div>
 
-          <div v-else class="panel">
-            <p class="mut">{{ L('Capacité de stockage actuelle', 'Current storage capacity') }} : <b>{{ cust.v.cargo_capacity || 0 }}</b> / 20</p>
-            <div class="chips">
-              <button v-for="n in [1, 2, 3, 5]" :key="n" type="button" class="chip" :class="{ on: cust.cargoAmount === n }" @click="cust.cargoAmount = n">+{{ n }}</button>
+          <div v-else class="panel wide">
+            <p class="mut">{{ L('Capacité de stockage actuelle', 'Current storage capacity') }} : <b>{{ cust.v.cargo_capacity || 0 }}</b> {{ L('unité(s)', 'unit(s)') }}</p>
+            <p v-if="!catalogCargoSlots.length && !cust.catalogLoading" class="empty">{{ L('Pas d\'emplacement de stockage connu pour ce véhicule.', 'No known storage slot for this vehicle.') }}</p>
+            <div v-for="s in catalogCargoSlots" :key="s.slot" class="tile wide">
+              <div class="tname">{{ slotLabel(s.slot) }}</div>
+              <div class="mut">{{ currentPartName(s.slot) }}</div>
+              <div class="chips">
+                <button v-for="o in s.options" :key="o.part" type="button" class="chip" :class="{ on: isInstalled(s.slot, o.part) }"
+                        :disabled="cust.busy || isInstalled(s.slot, o.part)" @click="buyPart(s.slot, o.part)">
+                  {{ o.name }} (+{{ o.cargo_units }})<small>{{ money(o.price) }}</small>
+                </button>
+              </div>
+              <button v-if="cust.v.parts && cust.v.parts[s.slot]" type="button" class="btn dim small" :disabled="cust.busy" @click="removePart(s.slot)">{{ L('Retirer', 'Remove') }}</button>
             </div>
-            <button type="button" class="btn" :disabled="cust.busy || (cust.v.cargo_capacity || 0) + cust.cargoAmount > 20" @click="buyCargo">{{ L('Ajouter', 'Add') }} ({{ money(priceFor('cargo') * cust.cargoAmount) }})</button>
           </div>
         </main>
 
@@ -352,7 +364,7 @@ const modeName = m => ({ money: L("Argent", "Money"), car: L("Donner une voiture
 
 const app = ref(null), msg = ref(""), sel = ref(null), mode = ref("money"), insFor = ref(null)
 const f = reactive({ amount: null, gift: "", offer: "", want: "", cash: null })
-const d = reactive({ trades: [], catalog: [], market: [], tx: [], partCats: [] })
+const d = reactive({ trades: [], catalog: [], market: [], tx: [] })
 const theirs = ref([]), theirsLoading = ref(false)
 const profile = computed(() => net.me?.profile || {})
 const vehicles = computed(() => net.me?.vehicles || [])
@@ -438,27 +450,38 @@ async function purchase() {
   buy.busy = false
 }
 // ------------------------------------------------------------------ ordinateur du garage (personnalisation)
-const SLOTS = [
-  { key: "engine", cat: "performance", fr: "Moteur", en: "Engine" },
-  { key: "turbo", cat: "performance", fr: "Turbo", en: "Turbo" },
-  { key: "exhaust", cat: "performance", fr: "Échappement", en: "Exhaust" },
-  { key: "brakes", cat: "performance", fr: "Freins", en: "Brakes" },
-  { key: "suspension", cat: "suspension", fr: "Suspension", en: "Suspension" },
-  { key: "wheels", cat: "cosmetic", fr: "Jantes", en: "Wheels" },
-  { key: "bumper_front", cat: "cosmetic", fr: "Pare-chocs avant", en: "Front bumper" },
-  { key: "bumper_rear", cat: "cosmetic", fr: "Pare-chocs arrière", en: "Rear bumper" },
-  { key: "hood", cat: "cosmetic", fr: "Capot", en: "Hood" },
-  { key: "bodykit", cat: "cosmetic", fr: "Kit carrosserie", en: "Body kit" },
-]
-const CAT_NAMES = { cosmetic: ["Esthétique", "Cosmetic"], performance: ["Performance", "Performance"], suspension: ["Suspension", "Suspension"], paint: ["Peinture", "Paint"], cargo: ["Stockage", "Storage"] }
-const catName = c => L(...(CAT_NAMES[c] || CAT_NAMES.cosmetic))
+// Catalogue RÉEL (supabase/migrations/0018_vehicle_parts_catalog.sql, extrait des vrais fichiers .jbeam du jeu
+// par scripts/extract-parts-catalog.mjs) : plus de libellés inventés, les emplacements et les pièces proposés
+// sont ceux qui existent vraiment pour ce modèle, au vrai prix du jeu.
+const PAINT_RATE = 2 // % de la valeur du véhicule, doit rester identique à private.part_rate('paint') (0015)
 const TAB_NAMES = { parts: ["Pièces", "Parts"], tuning: ["Réglages", "Tuning"], paint: ["Peinture", "Paint"], cargo: ["Stockage", "Storage"] }
 const custTabName = t => L(...TAB_NAMES[t])
 
-const cust = reactive({ v: null, tab: "parts", busy: false, paintLayers: 1, paintHex: ["#ffffff", "#ffffff", "#ffffff"], tuning: { ride: 0, tire: 30 }, cargoAmount: 1 })
-const partNames = reactive({})
-const rateFor = cat => (d.partCats.find(c => c.category === cat) || {}).rate || 0
-const priceFor = cat => Math.max(200, Math.ceil(((cust.v && cust.v.value) || 0) * rateFor(cat) / 100))
+const cust = reactive({ v: null, tab: "parts", busy: false, catalogLoading: false, paintLayers: 1, paintHex: ["#ffffff", "#ffffff", "#ffffff"], tuning: { ride: 0, tire: 30 } })
+const partsCatalog = ref([]) // [{ slot, part, name, price, cargo_units }], pour le modèle de cust.v
+const catalogSlots = computed(() => {
+  const bySlot = {}
+  for (const o of partsCatalog.value) {
+    if (o.cargo_units != null) continue
+    ;(bySlot[o.slot] = bySlot[o.slot] || { slot: o.slot, options: [] }).options.push(o)
+  }
+  return Object.values(bySlot)
+})
+const catalogCargoSlots = computed(() => {
+  const bySlot = {}
+  for (const o of partsCatalog.value) {
+    if (o.cargo_units == null) continue
+    ;(bySlot[o.slot] = bySlot[o.slot] || { slot: o.slot, options: [] }).options.push(o)
+  }
+  return Object.values(bySlot)
+})
+const slotLabel = slot => String(slot || "").replace(/^[a-z0-9]+_/i, "").replace(/_/g, " ")
+const currentPartName = slot => {
+  const p = cust.v && cust.v.parts && cust.v.parts[slot]
+  return p ? (p.name || p.part_key) : L("Pièce d'origine", "Stock part")
+}
+const isInstalled = (slot, part) => !!(cust.v && cust.v.parts && cust.v.parts[slot] && cust.v.parts[slot].part_key === part)
+const priceFor = cat => Math.max(200, Math.ceil(((cust.v && cust.v.value) || 0) * (cat === "paint" ? PAINT_RATE : 0) / 100))
 
 function hexToRgb(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "")
@@ -479,24 +502,22 @@ function openCustomize(v) {
   cust.paintLayers = (v.paint && v.paint.length) || 1
   cust.paintHex = [0, 1, 2].map(i => rgbToHex(v.paint && v.paint[i]))
   cust.tuning = Object.assign({ ride: 0, tire: 30 }, v.tuning || {})
-  cust.cargoAmount = 1
-  for (const k in partNames) delete partNames[k]
   app.value = "customize"; msg.value = ""; net.error = ""
-  if (!d.partCats.length) safe(async () => { d.partCats = await rpc("get_part_categories") })
+  cust.catalogLoading = true
+  safe(async () => { partsCatalog.value = await rpc("get_vehicle_parts_catalog", { p_model_key: v.model_key }) })
+    .finally(() => { cust.catalogLoading = false })
 }
-async function buyPart(s) {
-  const name = (partNames[s.key] || "").trim()
-  if (!name || !cust.v) return
+async function buyPart(slot, part) {
   cust.busy = true
-  await act(() => rpc("buy_vehicle_part", { p_vehicle_id: cust.v.id, p_category: s.cat, p_slot: s.key, p_part_name: name }), async () => {
-    partNames[s.key] = ""; refreshCustVeh()
+  await act(() => rpc("buy_vehicle_part", { p_vehicle_id: cust.v.id, p_slot: slot, p_part_key: part }), async () => {
+    refreshCustVeh()
     await ui("computer.parts", { id: cust.v.id, parts: cust.v.parts })
   })
   cust.busy = false
 }
-async function removePart(slotKey) {
+async function removePart(slot) {
   cust.busy = true
-  await act(() => rpc("remove_vehicle_part", { p_vehicle_id: cust.v.id, p_slot: slotKey }), async () => {
+  await act(() => rpc("remove_vehicle_part", { p_vehicle_id: cust.v.id, p_slot: slot }), async () => {
     refreshCustVeh()
     await ui("computer.parts", { id: cust.v.id, parts: cust.v.parts })
   })
@@ -518,11 +539,6 @@ async function repaint() {
     refreshCustVeh()
     await ui("computer.paint", { id: cust.v.id, paint: cust.v.paint })
   })
-  cust.busy = false
-}
-async function buyCargo() {
-  cust.busy = true
-  await act(() => rpc("buy_cargo_module", { p_vehicle_id: cust.v.id, p_capacity: cust.cargoAmount }), () => refreshCustVeh())
   cust.busy = false
 }
 

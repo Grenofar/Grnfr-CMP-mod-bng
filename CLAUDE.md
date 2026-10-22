@@ -14,7 +14,7 @@ Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
-  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0017).
+  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0018).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
 - `host/` — a standalone Tauri app (Rust backend + React/TypeScript frontend, one native window — not a
   local web server you open in a browser, and not the old egui/eframe version from earlier in this project's
@@ -365,28 +365,26 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.6.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.7.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
   à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
   input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
-- Migrations appliquées en prod : 0001 → 0017 (0015, 0016, 0017 appliquées via l'outil MCP `apply_migration` ;
-  0017 a dû passer par un `drop function` pour renommer un paramètre, accepté sans confirmation interactive cette
-  fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait viser surtout
-  delete/drop sur des données ou des tables). Chacune testée en direct dans une transaction annulée
+- Migrations appliquées en prod : 0001 → 0018 (0015 à 0018 appliquées via l'outil MCP `apply_migration` ; 0017 et
+  0018 ont dû passer par un `drop function` pour changer une signature de paramètres, accepté sans confirmation
+  interactive cette fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait
+  viser surtout delete/drop sur des données ou des tables, 0018 contient 1405 lignes d'insertion appliquées en
+  4 lots pour rester gérable). Chacune testée en direct dans une transaction annulée
   volontairement — voir plus bas.
 - **BeamNG.drive est installé sur CETTE machine** (`F:\SteamLibrary\steamapps\common\BeamNG.drive`, appid 284160
-  dans `F:\SteamLibrary\steamapps\libraryfolders.vdf`) — découverte faite en cherchant à améliorer l'ordinateur du
-  garage. Les véhicules (`content/vehicles/<model>.zip`) contiennent leurs vrais fichiers `.jbeam` (pièces réelles,
-  prix dans `information.value`, arborescence de slots via `slots`/`slots2`/`slotType`) : lisibles directement sur
-  disque, sans lancer le jeu. **Piste pour un futur « vrai » système de pièces** (voir TODO point 1bis) : un script
-  d'extraction (comme `scripts/build.mjs`) pourrait lire ces zips une fois sur cette machine et produire un
-  catalogue statique (slot réel -> pièces réelles + prix réel) à livrer avec le mod et à utiliser côté serveur
-  (remplacerait le système par catégories inventées de 0015). Pas commencé : jbeam est JSON5-like (commentaires
-  `//`, virgules traînantes), un seul vehicule (`barstow`) a été inspecté, aucun parseur écrit. Lancer le jeu
-  lui-même (pour vérifier `core_vehicle_partmgmt` ou les API de dégâts) n'a toujours pas été fait dans cette
-  session (pas de cargo/Tauri build testé non plus).
+  dans `F:\SteamLibrary\steamapps\libraryfolders.vdf`). Les véhicules (`content/vehicles/<model>.zip`) contiennent
+  leurs vrais fichiers `.jbeam` (pièces réelles, prix dans `information.value`, arborescence de slots via
+  `slots`/`slots2`/`slotType`) : lisibles directement sur disque, sans lancer le jeu. **Exploité pour le vrai
+  catalogue de pièces, voir « Fait » ci-dessous** (`scripts/extract-parts-catalog.mjs`). Lancer le jeu lui-même
+  (pour vérifier `core_vehicle_partmgmt` ou les API de dégâts) n'a toujours pas été fait dans cette session (pas de
+  cargo/Tauri build testé non plus) : si une session future a besoin de lancer BeamNG pour vérifier une hypothèse,
+  il est installé ici, inutile de chercher ailleurs.
 - L'utilisateur publie le mod lui-même : `git fetch origin main-n8m0cl && git reset --hard origin/main-n8m0cl` puis
   `.\release.local.bat` (note de version modifiée à la main dans ce .bat, sans accents). Son `main` local a divergé
   par le passé : toujours lui donner ces deux commandes, jamais `git pull` seul.
@@ -407,10 +405,11 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     `buy_cargo_module` ; `get_me()` renvoie maintenant `parts`/`tuning`/`paint`/`cargo_capacity` par véhicule. Prix
     = % de la valeur du véhicule par catégorie (cosmétique 3 %, performance 6 %, suspension 4 %, peinture 2 %,
     stockage 5 % par unité, plancher 200), **jamais un prix envoyé par le client** — comme `private.insurance_plan`
-    (0014). Il n'existe PAS de vrai catalogue de pièces BeamNG côté serveur (des milliers de pièces par véhicule,
-    dans les jbeam du jeu) : « slot » et « part_name » sont de simples libellés choisis par l'UI (10 emplacements
-    fixes dans `Tablet.vue` : moteur, turbo, échappement, freins, suspension, jantes, pare-chocs avant/arrière,
-    capot, kit carrosserie), pas de vrais chemins jbeam. **Testé en direct contre le vrai projet Supabase** : les 6
+    (0014). **⚠️ Historique seulement : ce système par catégories/libellés libres a été entièrement REMPLACÉ par
+    0018_vehicle_parts_catalog.sql (mod 2.7.0, voir plus bas) — `buy_vehicle_part`/`get_part_categories`/
+    `buy_cargo_module` décrits ici n'existent plus avec cette signature.** À l'époque (0015) : il n'existait PAS
+    de vrai catalogue de pièces BeamNG côté serveur, « slot » et « part_name » étaient de simples libellés choisis
+    par l'UI, pas de vrais chemins jbeam. **Testé en direct contre le vrai projet Supabase** : les 6
     RPC + `get_me()` appelées dans une transaction (`do $$ ... raise exception ... $$`, auth simulée via
     `set_config('request.jwt.claims', ...)`) qui s'annule elle-même à la fin — aucune n'a échoué, rien n'a été
     modifié pour de vrai (solde/colonnes vérifiés identiques après coup).
@@ -483,6 +482,36 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   (vérif mod/launcher) est déjà peu fréquent (5 min / 6 h). **Pas de mesure réelle de CPU/RAM** (app jamais lancée
   dans cette session, pas de `cargo`/Tauri ici) : si l'utilisateur observe une vraie surconsommation, il faudra le
   gestionnaire des tâches Windows (nom du processus, CPU, mémoire) pour aller plus loin.
+- **Vrai catalogue de pièces (mod 2.7.0, TODO point 2bis fait)** — redemandé explicitement par l'utilisateur après
+  le point 1 (« c'est vraiment customiser genre on voit les trucs à l'intérieur comme pour la carrière »), rendu
+  possible par la découverte ci-dessus (BeamNG installé sur cette machine).
+  - `scripts/extract-parts-catalog.mjs` (nouveau, dépendance `adm-zip` ajoutée) : lit `content/vehicles/<model>.zip`
+    pour les 14 véhicules de base du concessionnaire, parse TOUS leurs `.jbeam` avec un petit parseur maison
+    (jbeam n'est pas du JSON strict : commentaires, virgules traînantes ET parfois MANQUANTES entre deux membres
+    — rencontré pour de vrai dans `barstow.jbeam` — donc la virgule y est traitée comme un simple séparateur
+    optionnel plutôt que d'essayer de deviner où en rajouter une par regex), part de la pièce `slotType: "main"`
+    et parcourt son arbre de `slots`/`slots2` pour lister, par VRAI emplacement, toutes les VRAIES pièces
+    compatibles avec leur VRAI nom et leur VRAI prix (`information.value`). Jantes/pneus exclus (leur nom est
+    presque toujours une clé de traduction générique sans texte récupérable, et ça représente l'essentiel des
+    lignes). Les emplacements de stockage (ex. "4x Cargo Load Box M") sont repérés par mot-clé et leur capacité
+    cargo est lue directement dans le nom réel de la pièce ("4x..." -> 4 unités).
+  - `supabase/migrations/0018_vehicle_parts_catalog.sql` : nouvelle table `vehicle_parts_catalog` (1405 lignes,
+    14 véhicules, lecture publique comme `dealership_catalog`), **remplace entièrement** le système par
+    catégories inventées de 0015 : `buy_vehicle_part` a changé de signature (`p_vehicle_id, p_slot, p_part_key` —
+    plus de `p_category`/`p_part_name` libres) et va chercher le VRAI prix dans cette table (refuse toute
+    combinaison slot/pièce qui n'existe pas) ; achète aussi une capacité de stockage automatiquement si la pièce
+    en a une. `get_part_categories()` et `buy_cargo_module()` supprimées (obsolètes). Peinture et réglages
+    inchangés (toujours 0015). **Testé en direct contre le vrai Supabase** : catalogue interrogé, achat d'une
+    vraie pièce (capot) et d'un vrai module de stockage, refus d'une pièce inventée, retrait — tout dans une
+    transaction annulée volontairement.
+  - `Tablet.vue` (onglets Pièces/Stockage de l'ordinateur du garage) : parcourt maintenant `get_vehicle_parts_catalog`
+    (vrais emplacements, vraies options avec leur vrai prix) au lieu d'un champ de texte libre. `computer.lua` :
+    `applyParts` essaie maintenant plusieurs formes d'appel à `core_vehicle_partmgmt` avec les VRAIS identifiants
+    (`setPart(vehId, slot, partKey)` ou `getConfig`/`setPartsConfig`) — **aucune vérifiée en jeu**, le journal dit
+    clairement qu'un appel qui ne lève pas d'erreur n'est pas une preuve que la pièce a changé.
+  - Vérifié hors jeu : `node tests/net_test.mjs` (30/30), `Tablet.vue` compile, `computer.lua` syntaxiquement
+    valide, `node scripts/build.mjs` (mode test non relié) confirme que `partsCatalog.json` (297 Ko) est bien
+    inclus dans le zip. **Jamais ouvert dans le vrai jeu.**
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
@@ -497,14 +526,35 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
      portait sur autre chose (taxi PNJ amélioré ?) ou si c'est déjà couvert.
    - **Compte rendu de fin de mission** plus détaillé (bonus/malus de temps, dégâts) et marqueurs dédiés aux points
      de dépôt (`core_groundMarkers`, déjà utilisé par `nav.lua` de façon générique).
-2bis. **Ordinateur du garage, vraies pièces** (redemandé explicitement par l'utilisateur après le point 1 : « c'est
-   vraiment customiser genre on voit les trucs à l'intérieur comme pour la carrière », pas des libellés libres).
-   **Non commencé**, mais une vraie piste existe (voir § BeamNG.drive est installé sur cette machine, plus haut) :
-   écrire un script d'extraction qui lit les `.jbeam` réels des véhicules du jeu (prix réel, arborescence de slots
-   réelle) et produit un catalogue statique livré avec le mod ; remplacer le système par catégories inventées de
-   `0015_vehicle_customization.sql` par un vrai `vehicle_parts_catalog` côté serveur (prix toujours décidé par le
-   serveur, mais basé sur le vrai catalogue, pas une formule en %). Gros morceau : mérite sa propre session dédiée
-   plutôt que d'être bâclé à la fin d'une longue session déjà chargée.
+2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — reste à vérifier en
+   jeu que `core_vehicle_partmgmt` (ou l'API réelle, encore à trouver) applique vraiment la pièce achetée au
+   véhicule, pas seulement en base.
+2ter. **Garage : signalé en jeu par l'utilisateur, « je me suis trouvé dans une sorte de petite tente pour les
+   courses, qui n'est pas un garage »** (mod 2.6.1 ou avant). **Pas encore corrigé** : `grnfr_facilities.garages()`
+   (`getFacilitiesByType('garage'|'computer')`, ou son repli fichiers) a visiblement renvoyé une structure liée aux
+   courses (tente de départ/arrivée ?) comme si c'était un vrai garage résidentiel. À l'ouverture d'une session en
+   jeu : demander le `BeamNG.log`, et/ou lister ce que `getFacilitiesByType('garage')` renvoie vraiment sur la
+   carte concernée (nom, id) pour voir ce qui doit être filtré (peut-être se fier davantage à `hasComputer`, déjà
+   prioritaire, ou exclure les garages sans vraie structure/bâtiment associé).
+2quater. **« On voit les voitures des autres »** (demande reformulée par l'utilisateur, sens exact pas encore
+   confirmé). Le principe existe déjà : `ghosts.lua` affiche la position + le pseudo de chaque joueur distant en
+   fantôme. Si l'utilisateur voulait dire que ça ne marche pas (fantômes absents/invisibles) ou autre chose
+   (voir le modèle réel du véhicule sur le fantôme, pas juste un repère générique ?), **à clarifier avec lui et/ou
+   vérifier en jeu avant de coder quoi que ce soit** — pas assez d'information pour agir cette fois-ci.
+2quinquies. **Vente de pièces à prix libre, dans une boutique privée** (demandé par l'utilisateur, **non
+   commencé**). Le système d'annonces existant (`listings`, `0001_grnfr_online.sql`, onglet Annonces de la
+   tablette) ne vend que des véhicules entiers (`vehicle_id`). Pour vendre une PIÈCE (déjà posée sur un véhicule
+   via 0018, ou achetée en double ?) il faudrait soit une colonne supplémentaire sur `listings` (`part_slot`/
+   `part_key` au lieu de `vehicle_id`, ou les deux en nullable avec une contrainte « l'un ou l'autre »), soit une
+   table séparée ; prix fixé par le vendeur comme pour les véhicules déjà (`create_listing`), donc pas une
+   nouveauté côté sécurité — mais il faut d'abord décider CE qui peut être revendu (une pièce retirée d'un
+   véhicule existe-t-elle encore quelque part, ou disparaît-elle comme c'est le cas aujourd'hui avec
+   `remove_vehicle_part` qui ne fait que l'enlever sans la stocker ?). À concevoir avant de coder.
+2sexies. **Chat accessible depuis la tablette** (demandé par l'utilisateur, **non commencé**). Le chat existe déjà
+   (`chat.lua`, `0005_chat.sql`) mais seulement dans la petite fenêtre rapide (touche J, `QuickPanel.vue`), pas
+   dans `Tablet.vue`. Ajouter un onglet/app "Chat" à la tablette qui réutilise le même état (`net.game.chat` ou
+   équivalent déjà poussé pour `QuickPanel.vue` — à vérifier son nom exact dans `online.lua`/`chat.lua`) serait
+   une petite tâche bornée.
 3bis. **Dégâts persistants + sauvegarde périodique** (demandé par l'utilisateur, **non commencé**) :
    - Les dégâts du véhicule doivent survivre au rangement/à la reconnexion (aujourd'hui : rien n'est enregistré,
      lié à la phase 3 "réparation" déjà prévue plus bas — probablement à faire ensemble plutôt que deux fois).
