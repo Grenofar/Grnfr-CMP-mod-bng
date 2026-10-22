@@ -79,6 +79,8 @@ pub fn run() {
             commands::start_server,
             commands::stop_server,
             commands::kick_player,
+            commands::live_servers,
+            commands::level_roads,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au lancement de l'application Tauri");

@@ -2,7 +2,7 @@
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
   'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
-  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel' }
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap' }
 
 local VERSION = '2.3.2'
 local uiAttached = false
@@ -224,11 +224,12 @@ local ROUTES = {
     grnfr_online.setAuth(a.loggedIn, a.username)
     if a.loggedIn ~= true then
       grnfr_ghosts.setServer(false); grnfr_convoy.setServer(false); grnfr_garage.setServer(false)
-      grnfr_chat.setServer(false); grnfr_drag.setServer(false); grnfr_track.clear()
+      grnfr_chat.setServer(false); grnfr_drag.setServer(false); grnfr_track.clear(); grnfr_roadmap.setServer(false)
     end
   end,
   ['server.state']    = function(a)
     grnfr_ghosts.setServer(a.joined, a.name, a.intervalMs); grnfr_convoy.setServer(a.joined); grnfr_garage.setServer(a.joined)
+    grnfr_roadmap.setServer(a.joined)
     grnfr_chat.setServer(a.joined); grnfr_drag.setServer(a.joined)
     if not a.joined then grnfr_track.clear(); grnfr_travel.cancel() end
   end,
@@ -471,7 +472,7 @@ function M.tick(dtReal)
     if d0 > 0.5 then d0 = 0.5 end
     if modeInfo.session and grnfr_online.isAuthed() then
       grnfr_taxi.update(d0); grnfr_taxibot.update(d0); grnfr_bus.update(d0); grnfr_garage.update(d0)
-      grnfr_chat.update(d0); grnfr_drag.update(d0)
+      grnfr_chat.update(d0); grnfr_drag.update(d0); grnfr_roadmap.update(d0)
     end
     grnfr_nav.update()
     grnfr_http.update(d0)

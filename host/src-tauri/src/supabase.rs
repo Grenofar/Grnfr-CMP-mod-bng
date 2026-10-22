@@ -86,3 +86,16 @@ pub async fn delete_server(host_id: Uuid, id: Uuid) -> Result<(), String> {
     rpc("host_server_delete", serde_json::json!({ "p_host_id": host_id, "p_id": id })).await?;
     Ok(())
 }
+
+// ------------------------------------------------------------------ carte en direct (0013_live_map.sql)
+// Serveurs de jeu du MOD (Serveur 1, 2, 3...) et joueurs présents, avec carte et position 2D. Ce ne sont pas les
+// serveurs de cette installation : le mod ne passe pas (encore) par un relais host, ses joueurs sont sur Supabase.
+pub async fn live_servers() -> Result<serde_json::Value, String> {
+    rpc("live_servers", serde_json::json!({})).await
+}
+
+// Réseau routier d'une carte vu de dessus ({ roads: [[x1,y1,x2,y2]...], bounds }), envoyé une fois par le mod ;
+// null si aucun joueur ne l'a encore envoyé.
+pub async fn level_roads(level: &str) -> Result<serde_json::Value, String> {
+    rpc("get_level_roads", serde_json::json!({ "p_level": level })).await
+}

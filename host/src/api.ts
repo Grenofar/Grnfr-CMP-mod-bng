@@ -19,6 +19,31 @@ export interface ServerStatus {
   players: Player[]
 }
 
+// Carte en direct : serveurs de jeu du MOD (sur Supabase), pas ceux de cette installation.
+export interface LivePlayer {
+  username: string
+  level: string | null
+  x: number | null
+  y: number | null
+  veh: string | null
+  duty: string | null
+  since: string
+}
+
+export interface LiveServer {
+  id: string
+  name: string
+  max_players: number
+  players: LivePlayer[]
+}
+
+export interface LevelRoads {
+  level: string
+  roads: [number, number, number, number][]
+  bounds: { minx: number; miny: number; maxx: number; maxy: number }
+  segments: number
+}
+
 export const api = {
   // null = liste pas encore chargée (toujours en train de contacter Supabase au démarrage)
   listServers: () => invoke<ServerStatus[] | null>("list_servers"),
@@ -30,4 +55,6 @@ export const api = {
   startServer: (id: string) => invoke<void>("start_server", { id }),
   stopServer: (id: string) => invoke<void>("stop_server", { id }),
   kickPlayer: (id: string, clientId: number) => invoke<boolean>("kick_player", { id, clientId }),
+  liveServers: () => invoke<LiveServer[]>("live_servers"),
+  levelRoads: (level: string) => invoke<LevelRoads | null>("level_roads", { level }),
 }

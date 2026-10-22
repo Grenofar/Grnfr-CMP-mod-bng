@@ -108,3 +108,17 @@ fn persist_cache(state: &Arc<HostState>) {
     let servers: Vec<(Uuid, Config)> = state.all().iter().map(|i| (i.id, i.config())).collect();
     config::cache_save(&servers);
 }
+
+// Carte en direct : serveurs de jeu du mod et joueurs présents (voir supabase::live_servers).
+#[tauri::command]
+pub async fn live_servers() -> Result<serde_json::Value, String> {
+    supabase::live_servers().await
+}
+
+#[tauri::command]
+pub async fn level_roads(level: String) -> Result<serde_json::Value, String> {
+    if level.is_empty() || level.len() > 60 || !level.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err("bad_level".into());
+    }
+    supabase::level_roads(&level).await
+}

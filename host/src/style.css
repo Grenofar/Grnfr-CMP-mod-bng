@@ -160,3 +160,22 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ac); }
 .setup-card { width: 420px; max-width: 100%; }
 .setup-card h1 { color: var(--ac); }
 .setup-card form { display: flex; flex-direction: column; margin-top: 16px; }
+
+/* Carte en direct (components/LiveMap.tsx) */
+.main-content.wide { max-width: none; display: flex; flex-direction: column; }
+.live { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.live-body { flex: 1; display: flex; gap: 14px; min-height: 420px; }
+.live-map { position: relative; flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; cursor: grab; }
+.live-map:active { cursor: grabbing; }
+.live-map canvas { display: block; }
+.live-note { position: absolute; left: 12px; right: 12px; top: 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; background: rgba(0, 0, 0, 0.7); color: var(--mut); }
+.live-fit { position: absolute; right: 10px; bottom: 10px; }
+.live-side { width: 270px; flex: none; overflow-y: auto; }
+.live-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+.live-stats > div { display: flex; flex-direction: column; padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); }
+.live-stats b { font-size: 18px; color: var(--ac); }
+.live-player { display: flex; align-items: center; gap: 10px; padding: 8px; margin-bottom: 6px; border-radius: 8px; border: 1px solid var(--line); cursor: pointer; }
+.live-player:hover { border-color: rgba(255, 102, 0, 0.5); }
+.live-player.on { border-color: var(--ac); background: rgba(255, 102, 0, 0.08); }
+.live-av { width: 30px; height: 30px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
+.live-tag { margin-left: 6px; padding: 0 6px; font-size: 10px; border-radius: 8px; border: 1px solid var(--ac); color: var(--ac); }

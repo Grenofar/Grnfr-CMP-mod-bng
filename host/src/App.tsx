@@ -4,6 +4,7 @@ import Sidebar, { Selection } from "./components/Sidebar"
 import AllServers from "./components/AllServers"
 import ServerDetail from "./components/ServerDetail"
 import NewServer from "./components/NewServer"
+import LiveMap from "./components/LiveMap"
 
 export default function App() {
   const [servers, setServers] = useState<ServerStatus[] | null>(null)
@@ -40,9 +41,10 @@ export default function App() {
     return <NewServer firstRun onCreated={id => { setSelected(id); refresh() }} />
   }
 
-  const current = selected !== "overview" && selected !== "new" ? servers.find(s => s.id === selected) : undefined
+  const special = selected === "overview" || selected === "new" || selected === "live"
+  const current = !special ? servers.find(s => s.id === selected) : undefined
   // Le serveur sélectionné a été supprimé depuis ailleurs (ou à l'instant) : retombe sur le tableau de bord.
-  if (selected !== "overview" && selected !== "new" && !current) {
+  if (!special && !current) {
     if (selected !== "overview") setTimeout(() => setSelected("overview"), 0)
   }
 
@@ -50,10 +52,11 @@ export default function App() {
     <div className="shell">
       <Sidebar servers={servers} selected={selected} onSelect={setSelected} />
       <main>
-        <div className="main-content">
+        <div className={selected === "live" ? "main-content wide" : "main-content"}>
           {selected === "overview" && (
             <AllServers servers={servers} onSelect={setSelected} onNew={() => setSelected("new")} onChanged={refresh} />
           )}
+          {selected === "live" && <LiveMap />}
           {selected === "new" && <NewServer onCreated={id => { setSelected(id); refresh() }} />}
           {current && (
             <ServerDetail
