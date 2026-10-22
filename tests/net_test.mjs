@@ -13,8 +13,22 @@ code = code.replace('import { reactive } from "vue"', "const reactive = x => x")
   .replace('import cfg from "./serverConfig.js"', 'const cfg = { url: "https://fake.supabase.co", anonKey: "anon" }')
   .replace('import { callLua, unwrapObj, unwrapList } from "./luaCall.js"', 'import { callLua, unwrapObj, unwrapList } from "./lua_stub.mjs"')
 fs.writeFileSync(path.join(tmp, "net.mjs"), code)
-const lcalls = [], engine = [], handlers = {}, launcherCalls = []
-globalThis.__t = { lcalls, engine, handlers, lua: c => engine.push(c) }
+const lcalls = [], engine = [], handlers = {}, launcherCalls = [], luaHttpCalls = []
+// Faux grnfr/http.lua (second chemin vers le launcher, par le Lua du jeu) : extensions.grnfr_http.request(id, method,
+// path, body, apikey, authorization) -> faux launcher -> réponse par l'événement GRNFRHttp.
+const luaArgs = s => [...s.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => new TextDecoder().decode(Uint8Array.from(
+  m[1].match(/\\\d{3}|\\.|[^\\]/g) || [], t => t.length === 4 && t[0] === "\\" ? Number(t.slice(1)) : t.length === 2 ? t.charCodeAt(1) : t.charCodeAt(0))))
+function luaHttp(c) {
+  const id = Number(c.match(/^extensions\.grnfr_http\.request\((\d+),/)[1])
+  const [method, path, body, apikey, authorization] = luaArgs(c)
+  luaHttpCalls.push({ method, path, apikey, authorization })
+  setTimeout(async () => {
+    const r = !launcherUp ? { status: 0, error: "launcher injoignable sur 127.0.0.1:30815 (connection refused)" }
+      : await fakeServer("https://fake.supabase.co" + path, { method, headers: { Authorization: authorization }, body: body || undefined })
+    handlers.GRNFRHttp({ id, ...r })
+  }, 0)
+}
+globalThis.__t = { lcalls, engine, handlers, lua: c => c.startsWith("extensions.grnfr_http.request(") ? luaHttp(c) : engine.push(c) }
 fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.lua(c) } })`)
 fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d\nexport const unwrapList = d => d`)
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
@@ -26,9 +40,9 @@ const MAX = 4
 let anonCalls = 0
 // Comme dans BeamNG 0.40 : l'interface ne peut joindre que localhost. fetch vers Supabase -> "Failed to fetch".
 // fetch vers http://127.0.0.1:30815 -> faux GRNFR CMP Launcher (s'il est "ouvert"), qui relaie au faux Supabase.
-let launcherUp = true
+let launcherUp = true, uiBlocked = false // uiBlocked : l'interface ne joint pas le launcher (cas vu en jeu)
 globalThis.fetch = async (url, opt) => {
-  if (!url.startsWith("http://127.0.0.1:30815/") || !launcherUp) throw new TypeError("Failed to fetch")
+  if (!url.startsWith("http://127.0.0.1:30815/") || !launcherUp || uiBlocked) throw new TypeError("Failed to fetch")
   launcherCalls.push({ url, method: opt.method, apikey: opt.headers.apikey, authorization: opt.headers.Authorization })
   const r = await fakeServer(url.replace("http://127.0.0.1:30815", "https://fake.supabase.co"), opt)
   return { status: r.status, text: async () => r.body }
@@ -117,10 +131,22 @@ check(launcherCalls.some(c => c.authorization === "Bearer tok_anon2"), "le jeton
 await net.signOut()
 check(st.status === "out" && st.server === null && lcalls.some(c => c[1] === "auth" && !JSON.parse(c[2]).loggedIn), "déconnexion : quitte le serveur, prévient le Lua")
 
-// Launcher fermé : message clair (pas un « Failed to fetch » incompréhensible), y compris pour la vérif de pseudo.
+check(luaHttpCalls.length === 0, "l'interface joint le launcher : le Lua n'est pas sollicité")
+
+// Cas vu en jeu : launcher ouvert, mais l'interface ne le joint pas -> second chemin par le Lua du jeu.
+await net.signOut()
+uiBlocked = true
+check(await net.signUpAnonymous("zoe") === true && st.username === "zoe", "interface bloquée : profil créé quand même via le Lua du jeu")
+check(luaHttpCalls.length > 0 && luaHttpCalls.every(c => /^\/(rest|auth)\/v1\//.test(c.path) && c.apikey === "anon"), "le Lua reçoit un chemin seulement, avec la clé anon")
+const fetchesBefore = launcherCalls.length
+await net.refreshMe()
+check(launcherCalls.length === fetchesBefore, "le chemin qui marche (Lua) est retenu : plus d'essai inutile par l'interface")
+
+// Launcher fermé : message clair avec les deux vraies causes.
+await net.signOut()
 launcherUp = false
-check(await net.signUpAnonymous("zoe") === false && st.error.includes("GRNFR CMP Launcher n'est pas ouvert"), "launcher fermé : le joueur sait quoi faire")
-check(st.lastNetworkDetail.includes("Launcher"), "le détail affiché sous le champ pseudo nomme aussi le launcher")
-launcherUp = true
-check(await net.signUpAnonymous("zoe") === true, "launcher rouvert : ça repart sans relancer le jeu")
+check(await net.signUpAnonymous("yann") === false && st.error.includes("Impossible de joindre GRNFR CMP Launcher"), "launcher fermé : le joueur sait quoi faire")
+check(st.error.includes("interface : Failed to fetch") && st.error.includes("Lua : launcher injoignable"), "le message donne les deux vraies causes : " + st.error)
+launcherUp = true; uiBlocked = false
+check(await net.signUpAnonymous("yann") === true, "launcher rouvert : ça repart sans relancer le jeu")
 console.log("=== TESTS CLIENT OK ===")

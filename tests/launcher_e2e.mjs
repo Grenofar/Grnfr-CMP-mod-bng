@@ -6,9 +6,14 @@ import path from "path"
 import os from "os"
 import http from "http"
 import assert from "assert"
-import { spawn } from "child_process"
+import { spawn, execFileSync } from "child_process"
 import { pathToFileURL } from "url"
 
+// LuaJIT lancé SANS bloquer Node : le faux Supabase tourne dans ce même processus et doit pouvoir répondre.
+const runLua = mode => new Promise((resolve, reject) => {
+  const p = spawn("luajit", ["tests/lua_http_e2e.lua", mode], { stdio: ["ignore", "inherit", "inherit"] })
+  p.on("exit", code => code === 0 ? resolve() : reject(new Error("test Lua (" + mode + ") en échec : code " + code)))
+})
 const check = (c, w) => { assert.ok(c, "ECHEC : " + w); console.log("ok   " + w) }
 
 // ---------- faux Supabase (HTTP local) : signup anonyme, pseudo, get_me ; refuse sans apikey
@@ -51,7 +56,7 @@ try {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "grnfr-e2e-"))
   let code = fs.readFileSync("mod/grnfr-mod/ui/ui-vue/mods/GRNFR/net.js", "utf8")
   code = code.replace('import { reactive } from "vue"', "const reactive = x => x")
-    .replace('import { useBridge } from "@/bridge"', 'const useBridge = () => ({ events: { on() {}, off() {} }, api: { engineLua() {} } })')
+    .replace('import { useBridge } from "@/bridge"', 'const useBridge = () => ({ events: { on() {}, off() {} }, api: { engineLua() {} } }) // pas de Lua ici : le chemin Lua est testé à part (lua_http_e2e.lua)')
     .replace('import cfg from "./serverConfig.js"', 'const cfg = { url: "https://ne-doit-pas-etre-appele.invalid", anonKey: "anon" }')
     .replace('import { callLua, unwrapObj, unwrapList } from "./luaCall.js"', "const callLua = async () => {}, unwrapObj = d => d, unwrapList = d => d")
   fs.writeFileSync(path.join(tmp, "net.mjs"), code)
@@ -66,9 +71,15 @@ try {
   try { await net.rpc("fonction_inconnue", {}) } catch (x) { e = x }
   check(e && e.code === "unknown_fn" && e.status === 404, "erreur du serveur relayée avec son code et son statut")
 
+  // Second chemin du mod : le VRAI grnfr/http.lua dans LuaJIT + LuaSocket (si installés), vers le même relais.
+  let lua = true
+  try { execFileSync("luajit", ["-e", "require('socket')"], { stdio: "ignore" }) } catch (x) { lua = false; console.log("--   luajit + LuaSocket absents : test Lua sauté") }
+  if (lua) await runLua("up")
+
   relay.kill()
   await new Promise(r => relay.on("exit", r))
-  check(await net.signUpAnonymous("carol") === false && net.net.error.includes("GRNFR CMP Launcher n'est pas ouvert"), "relais arrêté : message « launcher pas ouvert »")
+  if (lua) await runLua("down")
+  check(await net.signUpAnonymous("carol") === false && net.net.error.includes("Impossible de joindre GRNFR CMP Launcher"), "relais arrêté : message « launcher injoignable » : " + net.net.error)
   console.log("=== BOUT EN BOUT OK ===")
 } finally {
   relay.kill()

@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { api, ModStatus, Settings, Status } from "../api"
 import ModeChooser from "./ModeChooser"
-import PathField from "./PathField"
-import UpdateCard from "./UpdateCard"
 
 const fileName = (p: string) => p.split(/[\\/]/).pop() || p
 
-export default function Home({ settings, onSettings, onWizard }: {
+export default function Home({ settings, onSettings }: {
   settings: Settings
   onSettings: (s: Settings) => void
-  onWizard: () => void
 }) {
   const [status, setStatus] = useState<Status | null>(null)
   const [mod, setMod] = useState<ModStatus | null>(null)
@@ -17,8 +14,6 @@ export default function Home({ settings, onSettings, onWizard }: {
   const [modBusy, setModBusy] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [launchMsg, setLaunchMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [showSettings, setShowSettings] = useState(false)
-  const [draft, setDraft] = useState<Settings>(settings)
 
   useEffect(() => {
     const poll = () => api.status().then(setStatus).catch(() => {})
@@ -61,11 +56,6 @@ export default function Home({ settings, onSettings, onWizard }: {
   const relayOk = status?.relay_ok
   return (
     <div className="home">
-      <div className="row between">
-        <h1>GRNFR CMP Launcher</h1>
-        <span className="mut small">v{__APP_VERSION__}</span>
-      </div>
-
       <div className={relayOk ? "card relay ok" : "card relay ko"}>
         <div className="row between">
           <div>
@@ -110,29 +100,6 @@ export default function Home({ settings, onSettings, onWizard }: {
         {modError && <p className="err">{modError}</p>}
       </div>
 
-      <UpdateCard />
-
-      <div className="card">
-        <div className="row between">
-          <label>Réglages</label>
-          <div className="row">
-            <button className="btn dim sm" onClick={onWizard}>Relancer l'assistant</button>
-            <button className="btn dim sm" onClick={() => { setDraft(settings); setShowSettings(!showSettings) }}>{showSettings ? "Fermer" : "Modifier"}</button>
-          </div>
-        </div>
-        {showSettings && (
-          <>
-            <PathField label="BeamNG.drive (exécutable)" value={draft.beamng_exe} onChange={v => setDraft({ ...draft, beamng_exe: v })} optional />
-            <PathField label="BeamMP Launcher" value={draft.beammp_exe} onChange={v => setDraft({ ...draft, beammp_exe: v })} optional />
-            <PathField label="Dossier mods de BeamNG" value={draft.mods_dir} onChange={v => setDraft({ ...draft, mods_dir: v })} directory />
-            <label className="row">
-              <input type="checkbox" checked={draft.auto_update_mod} onChange={e => setDraft({ ...draft, auto_update_mod: e.target.checked })} />
-              Mettre à jour le mod automatiquement avant chaque lancement
-            </label>
-            <div className="row between"><span /><button className="btn" onClick={() => save(draft).then(() => setShowSettings(false))}>Enregistrer</button></div>
-          </>
-        )}
-      </div>
     </div>
   )
 }

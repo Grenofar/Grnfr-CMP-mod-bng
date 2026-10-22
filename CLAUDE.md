@@ -109,6 +109,9 @@ node tests/net_test.mjs
 # End-to-end: real net.js -> REAL Rust relay (launcher/core, `cargo run --example relay`) -> fake Supabase.
 # Needs cargo. Proves the mod and the launcher agree on paths, headers, bodies and error codes.
 node tests/launcher_e2e.mjs
+# It also runs the REAL grnfr/http.lua under LuaJIT + LuaSocket (tests/lua_http_e2e.lua) against the same relay
+# when `luajit` and LuaSocket are installed (`apt-get install luajit lua-socket` works in the cloud sandbox;
+# `luajit -bl file.lua` is a real syntax/compile check for the mod's Lua).
 
 # launcher/ — core logic tests (relay, Steam/BeamMP/mods detection, launch commands, mod install with sha256,
 # settings, app state; 26 tests), then the app itself (same build requirements as host/ below)
@@ -159,8 +162,14 @@ v2.1.10). **Do not retry any of these.** The only open door is localhost, so (mo
 request to **GRNFR CMP Launcher** at `http://127.0.0.1:30815` (`launcher/core/src/proxy.rs`), which relays only
 `/rest/v1/*` and `/auth/v1/*` to the Supabase URL compiled into it (never an open proxy, loopback only, CORS +
 `Access-Control-Allow-Private-Network` answered for Chromium — verified from a real Chromium `file://` page).
-If nothing listens there, `net.js` throws `launcher_missing` with a message telling the player to start the
-launcher; a relay-side failure to reach Supabase comes back as HTTP 502 `launcher_upstream`. Port `30815` is
+**Two routes to the launcher** (mod 2.2.1+): first the UI `fetch()`; if it fails (seen in the real game with
+the launcher open — the CEF's local-network restrictions, not reproducible in a plain Chromium), `net.js` falls
+back to **`grnfr/http.lua`**: plain HTTP over the game's LuaSocket to `127.0.0.1:30815` only (no TLS needed on
+the same machine; takes a *path*, never a URL), one coroutine per request advanced by `grnfr_http.update` from
+`grnfr.lua`'s `M.tick`, reply via the `GRNFRHttp` event. Whichever route answers is remembered (`route`) and
+retried first. The session token reaches Lua only on that route, and `http.lua` never logs it. If both fail,
+`net.js` throws `launcher_missing` and the message shows both real causes (`interface : … ; Lua : …`); a
+relay-side failure to reach Supabase comes back as HTTP 502 `launcher_upstream`. Port `30815` is
 hardcoded on both sides (`LAUNCHER_URL` in `net.js`, `DEFAULT_ADDR` in `proxy.rs`) — change both or neither.
 `grnfr_online.call(fn, args, cb)` (`online.lua`) is a
 **generic RPC bridge**: any Supabase RPC can be invoked through it without adding new event plumbing — this
@@ -303,8 +312,12 @@ which design is actually in place.
   BeamMP location is a guess (unverified on a real install); the wizard lets the user browse for it.
 - **Launch** (`core/src/launch.rs`): Steam = `cmd /C start "" steam://rungameid/284160` (no window), direct = the
   BeamNG exe, BeamMP = BeamMP Launcher (which starts BeamNG itself).
+- **UI**: first-run wizard, then a top bar with **Accueil** (relay status, launch, mod card) and **Paramètres**
+  (paths + "Détecter automatiquement", default launch mode, auto-update of the mod, launcher self-update card,
+  relay info). No "re-run the wizard" button. Never mention the host app anywhere in the launcher.
 - **Verified**: core tests, both Tauri apps compiled in the sandbox, launcher run under Xvfb (wizard → home,
-  settings saved, relay `/health`), real Chromium page → relay with the mod's headers, `tests/launcher_e2e.mjs`.
+  settings page, settings saved, relay `/health`), real Chromium page → relay with the mod's headers,
+  `tests/launcher_e2e.mjs` (incl. real LuaJIT route).
   **Not verified**: anything on Windows (detection on a real machine, launching, SmartScreen — the exe is unsigned
   by Microsoft so Windows shows "Windows a protégé votre ordinateur"), and the mod talking to it from inside the
   real BeamNG. Say so plainly.

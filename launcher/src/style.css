@@ -180,3 +180,13 @@ main.single .main-content { margin: 0 auto; }
 .btn.launch-btn { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; color: #fff; }
 .card.relay.ok { border-color: rgba(74, 222, 128, 0.4); }
 .card.relay.ko { border-color: rgba(255, 107, 107, 0.5); }
+.topbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 16px; padding: 10px 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.topbar .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.topbar .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 8px var(--ac); }
+.tabs { display: flex; gap: 4px; flex: 1; }
+.tab { background: transparent; box-shadow: none; color: var(--mut); padding: 7px 14px; display: inline-flex; align-items: center; gap: 6px; }
+.tab:hover:not(:disabled) { background: rgba(255, 102, 0, 0.12); color: var(--tx); transform: none; box-shadow: none; }
+.tab.on { background: var(--ac); color: #fff; }
+.badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #fff; color: var(--ac); font-size: 11px; line-height: 16px; text-align: center; }
+.save-bar { margin: -4px 0 14px; }
+code { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px; }
