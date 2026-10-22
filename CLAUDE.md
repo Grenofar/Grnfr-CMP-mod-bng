@@ -186,6 +186,13 @@ fully removed from `OnlineWindow.vue` and `net.js` — don't re-add it without b
 is `^[A-Za-z0-9_]{3,20}$`, enforced identically on the client (`net.js`, multiple places) and in SQL
 (`username_format` check constraint, `handle_new_user` trigger, `set_username`, `change_username`) — if you
 relax one side you must relax all of them, including the trigger on `auth.users`.
+**Profiles survive mod updates/reinstalls, confirmed by reading the code (22/10/2026, asked explicitly by the
+user):** `profile.lua`'s `DIR = 'settings/grnfr/profiles/'` resolves under BeamNG's per-user `settings/` folder
+(e.g. `%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\settings\grnfr\profiles\`), physically separate from the
+`mods/` folder the launcher installs into. `launcher/core/src/modsync.rs::install` only ever touches files
+inside `mods_dir` (writes the new zip, deletes other `grnfr-online*.zip`) — it never reads or writes `settings/`.
+So reinstalling/updating the mod (or the launcher itself) cannot delete a saved profile; nothing in this repo
+needs to change for this.
 
 **Recurring debugging trap: stale installed mod vs. real bug.** Several times this session, a reported
 error message (verbatim) didn't match any string currently in the code — meaning the user was testing an
