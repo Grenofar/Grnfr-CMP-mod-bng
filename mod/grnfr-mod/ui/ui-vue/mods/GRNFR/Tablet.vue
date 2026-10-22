@@ -40,6 +40,7 @@
               <div class="tname">{{ v.nickname || fullName(vi(v.model_key, v.config_key), v.model_key) }}</div>
               <div class="mut">{{ specLine(vi(v.model_key, v.config_key)) || v.model_key }}</div>
               <div class="price">{{ money(v.value) }}</div>
+              <div class="mut classes">{{ L('Perf', 'Perf') }} {{ stars(v.perf_class) }} · {{ L('Confort', 'Comfort') }} {{ stars(v.comfort_class) }}</div>
               <div class="tags">
                 <span class="tag" :class="'ins-' + (v.insurance || 'none')">{{ planName(v.insurance) }}</span>
                 <span v-if="v.listed" class="tag">{{ L('En vente', 'Listed') }}</span>
@@ -174,6 +175,7 @@
               <div class="tname">{{ c.name }}</div>
               <div class="mut">{{ specLine(vi(c.model_key, c.config_key)) }}</div>
               <div class="price">{{ money(c.price) }}</div>
+              <div class="mut classes">{{ L('Perf', 'Perf') }} {{ stars(c.perf_class) }} · {{ L('Confort', 'Comfort') }} {{ stars(c.comfort_class) }}</div>
             </div>
           </div>
         </main>
@@ -185,6 +187,7 @@
               <div class="vtxt">
                 <h3>{{ buy.c.name }}</h3>
                 <div class="mut">{{ L('Prix affiché', 'List price') }} : <b>{{ money(buy.c.price) }}</b></div>
+                <div class="mut classes">{{ L('Perf', 'Perf') }} {{ stars(buy.c.perf_class) }} · {{ L('Confort', 'Comfort') }} {{ stars(buy.c.comfort_class) }}</div>
                 <div class="specs">
                   <div v-for="sp in specs(vi(buy.c.model_key, buy.c.config_key))" :key="sp[0]"><span>{{ sp[0] }}</span><b>{{ sp[1] }}</b></div>
                 </div>
@@ -426,6 +429,7 @@ import VehImg from "./VehImg.vue"
 
 const L = (fr, en) => (net.lang === "en" ? en : fr)
 const money = n => (Number(n) < 0 ? "-$" : "$") + Math.abs(Number(n || 0)).toLocaleString(net.lang === "en" ? "en-US" : "fr-FR")
+const stars = n => "★".repeat(Math.max(0, Math.min(5, Number(n) || 0))) + "☆".repeat(5 - Math.max(0, Math.min(5, Number(n) || 0)))
 const apps = [
   { id: "garage", color: "#ff6600", path: "M3 11l9-7 9 7M5 10v10h14V10M9 20v-6h6v6" },
   { id: "players", color: "#3b82f6", path: "M9 11a4 4 0 100-8 4 4 0 000 8zM2 21c0-4 3-6 7-6s7 2 7 6M17 11a3 3 0 100-6M22 21c0-3-2-5-5-5" },

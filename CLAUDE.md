@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.12.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.13.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -688,6 +688,38 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     `extensions` à l'exécution n'a pas été confirmé en jeu réel), et jamais vérifié que le monkey-patch résiste à
     un rechargement de l'extension native (qui recréerait `M` et perdrait notre enveloppe — à surveiller).
 
+- **Grand chantier Phase C — classes perf/confort, pourboire taxi, délai après dépose (mod 2.13.0)**.
+  - `supabase/migrations/0023_vehicle_classes.sql` : `perf_class`/`comfort_class` (1 à 5, façon étoiles) ajoutées
+    à `dealership_catalog` (56 lignes remplies à la main selon le vrai comportement de chaque véhicule BeamNG —
+    approximation raisonnable, pas une mesure physique) et à `garage_vehicles` (copiées à l'achat, `buy_vehicle`
+    et `buy_vehicle_insured` mis à jour, `get_catalog()`/`get_me()` les renvoient maintenant). **Tranché sans
+    demander** : pas de véhicule de flotte dédié obligatoire pour le taxi/bus — le joueur utilise SON propre
+    véhicule (cohérent avec la Phase M, « on ne peut faire apparaître que les véhicules qu'on possède ») ; sa
+    classe confort s'applique simplement à la course en cours.
+  - **Pourboire/refus lié au confort** : `private.comfort_tip(model_key, config_key, smoothness)` — `smoothness`
+    (0-100, mesuré par `taxi.lua` pendant la course, **jamais un montant, juste un score de douceur de conduite**)
+    vient du client mais le pourboire ET le seuil de refus sont décidés entièrement par le serveur
+    (`taxi_comfort_tip_per_class`, `taxi_comfort_refuse_below`). `taxi_complete` (course d'un autre joueur) : si
+    la conduite était trop brusque, le passager est intégralement remboursé et le chauffeur ne reçoit rien — "pas
+    forcément gagnant" comme demandé. `complete_job` (npc_taxi/bus_leg, passager virtuel) : pas de refus possible
+    (personne à qui refuser), juste un pourboire variable. `bot_taxi` (le joueur est PASSAGER) : non concerné, le
+    joueur ne conduit pas. **Testé en direct contre le vrai Supabase** : course douce (Bolide, confort 2,
+    douceur 95) → pourboire +10 vérifié exact ; course brutale (douceur 10) → passager remboursé, chauffeur à 0 ;
+    `complete_job` avec un ETK 800 856xc (confort 5, douceur 100) → pourboire +25 vérifié exact — tout dans des
+    transactions annulées volontairement, soldes revérifiés identiques après coup.
+  - `taxi.lua` : échantillonne l'accélération subie (delta de vitesse / dt, **une approximation du G-force, pas
+    une mesure physique exacte**) à chaque image pendant que le passager est à bord, convertit en score 0-100 à
+    l'arrivée. Toast différent si le passager refuse de payer vs pourboire confort reçu.
+  - ~~**Cooldown après dépose**~~ **En fait déjà présent avant cette session** (`cooldown = 4` après `finish()`
+    dans `taxi.lua`) — la description du TODO plus bas affirmait qu'il n'y en avait aucun SANS avoir relu le
+    code, ce qui était faux. Simplement augmenté à 8 s suite à la demande explicite de l'utilisateur.
+  - `Tablet.vue` : classes perf/confort affichées en étoiles (★★★☆☆) sur les tuiles Mes voitures, catalogue
+    concession et détail d'achat.
+  - Vérifié hors jeu : `luaparse` sur `taxi.lua`, `Tablet.vue` compile, `node tests/net_test.mjs` (30/30).
+    **Jamais ouvert dans le vrai jeu** — en particulier la formule d'échantillonnage du G-force (seuils
+    `COMFORT_TOLERANCE`/`COMFORT_SCALE`) n'a jamais été calibrée contre une vraie conduite, les valeurs sont un
+    point de départ raisonnable à ajuster une fois testé.
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -881,6 +913,28 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
 **Pas encore priorisé entre les phases** : l'utilisateur a demandé de proposer lui-même l'ordre complet avant de
 commencer à coder quoi que ce soit — voir la conversation pour la proposition faite et sa réponse, avant de
 commencer la Phase A.
+
+### Demandes supplémentaires du 22/10/2026 (arrivées après le début du grand chantier, PAS ENCORE FAITES)
+
+- **Téléphone (touche K) : refonte visuelle** — doit ressembler à l'ordinateur/tablette (`Tablet.vue`) : contours
+  arrondis façon vrai téléphone, écran d'accueil à icônes d'application (taxi, etc.), pas le panneau plat ancré
+  dans un coin actuel (`QuickPanel.vue`). Concerne l'apparence uniquement, pas le contenu fonctionnel (déjà fait
+  en Phase A : chat/joueurs/taxi/drag).
+- **Garages : le nom persiste et on voit les 4 garages du joueur** — « Garage de X » doit rester affiché tout le
+  temps (pas seulement selon la proximité actuelle), et le joueur doit voir ses 4 garages (une fois la Phase G
+  faite — « 4 garages par joueur » — actuellement un seul à la fois), qu'ils soient pris ou non. Dépend de la
+  Phase G (garages) ci-dessus, pas encore faite.
+- **Tâches aléatoires qui apparaissent spontanément** — taxi, colis (livraison) ou courses de drag qui « popent »
+  sans action du joueur (notification/offre spontanée), plutôt que seulement à la demande (taxi : service actif ;
+  livraison : rafraîchir manuellement ; drag : marquer soi-même un départ/arrivée). Mécanisme à concevoir
+  (fréquence, notification, où ça apparaît).
+- **Drag : pré-inscription + spectateurs/paris** — actuellement (`drag.lua`, `0007_drag_races.sql`) on marque un
+  départ/arrivée et on propose IMMÉDIATEMENT une course. Nouveau : pouvoir se « pré-inscrire » à une course de
+  drag à venir (avant qu'elle ne démarre), et que D'AUTRES joueurs puissent rejoindre/parier de l'argent sur la
+  course de quelqu'un en voyant d'abord la fiche du véhicule adverse (puissance/couple — ps/nm — et une photo,
+  comme les fiches véhicule déjà affichées ailleurs dans la tablette via `vehinfo.lua`/`VehImg.vue`), puis
+  accepter ou refuser. Gros morceau de conception (pas juste un ajout de colonne) : mérite sa propre passe plutôt
+  que d'être bâclé.
 
 ### Règles à garder
 - Toute API du jeu non vérifiée sous `pcall`, avec repli, et des logs `Garage:`/`Travel:`/... dans BeamNG.log
