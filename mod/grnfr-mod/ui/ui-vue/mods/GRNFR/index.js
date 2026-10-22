@@ -7,6 +7,7 @@ import FpsOverlay from "./FpsOverlay.vue"
 import HudOverlay from "./HudOverlay.vue"
 import OnlineWindow from "./OnlineWindow.vue"
 import QuickPanel from "./QuickPanel.vue"
+import ServerBar from "./ServerBar.vue"
 import { initNet, stopNet, ui } from "./net.js"
 import { startPerfStore, stopPerfStore } from "./perfStore.js"
 
@@ -20,6 +21,8 @@ let onlineApp = null
 let onlineEl = null
 let quickApp = null
 let quickEl = null
+let barApp = null
+let barEl = null
 
 function addGrnfrButton(addButton) {
   // Un seul bouton : ouvre la fenêtre GRNFR CMP (comptes, serveurs, garage... et réglages). Fonctionne depuis
@@ -59,6 +62,12 @@ export async function onLoad() {
   document.body.appendChild(quickEl)
   quickApp = createApp(QuickPanel)
   quickApp.mount(quickEl)
+  // Bandeau du serveur (haut de l'écran) : nom du serveur et joueurs présents / places
+  barEl = document.createElement("div")
+  barEl.id = "grnfr-serverbar-root"
+  document.body.appendChild(barEl)
+  barApp = createApp(ServerBar)
+  barApp.mount(barEl)
   initNet().catch(e => console.error("[GRNFR] online", e))
   try {
     await lua.extensions.ui_pause_actions.registerModButton({
@@ -85,6 +94,8 @@ export async function onUnload() {
   onlineEl?.remove()
   quickApp?.unmount()
   quickEl?.remove()
-  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = null
+  barApp?.unmount()
+  barEl?.remove()
+  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = null
   try { await lua.extensions.ui_pause_actions.unregisterModButton(PAUSE_BUTTON_ID) } catch (e) { /* ignoré */ }
 }

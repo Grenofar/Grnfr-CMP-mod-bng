@@ -215,10 +215,14 @@ rather than trusting the client outright. The same "limited, not foolproof" phil
 
 **Joining a server travels to the other players** (mod 2.3.0+): right after `join_server`, `net.js`
 (`travelToPlayers`) does one read-only `server_sync` (all-null args), takes the oldest other member's `level`/`pos`
-and sends `server.travel` to Lua; `grnfr/travel.lua` loads that map in free roam (or, server empty, stays put —
-from the main menu loads `west_coast_usa`), then places the player's car a few metres from that player once the
-map and vehicle are ready. Load/teleport APIs (`freeroam_freeroam.startFreeroamByName`, `core_levels.startLevel`,
-`spawn.safeTeleport`) are unverified hypotheses under `pcall`.
+and sends `server.travel` to Lua. `grnfr/travel.lua` (2.3.2) starts that map **in free roam** the way BeamMP's
+`multiplayer.lua` does (`extensions.load('freeroam_freeroam')` if needed, then `freeroam_freeroam.startFreeroam(<entry
+of core_levels.getList()>)`; plain `core_levels.startLevel` only as a last resort, followed by
+`core_gamestate.setGameState('freeroam',…)` — loading a level without the free-roam game mode left players on the
+main menu in 2.3.0/2.3.1). Server empty: current map, or `west_coast_usa` from the main menu. Then: car placed near
+that player → `garage.lua` released (it holds its claim on a fresh join so the garage isn't picked near the default
+spawn point) → car placed 4 m from the player's own garage (tablet in reach). The mod windows close before a load.
+All these game APIs are unverified hypotheses under `pcall`. `ServerBar.vue` = top-centre pill "server · n/max".
 
 **Host election / handover needs no explicit state.** The shared-traffic "host" (`convoy.lua`,
 `0003_convoy.sql`) is just "the `server_members` row with the oldest `joined_at` still present" —
