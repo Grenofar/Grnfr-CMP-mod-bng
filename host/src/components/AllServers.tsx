@@ -30,7 +30,7 @@ export default function AllServers({ servers, onSelect, onNew, onChanged }: {
     <div>
       <h1>Tableau de bord</h1>
 
-      <UpdateBanner />
+      <UpdateBanner runningCount={runningCount} />
 
       <div className="card">
         <div className="row">
