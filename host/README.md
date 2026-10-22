@@ -81,11 +81,17 @@ commitée**. La clé publique correspondante est dans `src-tauri/tauri.conf.json
 `plugins.updater.pubkey`. Si la clé privée est perdue, impossible de publier une mise à jour que les apps
 déjà installées accepteront — gardez-en une copie de sauvegarde hors du dépôt.
 
-La CI a besoin de `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` en secrets du dépôt
-(Settings → Secrets and variables → Actions) pour signer les builds et générer `latest.json` (fait
-automatiquement par `tauri-apps/tauri-action`, publié dans chaque Release GitHub). L'app vérifie les mises à
-jour sur `https://github.com/Grenofar/Grnfr-CMP-mod-bng/releases/latest/download/latest.json`
+La CI a besoin de `TAURI_SIGNING_PRIVATE_KEY` en secret du dépôt (Settings → Secrets and variables →
+Actions) pour signer les builds et générer `latest.json` (fait automatiquement par `tauri-apps/tauri-action`,
+publié dans chaque Release GitHub). L'app vérifie les mises à jour sur
+`https://github.com/Grenofar/Grnfr-CMP-mod-bng/releases/latest/download/latest.json`
 (`tauri.conf.json` → `plugins.updater.endpoints`).
+
+**Ne pas ajouter `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`** : la clé n'a pas de mot de passe, et GitHub ne peut
+pas enregistrer un secret vide. Passer quand même cette variable (vide) à `tauri-action` a fait échouer
+`host-v0.5.0` sur Linux et Windows avec `incorrect updater private key password: Missing comment in secret
+key` (le dmg macOS, lui, signait sans problème avec la même clé — bug connu côté tauri-action/NSIS-AppImage,
+cf. tauri-apps/tauri-action#658). Le workflow ne passe donc plus que `TAURI_SIGNING_PRIVATE_KEY`.
 
 ## Construire
 
@@ -100,10 +106,11 @@ Les installeurs sortent dans `host/src-tauri/target/release/bundle/` (NSIS sous 
 AU MOMENT de la compilation :
 - `SUPABASE_URL` / `SUPABASE_ANON_KEY` (`option_env!`, voir `src-tauri/src/supabase.rs`) — sans elles l'app
   compile quand même mais ne peut jamais lire/écrire ses serveurs.
-- `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — sans elles l'app compile et tourne
-  quand même, juste sans artefacts de mise à jour signés (pas de `.sig`, pas de `latest.json`).
+- `TAURI_SIGNING_PRIVATE_KEY` — sans elle l'app compile et tourne quand même, juste sans artefacts de mise
+  à jour signés (pas de `.sig`, pas de `latest.json`). Pas de `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` : voir
+  plus haut.
 
-Tous les quatre sont déjà configurés comme secrets du dépôt pour la CI.
+Les trois sont déjà configurées comme secrets du dépôt pour la CI.
 
 Sur Linux, la compilation a besoin de paquets système (voir le `apt-get install` du workflow CI :
 `libwebkit2gtk-4.1-dev`, etc.) ; rien de supplémentaire n'est requis à l'exécution sur une installation
