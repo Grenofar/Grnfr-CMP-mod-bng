@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.15.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
+- Mod : **2.15.1** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
   à republier pour la 2.14.0 ; toutes les données ont aussi été réinitialisées ce jour-là à la demande de
   l'utilisateur : `wipe_all.sql` puis `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -772,6 +772,31 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     vrai jeu** — en particulier `scenetree.findObject('busstops')`/`Sim.upcast` n'ont jamais été exécutés dans
     notre mod, seulement lus dans le vrai module du jeu.
 
+- **Grand chantier Phase F (partiel) — trait + pseudo façon BeamMP (mod 2.15.1)**.
+  - `ghosts.lua` (`drawName`) : chaque fantôme (tous les joueurs du serveur, pas seulement ceux qu'on suit avec
+    track.lua) affiche maintenant une ligne verticale du toit du véhicule jusqu'au pseudo, au lieu du texte
+    flottant seul — demandé explicitement (« comme BeamMP »). Même esprit visuel que `track.lua` (sphère+ligne),
+    sans la sphère ici puisque le véhicule fantôme tient déjà ce rôle.
+  - **Pas fait, et volontairement pas deviné** : « voir les personnages À L'INTÉRIEUR de leur véhicule » et
+    « voir le passager dans la voiture pendant une course taxi ». Recherché dans les vraies sources du jeu
+    (`setGhostEnabled` : aucun rapport avec la visibilité, c'est juste la désactivation de collision physique,
+    confirmé par un commentaire du jeu lui-même disant que cette fonction « n'est pas encore capable de bien
+    fonctionner » ; aucune fonction `showOccupant`/`driverVisible`/équivalent trouvée nulle part dans les
+    extensions du jeu). Deux hypothèses, ni l'une ni l'autre vérifiée :
+    1. Le modèle de conducteur visible à travers le pare-brise fait peut-être déjà partie du maillage du
+       véhicule lui-même (pas une option à activer) — dans ce cas les fantômes montrent déjà un conducteur
+       sans rien à faire côté mod, et le signalement du joueur serait un vrai bug d'affichage à diagnostiquer
+       avec le `BeamNG.log`, pas une fonctionnalité manquante.
+    2. « Voir le passager pendant une course taxi » impliquerait de faire apparaître physiquement, dans LA
+       voiture du chauffeur, un second personnage représentant un AUTRE joueur réel — un problème d'architecture
+       non résolu (les fantômes actuels n'ont jamais de physique partagée avec une vraie voiture, voir le
+       commentaire en tête de `ghosts.lua`), pas une correction rapide.
+    **À statuer avec le `BeamNG.log` et/ou une clarification de l'utilisateur avant de coder quoi que ce soit
+    ici** — deviner un mécanisme non confirmé serait contraire à la règle du projet (jamais prétendre qu'une API
+    du jeu fait quelque chose sans l'avoir vérifiée).
+  - Vérifié hors jeu : `luaparse` sur `ghosts.lua`, `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le
+    vrai jeu.**
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -923,10 +948,10 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
 ~~**Phase E — Bus**~~ **Fait (mod 2.15.0, voir § Fait ci-dessus)** : vraies lignes de la carte quand elles
    existent (west_coast_usa confirmé), pourboire confort comme le taxi.
 **Phase F — Multijoueur visible** :
-   - Voir les autres joueurs ET leur véhicule avec un trait + pseudo façon BeamMP (`ghosts.lua` existe déjà, montre
-     position + pseudo — à vérifier s'il manque le modèle réel du véhicule ou le lien visuel).
-   - Rendre visible le joueur À L'INTÉRIEUR de son véhicule (actuellement, d'après l'utilisateur, on ne le voit
-     plus une fois monté dans la voiture) — notamment pour voir un passager pendant une course taxi.
+   - ~~Trait + pseudo façon BeamMP~~ **Fait (mod 2.15.1, voir § Fait ci-dessus)**.
+   - **Reste ouvert, pas deviné** : voir le joueur À L'INTÉRIEUR de son véhicule + le passager pendant une course
+     taxi — aucune vraie API trouvée, à statuer avec le `BeamNG.log`/une clarification avant de coder (voir le
+     détail dans § Fait ci-dessus).
 **Phase G — Garages** :
    - 4 garages par joueur, tous visibles dans « Mes voitures » (actuellement un seul à la fois ? à vérifier).
    - Vente simplifiée : un bouton « Vendre » qui ouvre directement un nouvel onglet dans la tablette pour la

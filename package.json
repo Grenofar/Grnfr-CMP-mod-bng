@@ -1,6 +1,6 @@
 {
   "name": "grnfr-online",
-  "version": "2.15.0",
+  "version": "2.15.1",
   "private": true,
   "description": "Site + build du mod BeamNG GRNFR CMP (backend Supabase)",
   "scripts": {

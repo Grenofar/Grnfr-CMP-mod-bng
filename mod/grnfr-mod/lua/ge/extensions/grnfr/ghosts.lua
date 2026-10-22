@@ -132,13 +132,19 @@ local function ensureGhost(name, r)
   return be:getObjectByID(id)
 end
 
+-- Trait + pseudo façon BeamMP (demandé explicitement) : une ligne verticale depuis le toit du véhicule jusqu'au
+-- pseudo, au lieu du texte flottant seul. Même esprit que track.lua (sphère + ligne), sans la sphère ici (le
+-- véhicule fantôme lui-même tient ce rôle).
 local function drawName(p, name, dist)
   pcall(function()
-    local pos = vec3(p.x, p.y, p.z + 2.2)
+    local base = vec3(p.x, p.y, p.z + 1.2)
+    local top = vec3(p.x, p.y, p.z + 2.4)
+    local c = ColorF(1, 1, 1, 0.85)
+    debugDrawer:drawLine(base, top, c)
     if debugDrawer.drawTextAdvanced then
-      debugDrawer:drawTextAdvanced(pos, String(name), ColorF(1, 1, 1, 1), true, false, ColorI(0, 0, 0, 170))
+      debugDrawer:drawTextAdvanced(top, String(name), ColorF(1, 1, 1, 1), true, false, ColorI(0, 0, 0, 170))
     else
-      debugDrawer:drawText(pos, String(name), ColorF(1, 1, 1, 1))
+      debugDrawer:drawText(top, String(name), ColorF(1, 1, 1, 1))
     end
   end)
 end
