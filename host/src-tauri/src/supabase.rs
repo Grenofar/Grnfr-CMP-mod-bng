@@ -1,6 +1,8 @@
-// Configuration du host stockée dans Supabase (table `hosts`, fonctions `host_config_get`/`host_config_set`
-// — voir supabase/migrations/0011_host_config.sql). Pas de compte : l'identifiant aléatoire généré en local
-// (config::load_or_create_host_id) sert à la fois de clé et de secret.
+// Liste des serveurs de cette installation, stockée dans Supabase (table `host_servers`, fonctions
+// `host_servers_list`/`host_server_upsert`/`host_server_delete` — voir
+// supabase/migrations/0012_host_multi_server.sql). Pas de compte : l'identifiant aléatoire généré en local
+// (config::load_or_create_host_id) sert à la fois de clé et de secret pour TOUS les serveurs de cette
+// installation.
 //
 // SUPABASE_URL et SUPABASE_ANON_KEY sont fixés À LA COMPILATION (variables d'environnement passées par la
 // CI, voir .github/workflows/host-release.yml) — jamais lus depuis un fichier .env à l'exécution. L'anon
@@ -44,29 +46,43 @@ async fn rpc(name: &str, body: serde_json::Value) -> Result<serde_json::Value, S
     resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())
 }
 
-// None = pas d'erreur réseau, mais pas encore de config enregistrée pour cet host_id (premier lancement).
-pub async fn fetch_config(host_id: Uuid) -> Result<Option<Config>, String> {
-    let v = rpc("host_config_get", serde_json::json!({ "p_host_id": host_id })).await?;
-    if v.is_null() {
-        return Ok(None);
-    }
-    Ok(Some(Config {
-        name: v.get("name").and_then(|x| x.as_str()).unwrap_or("Serveur GRNFR").to_string(),
-        password: v.get("password").and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
-        port: v.get("port").and_then(|x| x.as_u64()).unwrap_or(crate::config::DEFAULT_PORT as u64) as u16,
-    }))
+pub struct ServerRecord {
+    pub id: Uuid,
+    pub config: Config,
 }
 
-pub async fn save_config(host_id: Uuid, cfg: &Config) -> Result<(), String> {
-    rpc(
-        "host_config_set",
+fn parse_record(v: &serde_json::Value) -> Option<ServerRecord> {
+    let id = Uuid::parse_str(v.get("id")?.as_str()?).ok()?;
+    let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("Serveur GRNFR").to_string();
+    let password = v.get("password").and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string());
+    let port = v.get("port").and_then(|x| x.as_u64()).unwrap_or(crate::config::DEFAULT_PORT as u64) as u16;
+    Some(ServerRecord { id, config: Config { name, password, port } })
+}
+
+pub async fn list_servers(host_id: Uuid) -> Result<Vec<ServerRecord>, String> {
+    let v = rpc("host_servers_list", serde_json::json!({ "p_host_id": host_id })).await?;
+    let arr = v.as_array().cloned().unwrap_or_default();
+    Ok(arr.iter().filter_map(parse_record).collect())
+}
+
+// id None = crée un nouveau serveur ; id Some = modifie un serveur existant. Retourne l'id (nouveau ou
+// existant).
+pub async fn upsert_server(host_id: Uuid, id: Option<Uuid>, cfg: &Config) -> Result<Uuid, String> {
+    let v = rpc(
+        "host_server_upsert",
         serde_json::json!({
             "p_host_id": host_id,
+            "p_id": id,
             "p_name": cfg.name,
             "p_password": cfg.password.clone().unwrap_or_default(),
             "p_port": cfg.port,
         }),
     )
     .await?;
+    Uuid::parse_str(v.as_str().ok_or("bad_response")?).map_err(|e| e.to_string())
+}
+
+pub async fn delete_server(host_id: Uuid, id: Uuid) -> Result<(), String> {
+    rpc("host_server_delete", serde_json::json!({ "p_host_id": host_id, "p_id": id })).await?;
     Ok(())
 }

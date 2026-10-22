@@ -1,11 +1,13 @@
-// Configuration du host : nom, mot de passe (facultatif), port. Pas de nombre de joueurs maximum.
+// Configuration d'UN serveur : nom, mot de passe (facultatif), port. Pas de nombre de joueurs maximum.
+// Une installation peut avoir plusieurs serveurs (voir relay::HostState) ; chacun a sa propre Config.
 //
-// La config vit dans Supabase (voir supabase.rs et supabase/migrations/0011_host_config.sql), pas dans un
-// fichier local. Pas de compte joueur requis : au premier lancement, un identifiant aléatoire (UUID v4) est
-// généré et gardé dans grnfr-host.id, à côté de l'exécutable — connaître cet identifiant suffit à lire/écrire
-// CETTE config (sécurité "limitée, pas infaillible", voir le commentaire de la migration 0011). Un petit
-// cache local (grnfr-host.cache) garde la dernière config connue pour pouvoir démarrer même hors ligne ;
-// toujours écrasé par ce qui vient de Supabase quand c'est possible.
+// La liste des serveurs vit dans Supabase (voir supabase.rs et
+// supabase/migrations/0012_host_multi_server.sql), pas dans un fichier local. Pas de compte joueur requis :
+// au premier lancement, un identifiant aléatoire (UUID v4) est généré et gardé dans grnfr-host.id, à côté de
+// l'exécutable — connaître cet identifiant suffit à lire/écrire TOUS les serveurs de CETTE installation
+// (sécurité "limitée, pas infaillible", voir le commentaire de la migration 0012). Un petit cache local
+// (grnfr-host.cache, JSON) garde la dernière liste connue pour pouvoir démarrer même hors ligne ; toujours
+// écrasé par ce qui vient de Supabase quand c'est possible.
 use std::fs;
 use std::path::Path;
 
@@ -29,8 +31,9 @@ impl Default for Config {
     }
 }
 
-// Identifiant stable de ce host : généré une seule fois, puis toujours relu (jamais régénéré tant que le
-// fichier existe), pour toujours retrouver la même ligne dans Supabase entre deux lancements.
+// Identifiant stable de cette installation : généré une seule fois, puis toujours relu (jamais régénéré
+// tant que le fichier existe), pour toujours retrouver les mêmes serveurs dans Supabase entre deux
+// lancements.
 pub fn load_or_create_host_id() -> Uuid {
     if let Ok(s) = fs::read_to_string(HOST_ID_PATH) {
         if let Ok(id) = Uuid::parse_str(s.trim()) {
@@ -42,33 +45,25 @@ pub fn load_or_create_host_id() -> Uuid {
     id
 }
 
-pub fn cache_load() -> Option<Config> {
+#[derive(Serialize, Deserialize)]
+struct CachedServer {
+    id: Uuid,
+    #[serde(flatten)]
+    config: Config,
+}
+
+pub fn cache_load() -> Option<Vec<(Uuid, Config)>> {
     if !Path::new(CACHE_PATH).exists() {
         return None;
     }
     let content = fs::read_to_string(CACHE_PATH).ok()?;
-    let mut cfg = Config::default();
-    for line in content.lines() {
-        let line = line.trim();
-        if let Some((k, v)) = line.split_once('=') {
-            let v = v.trim();
-            match k.trim() {
-                "name" => cfg.name = v.to_string(),
-                "password" => cfg.password = if v.is_empty() { None } else { Some(v.to_string()) },
-                "port" => { if let Ok(p) = v.parse::<u16>() { cfg.port = p; } }
-                _ => {}
-            }
-        }
-    }
-    Some(cfg)
+    let list: Vec<CachedServer> = serde_json::from_str(&content).ok()?;
+    Some(list.into_iter().map(|c| (c.id, c.config)).collect())
 }
 
-pub fn cache_save(cfg: &Config) {
-    let content = format!(
-        "# Copie locale de la config (voir Supabase pour la source de vérité) — utilisée si hors ligne.\nname={}\npassword={}\nport={}\n",
-        cfg.name,
-        cfg.password.clone().unwrap_or_default(),
-        cfg.port
-    );
-    let _ = fs::write(CACHE_PATH, content);
+pub fn cache_save(servers: &[(Uuid, Config)]) {
+    let list: Vec<CachedServer> = servers.iter().map(|(id, cfg)| CachedServer { id: *id, config: cfg.clone() }).collect();
+    if let Ok(json) = serde_json::to_string_pretty(&list) {
+        let _ = fs::write(CACHE_PATH, json);
+    }
 }

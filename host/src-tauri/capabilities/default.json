@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capacités de la fenêtre principale : nos commandes personnalisées sont toujours autorisées (voir invoke_handler) ; ceci couvre juste les API coeur par défaut (fenêtre, événements...).",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default", "process:default"]
 }

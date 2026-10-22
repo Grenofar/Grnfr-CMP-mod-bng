@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useState } from "react"
-import { api, Status } from "./api"
-import Sidebar, { Tab } from "./components/Sidebar"
-import SetupWizard from "./components/SetupWizard"
-import Overview from "./components/Overview"
-import Players from "./components/Players"
-import Settings from "./components/Settings"
+import { api, ServerStatus } from "./api"
+import Sidebar, { Selection } from "./components/Sidebar"
+import AllServers from "./components/AllServers"
+import ServerDetail from "./components/ServerDetail"
+import NewServer from "./components/NewServer"
 
 export default function App() {
-  const [status, setStatus] = useState<Status | null>(null)
-  const [tab, setTab] = useState<Tab>("overview")
+  const [servers, setServers] = useState<ServerStatus[] | null>(null)
+  const [selected, setSelected] = useState<Selection>("overview")
   const [pollError, setPollError] = useState("")
 
   const refresh = useCallback(() => {
     api
-      .getStatus()
-      .then(s => {
-        setStatus(s)
+      .listServers()
+      .then(list => {
+        setServers(list)
         setPollError("")
       })
       .catch(err => setPollError(String(err)))
@@ -27,41 +26,42 @@ export default function App() {
     return () => clearInterval(t)
   }, [refresh])
 
-  if (!status) {
+  if (servers === null) {
     return (
       <div className="loading">
-        <p className="mut">Chargement…</p>
+        <p className="mut">Connexion à Supabase…</p>
         {pollError && <p className="err">{pollError}</p>}
       </div>
     )
   }
 
-  // configured === null : encore en train de vérifier Supabase au démarrage.
-  if (status.configured === null) {
-    return (
-      <div className="loading">
-        <p className="mut">Connexion à Supabase…</p>
-      </div>
-    )
+  // Premier lancement : aucun serveur encore créé sur cette installation.
+  if (servers.length === 0) {
+    return <NewServer firstRun onCreated={id => { setSelected(id); refresh() }} />
   }
 
-  if (status.configured === false) {
-    return <SetupWizard onDone={refresh} />
+  const current = selected !== "overview" && selected !== "new" ? servers.find(s => s.id === selected) : undefined
+  // Le serveur sélectionné a été supprimé depuis ailleurs (ou à l'instant) : retombe sur le tableau de bord.
+  if (selected !== "overview" && selected !== "new" && !current) {
+    if (selected !== "overview") setTimeout(() => setSelected("overview"), 0)
   }
 
   return (
     <div className="shell">
-      <Sidebar tab={tab} onTab={setTab} running={status.running} />
+      <Sidebar servers={servers} selected={selected} onSelect={setSelected} />
       <main>
-        {!status.running && status.configured && (
-          <div className="banner">
-            Le serveur est arrêté. Ouvrez « Tableau de bord » pour le démarrer.
-          </div>
-        )}
         <div className="main-content">
-          {tab === "overview" && <Overview status={status} onChanged={refresh} />}
-          {tab === "players" && <Players status={status} onChanged={refresh} />}
-          {tab === "settings" && <Settings status={status} onChanged={refresh} />}
+          {selected === "overview" && (
+            <AllServers servers={servers} onSelect={setSelected} onNew={() => setSelected("new")} onChanged={refresh} />
+          )}
+          {selected === "new" && <NewServer onCreated={id => { setSelected(id); refresh() }} />}
+          {current && (
+            <ServerDetail
+              server={current}
+              onChanged={refresh}
+              onDeleted={() => { setSelected("overview"); refresh() }}
+            />
+          )}
         </div>
       </main>
     </div>

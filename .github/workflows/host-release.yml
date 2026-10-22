@@ -5,9 +5,13 @@ name: GRNFR Host CMP — build & release
 # Déclenché par un tag "host-vX.Y.Z" : construit le frontend (Vite) puis empaquette l'app native avec
 # tauri-action, qui publie les installeurs en pièces jointes d'une GitHub Release du même nom.
 #
-# Secrets requis (Settings > Secrets and variables > Actions, sur ce dépôt) : SUPABASE_URL et
-# SUPABASE_ANON_KEY — embarqués À LA COMPILATION dans le binaire (voir host/src-tauri/src/supabase.rs).
-# Sans eux, l'app compile quand même mais ne peut pas lire/écrire sa config dans Supabase.
+# Secrets requis (Settings > Secrets and variables > Actions, sur ce dépôt) :
+# - SUPABASE_URL / SUPABASE_ANON_KEY — embarqués À LA COMPILATION dans le binaire (voir
+#   host/src-tauri/src/supabase.rs). Sans eux, l'app compile quand même mais ne peut pas lire/écrire ses
+#   serveurs dans Supabase.
+# - TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD — pour signer les artefacts de mise à
+#   jour (voir host/README.md, "Mises à jour signées"). Sans eux, l'app compile et tourne quand même, juste
+#   sans fichiers .sig / latest.json : la mise à jour automatique ne trouve rien à proposer.
 on:
   push:
     tags:
@@ -58,14 +62,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: host
           tagName: ${{ github.ref_name }}
           releaseName: "GRNFR Host CMP ${{ github.ref_name }}"
           releaseBody: |
             Binaires de GRNFR Host CMP, compilés automatiquement par GitHub Actions (Windows, Linux, macOS).
-            App native (Tauri — Rust + React/TypeScript) : au premier lancement, un assistant configure le
-            serveur (nom, mot de passe facultatif, port — 30814 par défaut) et enregistre tout dans Supabase.
-            Voir host/README.md.
+            App native (Tauri — Rust + React/TypeScript) : au premier lancement, un assistant crée votre
+            premier serveur (nom, mot de passe facultatif, port — 30814 par défaut). Plusieurs serveurs par
+            installation, lançables en même temps. Mises à jour automatiques et signées. Voir host/README.md.
           releaseDraft: false
           prerelease: false

@@ -1,12 +1,12 @@
-// GRNFR Host : relais WebSocket entre joueurs connectés au même host. Volontairement minimal : ce n'est PAS
-// un serveur de simulation (pas de physique, pas d'arbitrage) — il relaie tel quel ce qu'un client envoie à
-// tous les autres, comme le fait aujourd'hui Supabase (server_sync) pour les serveurs officiels, mais sans
-// base de données ni limite de joueurs. L'intégration du mod GRNFR (net.js) avec CE relais (plutôt que /
-// en complément de Supabase) n'a pas été faite dans cette session : voir host/README.md.
+// GRNFR Host : relais WebSocket entre joueurs connectés au même serveur. Volontairement minimal : ce n'est
+// PAS un serveur de simulation (pas de physique, pas d'arbitrage) — il relaie tel quel ce qu'un client
+// envoie à tous les autres, comme le fait aujourd'hui Supabase (server_sync) pour les serveurs officiels,
+// mais sans base de données ni limite de joueurs. L'intégration du mod GRNFR (net.js) avec CE relais
+// (plutôt que / en complément de Supabase) n'a pas été faite dans cette session : voir host/README.md.
 //
-// État partagé avec le frontend (commands.rs) via ServerState : running/clients/cfg/configured, pour que la
-// fenêtre React puisse afficher qui est connecté, démarrer/arrêter le relais, expulser un joueur, et savoir
-// si l'assistant de configuration doit s'afficher (configured = None tant qu'on ne sait pas encore).
+// Plusieurs serveurs par installation : HostState garde la liste de tous les ServerInstance connus (chacun
+// avec son propre port/nom/mot de passe/joueurs), identifiés par l'id de leur ligne host_servers. Chacun
+// peut être démarré/arrêté indépendamment — plusieurs peuvent tourner EN MÊME TEMPS, chacun sur son port.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -18,6 +18,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::Message;
+use uuid::Uuid;
 
 use crate::config::Config;
 use crate::logger::log;
@@ -44,32 +45,29 @@ struct Shared {
     next_id: Mutex<u64>,
 }
 
-pub struct ServerState {
+// Un serveur configuré (une ligne host_servers), démarré ou non.
+pub struct ServerInstance {
+    pub id: Uuid,
     shared: Arc<Shared>,
     listener_task: Mutex<Option<JoinHandle<()>>>,
     running: Mutex<bool>,
     cfg: Mutex<Config>,
-    // None = pas encore su (vérification Supabase en cours) ; Some(false) = premier lancement, assistant à
-    // afficher ; Some(true) = config trouvée, tableau de bord à afficher.
-    configured: Mutex<Option<bool>>,
 }
 
-impl ServerState {
-    pub fn new(cfg: Config) -> Arc<Self> {
-        Arc::new(ServerState {
+impl ServerInstance {
+    pub fn new(id: Uuid, cfg: Config) -> Arc<Self> {
+        Arc::new(ServerInstance {
+            id,
             shared: Arc::new(Shared { clients: Mutex::new(HashMap::new()), next_id: Mutex::new(1) }),
             listener_task: Mutex::new(None),
             running: Mutex::new(false),
             cfg: Mutex::new(cfg),
-            configured: Mutex::new(None),
         })
     }
 
     pub fn is_running(&self) -> bool { *self.running.lock().unwrap() }
     pub fn config(&self) -> Config { self.cfg.lock().unwrap().clone() }
     pub fn set_config(&self, cfg: Config) { *self.cfg.lock().unwrap() = cfg; }
-    pub fn configured(&self) -> Option<bool> { *self.configured.lock().unwrap() }
-    pub fn set_configured(&self, v: bool) { *self.configured.lock().unwrap() = Some(v); }
 
     pub fn players(&self) -> Vec<ClientSummary> {
         let clients = self.shared.clients.lock().unwrap();
@@ -88,9 +86,9 @@ impl ServerState {
 
     // Expulsion : signale la fermeture au client puis le retire tout de suite de la liste (le socket se
     // fermera de son côté dans l'instant qui suit, sans qu'on ait besoin de l'attendre ici).
-    pub fn kick(&self, id: u64) -> bool {
+    pub fn kick(&self, client_id: u64) -> bool {
         let mut clients = self.shared.clients.lock().unwrap();
-        if let Some(info) = clients.remove(&id) {
+        if let Some(info) = clients.remove(&client_id) {
             let _ = info.tx.send(Message::Text(r#"{"type":"kicked"}"#.to_string()));
             let _ = info.tx.send(Message::Close(None));
             true
@@ -100,13 +98,46 @@ impl ServerState {
     }
 }
 
-// Démarre le relais avec la config actuellement enregistrée dans l'état partagé. Sans effet si déjà démarré
-// (il faut d'abord stop() pour reprendre un port différent).
-pub async fn start(state: Arc<ServerState>) -> Result<(), String> {
-    if state.is_running() {
+// Tous les serveurs connus de cette installation (host_id), qu'ils soient démarrés ou non.
+pub struct HostState {
+    pub host_id: Uuid,
+    servers: Mutex<HashMap<Uuid, Arc<ServerInstance>>>,
+}
+
+impl HostState {
+    pub fn new(host_id: Uuid) -> Arc<Self> {
+        Arc::new(HostState { host_id, servers: Mutex::new(HashMap::new()) })
+    }
+
+    // Enregistre un serveur connu (venant de Supabase) sans le démarrer — no-op si déjà présent.
+    pub fn ensure(&self, id: Uuid, cfg: Config) -> Arc<ServerInstance> {
+        let mut servers = self.servers.lock().unwrap();
+        servers.entry(id).or_insert_with(|| ServerInstance::new(id, cfg)).clone()
+    }
+
+    pub fn get(&self, id: Uuid) -> Option<Arc<ServerInstance>> {
+        self.servers.lock().unwrap().get(&id).cloned()
+    }
+
+    pub fn remove(&self, id: Uuid) -> Option<Arc<ServerInstance>> {
+        self.servers.lock().unwrap().remove(&id)
+    }
+
+    pub fn all(&self) -> Vec<Arc<ServerInstance>> {
+        let servers = self.servers.lock().unwrap();
+        let mut out: Vec<_> = servers.values().cloned().collect();
+        out.sort_by_key(|s| s.id);
+        out
+    }
+}
+
+// Démarre le relais de CE serveur avec sa config actuelle. Sans effet si déjà démarré (il faut d'abord
+// stop() pour reprendre un port différent).
+pub async fn start(instance: Arc<ServerInstance>) -> Result<(), String> {
+    if instance.is_running() {
         return Err("already_running".into());
     }
-    let cfg = state.config();
+    let cfg = instance.config();
     let addr = format!("0.0.0.0:{}", cfg.port);
     let listener = TcpListener::bind(&addr).await.map_err(|e| e.to_string())?;
     log(&format!(
@@ -115,24 +146,25 @@ pub async fn start(state: Arc<ServerState>) -> Result<(), String> {
         cfg.port,
         if cfg.password.is_some() { "avec" } else { "sans" }
     ));
-    let shared = state.shared.clone();
+    let shared = instance.shared.clone();
     let handle = tokio::spawn(accept_loop(listener, shared, cfg));
-    *state.listener_task.lock().unwrap() = Some(handle);
-    *state.running.lock().unwrap() = true;
+    *instance.listener_task.lock().unwrap() = Some(handle);
+    *instance.running.lock().unwrap() = true;
     Ok(())
 }
 
-// Arrête d'accepter de nouvelles connexions et expulse tout le monde. Le port est libéré immédiatement
-// (nécessaire pour pouvoir relancer avec un port différent sans redémarrer le programme).
-pub fn stop(state: &Arc<ServerState>) {
-    if let Some(h) = state.listener_task.lock().unwrap().take() {
+// Arrête d'accepter de nouvelles connexions sur CE serveur et expulse tout le monde. Les autres serveurs de
+// la même installation ne sont pas affectés. Le port est libéré immédiatement (nécessaire pour pouvoir
+// relancer avec un port différent sans redémarrer le programme).
+pub fn stop(instance: &Arc<ServerInstance>) {
+    if let Some(h) = instance.listener_task.lock().unwrap().take() {
         h.abort();
     }
-    let mut clients = state.shared.clients.lock().unwrap();
+    let mut clients = instance.shared.clients.lock().unwrap();
     for (_, info) in clients.drain() {
         let _ = info.tx.send(Message::Close(None));
     }
-    *state.running.lock().unwrap() = false;
+    *instance.running.lock().unwrap() = false;
 }
 
 async fn accept_loop(listener: TcpListener, shared: Arc<Shared>, cfg: Config) {
