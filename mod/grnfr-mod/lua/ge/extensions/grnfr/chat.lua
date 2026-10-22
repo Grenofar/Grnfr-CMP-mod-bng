@@ -1,4 +1,4 @@
--- GRNFR Online : chat textuel entre joueurs du même serveur de jeu (fenêtre rapide, touche J par défaut).
+-- GRNFR Online : chat textuel entre joueurs du même serveur de jeu (téléphone, touche K par défaut).
 -- Les messages passent par le pont RPC générique (grnfr_online.call), comme toutes les autres actions GRNFR
 -- Online : aucune nouvelle plomberie réseau n'est nécessaire côté interface (net.js).
 local M = {}

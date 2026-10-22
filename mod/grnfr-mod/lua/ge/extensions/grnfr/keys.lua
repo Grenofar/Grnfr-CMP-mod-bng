@@ -1,10 +1,12 @@
 -- Raccourci : l'action "grnfr_toggle" est déclarée dans lua/ge/extensions/core/input/actions/grnfr.json.
--- La touche PAR DÉFAUT (K, libre dans BeamNG) est livrée par le mod dans settings/inputmaps/keyboardGRNFR.json
+-- La touche PAR DÉFAUT (L, libre dans BeamNG) est livrée par le mod dans settings/inputmaps/keyboardGRNFR.json
 -- (mécanisme documenté : nom de fichier = périphérique + suffixe libre). Le joueur peut la changer dans
 -- Options > Contrôles > « GRNFR Mod » ; ce module lit (lecture seule) la touche réellement assignée.
+-- Depuis le grand chantier du 22/10/2026 : K est devenu le téléphone (grnfr_quick_toggle), donc le tableau de
+-- bord/HUD (grnfr_toggle, cette touche) est passé sur L pour libérer K.
 local M = {}
 M.ACTION = 'grnfr_toggle'
-M.DEFAULT = 'K'
+M.DEFAULT = 'L'
 
 function M.getLabel()
   local ok, label = pcall(function()

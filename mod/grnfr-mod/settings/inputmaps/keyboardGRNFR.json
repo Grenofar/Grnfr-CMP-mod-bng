@@ -2,7 +2,7 @@
   "bindings": [
     {
       "action": "grnfr_toggle",
-      "control": "k"
+      "control": "l"
     },
     {
       "action": "grnfr_online_toggle",
@@ -10,7 +10,7 @@
     },
     {
       "action": "grnfr_quick_toggle",
-      "control": "j"
+      "control": "k"
     }
   ]
 }

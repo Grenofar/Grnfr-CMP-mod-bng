@@ -20,7 +20,7 @@
     "order": 902,
     "ctx": "tlua",
     "onDown": "if extensions.grnfr then extensions.grnfr.toggleQuick() end",
-    "title": "GRNFR CMP : fenêtre rapide (chat, joueurs, drag)",
-    "desc": "Ouvre ou ferme la petite fenêtre rapide : chat de serveur, liste des joueurs, repère, argent, échange, courses de drag"
+    "title": "GRNFR CMP : téléphone",
+    "desc": "Ouvre ou ferme le téléphone : chat de serveur, joueurs, taxi, repère, argent, échange, courses de drag"
   }
 }

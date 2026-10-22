@@ -88,7 +88,7 @@ local function hold(on) pcall(grnfr_garage.setHold, on) end
 -- resume (0020, reconnexion à un serveur où l'on était déjà) : pos est alors MA dernière position connue, pas
 -- celle d'un autre joueur -> une fois arrivé là, on ne force PLUS le trajet jusqu'au garage (M.update) : le
 -- joueur reste où il était (dans la voiture par défaut du jeu libre), libre d'aller chercher la sienne quand il
--- veut (touche J > « Aller à mon garage »). Le garage continue d'être attribué en arrière-plan (hold(false)).
+-- veut (téléphone, touche K > « Aller à mon garage »). Le garage continue d'être attribué en arrière-plan (hold(false)).
 function M.go(level, pos, beforeLoad, resume)
   resume = resume == true
   local cur = grnfr_places.level()
@@ -157,7 +157,7 @@ function M.update(dt)
       target = nil
       if mine.garage then
         if not grnfr_garage.teleportHome(playerVeh()) then
-          grnfr_online.toast(L('Impossible de vous placer au garage : touche J > « Aller à mon garage ».', 'Could not place you at your garage: J key > "Go to my garage".'), 'warning')
+          grnfr_online.toast(L('Impossible de vous placer au garage : téléphone (touche K) > « Aller à mon garage ».', 'Could not place you at your garage: phone (K key) > "Go to my garage".'), 'warning')
         end
         slog('info', 'Travel: at the garage, asking the interface which vehicle to take out.')
         -- l'interface connaît mes véhicules : elle répond par server.arrive (voir M.arrive)
@@ -187,7 +187,8 @@ function M.arrive(v)
   if type(v) == 'table' and v.model_key then
     if grnfr_online.spawnVehicle(v, true) then
       dropOld()
-      grnfr_online.toast(L('Bienvenue ! Votre véhicule vous attend au garage. Tablette : touche O.', 'Welcome! Your vehicle is at your garage. Tablet: O key.'))
+      grnfr_online.toast(L('Bienvenue ! Votre véhicule vous attend au garage. Ordinateur : touche O. Téléphone : touche K.',
+        'Welcome! Your vehicle is at your garage. Computer: O key. Phone: K key.'))
       return true
     end
   end
@@ -202,8 +203,8 @@ function M.arrive(v)
     end
   end)
   if ok then dropOld() else slog('warn', 'Travel: could not switch to walking mode.') end
-  grnfr_online.toast(L('Vous êtes à pied devant votre garage : achetez votre première voiture sur la tablette (touche O).',
-    'You are on foot at your garage: buy your first car on the tablet (O key).'))
+  grnfr_online.toast(L('Vous êtes à pied devant votre garage : achetez votre première voiture sur l\'ordinateur (touche O). Téléphone : touche K.',
+    'You are on foot at your garage: buy your first car on the computer (O key). Phone: K key.'))
   return true
 end
 

@@ -47,7 +47,7 @@ export async function onLoad() {
   document.body.appendChild(overlayEl)
   overlayApp = createApp(FpsOverlay)
   overlayApp.mount(overlayEl)
-  // HUD en jeu (touche K) : monté dans <body>, ne dépend pas de l'app « HUD Apps »
+  // HUD en jeu (touche L) : monté dans <body>, ne dépend pas de l'app « HUD Apps »
   hudEl = document.createElement("div")
   hudEl.id = "grnfr-hud-root"
   document.body.appendChild(hudEl)
@@ -59,7 +59,7 @@ export async function onLoad() {
   document.body.appendChild(onlineEl)
   onlineApp = createApp(OnlineWindow)
   onlineApp.mount(onlineEl)
-  // Fenêtre rapide (touche J) : chat de serveur, joueurs, repère, argent, échange, courses de drag
+  // Téléphone (touche K) : chat de serveur, joueurs, taxi, repère, argent, échange, courses de drag
   quickEl = document.createElement("div")
   quickEl.id = "grnfr-quick-root"
   document.body.appendChild(quickEl)

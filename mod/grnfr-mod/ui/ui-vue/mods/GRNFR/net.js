@@ -15,7 +15,7 @@ export const net = reactive({
   username: "", email: "", me: null,
   error: "", info: "",
   open: false, lang: "fr", langChosen: true,
-  quickOpen: false,       // petite fenêtre rapide (touche J) : chat, joueurs, drag
+  quickOpen: false,       // téléphone (touche K) : chat, joueurs, taxi, drag
   tablet: { open: false, name: "" }, // tablette du garage (touche O devant son garage) : garage, joueurs, concession...
   vehInfo: {},            // fiches des véhicules ("modèle|config" -> nom, marque, poids, image...), lues dans le jeu (vehinfo.lua)
   dragCount: null,        // compte à rebours de départ d'une course de drag (3,2,1, puis 0 = TOP), null = masqué

@@ -1,5 +1,5 @@
 <template>
-  <!-- Petite fenêtre rapide (touche J par défaut) : chat de serveur, liste des joueurs, repère, argent,
+  <!-- Téléphone (touche K par défaut) : chat de serveur, liste des joueurs, taxi, repère, argent,
        échange, courses de drag. Contrairement à la fenêtre GRNFR Online (touche O), elle ne prend pas tout
        l'écran et ne cache rien du jeu derrière : juste un panneau ancré dans un coin. -->
   <div v-if="net.quickOpen" class="qpanel" @focusin="focus($event, true)" @focusout="focus($event, false)">
@@ -41,6 +41,19 @@
                 <input v-model.number="tradeCash" type="number" :placeholder="t('q_trade_cash')" class="sm" />
                 <button type="button" class="mini" @click="sendTrade(p.username)">{{ t('q_trade_send') }}</button>
               </template>
+            </div>
+          </div>
+        </section>
+
+        <section class="taxi">
+          <h4>{{ t('q_taxi') }} <button type="button" class="mini" @click="loadTaxi">{{ t('q_taxi_refresh') }}</button></h4>
+          <p v-if="taxiLoading" class="mut">{{ t('q_taxi_loading') }}</p>
+          <p v-else-if="!visibleTaxi.length" class="mut">{{ t('q_taxi_empty') }}</p>
+          <div v-for="r in visibleTaxi" :key="r.id" class="prow line">
+            <span><b>{{ r.passenger }}</b> — {{ (r.route_m / 1000).toFixed(1) }} {{ t('q_taxi_km') }} — {{ money(r.fare) }}</span>
+            <div class="pactions">
+              <button type="button" class="mini" @click="acceptTaxi(r)">{{ t('q_taxi_accept') }}</button>
+              <button type="button" class="mini dim" @click="ignoreTaxi(r.id)">{{ t('q_taxi_ignore') }}</button>
             </div>
           </div>
         </section>
@@ -135,6 +148,21 @@ async function sendGive(name) {
   try { await rpc("send_money", { p_username: name, p_amount: giveAmount.value }); giveTarget.value = null }
   catch (e) { net.error = errText(e) }
 }
+
+// ------------------------------------------------------------------ taxi : courses demandées par d'autres joueurs
+const taxiOffers = ref([])
+const taxiLoading = ref(false)
+const ignored = ref(new Set())
+const visibleTaxi = computed(() => taxiOffers.value.filter(r => !ignored.value.has(r.id)))
+async function loadTaxi() {
+  if (!net.server) return
+  taxiLoading.value = true
+  try { taxiOffers.value = await rpc("get_open_taxi_requests", { p_level: null }) } catch (e) { net.error = errText(e) }
+  taxiLoading.value = false
+}
+function acceptTaxi(r) { ui("taxi.accept", r); ignored.value.add(r.id) }
+function ignoreTaxi(id) { ignored.value.add(id) }
+watch(() => net.quickOpen, on => { if (on) loadTaxi() })
 
 // ------------------------------------------------------------------ échanger un véhicule
 const tradeTarget = ref(null), tradeLoading = ref(false), theirVehicles = ref([])

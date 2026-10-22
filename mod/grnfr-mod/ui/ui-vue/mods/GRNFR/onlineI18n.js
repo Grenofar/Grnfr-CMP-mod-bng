@@ -35,13 +35,15 @@ export const ON = {
     ok: "Fait.", loading: "Chargement…",
     update_available: "Mise à jour disponible : v{v}. Téléchargez le nouveau zip sur le site et remplacez-le dans le dossier mods de BeamNG.",
 
-    q_title: "GRNFR — Serveur", q_players: "Joueurs", q_chat: "Chat", q_drag: "Course de drag",
+    q_title: "GRNFR — Téléphone", q_players: "Joueurs", q_chat: "Chat", q_drag: "Course de drag",
     q_send_chat: "Envoyer", q_chat_placeholder: "Message au serveur…",
     q_track: "Suivre", q_untrack: "Ne plus suivre", q_give: "Donner", q_trade: "Échanger",
     q_give_amount: "Montant", q_give_send: "Envoyer", q_trade_pick_offer: "Votre véhicule", q_trade_pick_want: "Son véhicule",
     q_trade_cash: "Argent en plus (peut être négatif)", q_trade_send: "Proposer l'échange", q_trade_loading: "Chargement du garage…",
     q_need_server: "Rejoignez un serveur pour voir les joueurs, le chat et les courses de drag.",
     q_off: "Fermer",
+    q_taxi: "Taxi", q_taxi_refresh: "Actualiser", q_taxi_empty: "Aucune course demandée pour l'instant.",
+    q_taxi_accept: "Accepter", q_taxi_ignore: "Ignorer", q_taxi_km: "km", q_taxi_loading: "Recherche de courses…",
 
     drag_none: "Aucune course en cours.", drag_mark_start: "Marquer le départ ici", drag_mark_finish: "Marquer l'arrivée ici",
     drag_start_marked: "Départ marqué ✓", drag_finish_marked: "Arrivée marquée ✓", drag_propose: "Proposer la course",
@@ -86,13 +88,15 @@ export const ON = {
     ok: "Done.", loading: "Loading…",
     update_available: "Update available: v{v}. Download the new zip from the website and replace it in your BeamNG mods folder.",
 
-    q_title: "GRNFR — Server", q_players: "Players", q_chat: "Chat", q_drag: "Drag race",
+    q_title: "GRNFR — Phone", q_players: "Players", q_chat: "Chat", q_drag: "Drag race",
     q_send_chat: "Send", q_chat_placeholder: "Message to the server…",
     q_track: "Track", q_untrack: "Untrack", q_give: "Give", q_trade: "Trade",
     q_give_amount: "Amount", q_give_send: "Send", q_trade_pick_offer: "Your vehicle", q_trade_pick_want: "Their vehicle",
     q_trade_cash: "Extra cash (can be negative)", q_trade_send: "Propose trade", q_trade_loading: "Loading garage…",
     q_need_server: "Join a server to see players, chat and drag races.",
     q_off: "Close",
+    q_taxi: "Taxi", q_taxi_refresh: "Refresh", q_taxi_empty: "No ride requested yet.",
+    q_taxi_accept: "Accept", q_taxi_ignore: "Ignore", q_taxi_km: "km", q_taxi_loading: "Looking for rides…",
 
     drag_none: "No race in progress.", drag_mark_start: "Mark start here", drag_mark_finish: "Mark finish here",
     drag_start_marked: "Start marked ✓", drag_finish_marked: "Finish marked ✓", drag_propose: "Propose the race",

@@ -5,13 +5,13 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
   'grnfr_delivery' }
 
-local VERSION = '2.10.0'
+local VERSION = '2.11.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
 local bigOpen = false -- grande fenêtre en jeu (bouton Option du HUD)
-local onlineOpen = false -- fenêtre GRNFR Online (touche O)
-local quickOpen = false -- petite fenêtre rapide : chat, joueurs, drag (touche J)
+local onlineOpen = false -- fenêtre GRNFR Online (touche O, hors de son garage)
+local quickOpen = false -- téléphone : chat, joueurs, taxi, drag (touche K)
 local tabletOpen = false -- tablette du garage (touche O devant SON garage)
 local acc = 0
 local cntPre, cntUpd, cntPoll, cntSent = 0, 0, 0, 0 -- compteurs de diagnostic (log toutes les 5 s + affichés dans le HUD)
@@ -176,7 +176,7 @@ function M.toggleOnline()
   return setOnlineOpen(not onlineOpen)
 end
 
--- Petite fenêtre rapide (touche J) : chat, liste des joueurs, repère, argent, échange, courses de drag.
+-- Téléphone (touche K) : chat, liste des joueurs, taxi, repère, argent, échange, courses de drag.
 -- Mêmes règles d'ouverture que GRNFR Online (jeu libre / multijoueur, pas en carrière / scénario).
 local function setQuickOpen(on)
   on = on == true

@@ -1,5 +1,5 @@
 <template>
-  <!-- Petit HUD (touche K) : même style que la fenêtre GRNFR. Monté dans <body>, sans app « HUD Apps ». -->
+  <!-- Petit HUD (touche L) : même style que la fenêtre GRNFR. Monté dans <body>, sans app « HUD Apps ». -->
   <div v-if="shown && open && !big" class="ghud" :class="['acc-' + accent, 'pos-' + (s.hudPos || 'top-left'), { compact: s.compact }]" :style="{ opacity: s.opacity }">
     <header>
       <span class="title">GRNFR CMP</span>
@@ -81,7 +81,7 @@ function onStatic(d) {
   d = unwrapObj(d)
   if (!d) return
   lastEvt = Date.now()
-  // On ne suit Lua que lorsque SON état change (touche K, retour au menu...) : un envoi périodique inchangé ne doit pas
+  // On ne suit Lua que lorsque SON état change (touche L, retour au menu...) : un envoi périodique inchangé ne doit pas
   // fermer la fenêtre que l'utilisateur vient d'ouvrir (si Lua n'a pas reçu la demande d'ouverture, il dit « fermée »).
   const sess = !!d.session
   const lb = sess && !!d.bigOpen, lh = sess && !!d.hudOpen

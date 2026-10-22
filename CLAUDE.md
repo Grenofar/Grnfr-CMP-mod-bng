@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.10.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.11.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -605,6 +605,36 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     le vrai jeu** — rien ne dépend du jeu pour ce mécanisme (aucune API BeamNG utilisée), donc le risque principal
     non vérifié est seulement l'UI (affichage correct dans la vraie tablette en jeu).
 
+- **Grand chantier Phase A — clavier/téléphone (mod 2.11.0)** : **K = téléphone**, remplace l'ancienne « fenêtre
+  rapide » (qui était sur J) et l'enrichit ; **O = ordinateur du garage, inchangé** ; le tableau de bord HUD/FPS
+  (l'ancien contenu de K, `GrnfrPanel.vue`) passe sur **L** pour libérer K ; J ne fait plus rien pour le mod
+  (libre). `settings/inputmaps/keyboardGRNFR.json` + `core/input/actions/grnfr.json` (titre/description de
+  l'action) mis à jour ; `grnfr_keys.lua` (`M.DEFAULT`) suit le changement.
+  - **Nouveau dans le téléphone (`QuickPanel.vue`) : section Taxi** — accepter/refuser une course demandée par un
+    autre joueur, avec distance (km) et revenu affichés avant d'accepter. Découverte importante : le backend
+    (`get_open_taxi_requests`, `accept_taxi_request`, 0001) et le Lua (`grnfr_taxi.acceptRequest`, route
+    `taxi.accept` déjà dans `grnfr.lua`) existaient déjà et fonctionnaient, mais n'étaient câblés dans AUCUNE UI
+    jusqu'ici — pur travail de branchement, aucun changement serveur. **Testé en direct contre le vrai Supabase**
+    (un vrai passager demande une course, un vrai chauffeur la voit dans la liste avec la bonne distance/le bon
+    prix, puis l'accepte — tout dans une transaction annulée volontairement). « Ignorer » est gérée côté client
+    uniquement (la course reste visible pour les autres joueurs, pas de RPC de refus côté serveur).
+  - **Itinéraire vers un joueur** : déjà couvert par le bouton Suivre/Ne plus suivre existant (`track.lua` dessine
+    un point qui suit sa position) — rien de nouveau à construire, juste réaffirmé comme présent dans le
+    téléphone. **Itinéraire vers son garage** : déjà le bouton « Aller à mon garage » existant (téléportation
+    directe, pas un simple marqueur) — également déjà dans le téléphone.
+  - Messages d'arrivée au garage (`travel.lua`) mis à jour pour mentionner les deux touches (« Ordinateur : touche
+    O. Téléphone : touche K. »), comme demandé.
+  - **Pas fait dans cette passe, reporté** : la toute première demande du brouillon (« refais une disposition HUD
+    pour le chat, à partir de Basic Mission Layout avec chat ») semble viser un vrai LAYOUT HUD natif BeamNG
+    (Options > HUD Apps > disposition), pas notre panneau Vue — zone non explorée cette session (aucun fichier de
+    layout HUD trouvé dans ce repo), risque de deviner le format sans vérifier. **À investiguer avant de coder**,
+    plutôt que d'improviser un format de fichier non confirmé.
+  - Vérifié hors jeu : `luaparse` sur tous les `.lua` touchés, `node --check` sur les `.js` touchés, JSON validés
+    (`keyboardGRNFR.json`, `actions/grnfr.json`), `QuickPanel.vue` compile, `node tests/net_test.mjs` (30/30).
+    **Jamais ouvert dans le vrai jeu** — en particulier le changement de touche par défaut (L au lieu de K pour
+    le tableau de bord) n'a jamais été vérifié en conditions réelles (conflit possible avec une touche déjà prise
+    par BeamNG ou un autre mod, non vérifiable hors jeu).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
    mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
@@ -719,17 +749,14 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
   touche native BeamNG sur sa configuration, pas un binding GRNFR qui pause le jeu à proprement parler) : prudence,
   revérifier avec lui plutôt que deviner la cause exacte avant de choisir la nouvelle touche.
 
-**Phase A — Fondation clavier/HUD** (bloquant pour une bonne partie du reste) :
-   - Nouvelle disposition HUD basée sur le layout BeamNG « Basic Mission Layout », avec le chat intégré dedans.
-   - Touche **K = « téléphone »** : regroupe tout ce qui est social/mission à distance (courses taxi avec
-     accepter/refuser + distance/revenu affichés, échanges, don d'argent, chat, itinéraire vers un joueur ou vers
-     son garage) — remplace l'actuelle petite fenêtre rapide (`J`, `QuickPanel.vue`) et absorbe sa fonction
-     « Aller à mon garage ».
-   - Touche **O reste l'ordinateur du garage** (Personnaliser/achats de pièces), utilisable seulement à proximité
-     physique du garage — pas de changement de principe, juste s'assurer que ça reste cohérent avec le nouveau K.
-   - Binding `j` supprimé (sa fonction bascule dans le menu K).
-   - À l'arrivée sur un serveur près de son garage : afficher un message toast/alerte native indiquant les deux
-     touches (O = ordinateur, K = téléphone).
+~~**Phase A — Fondation clavier/HUD**~~ **Fait (mod 2.11.0, voir § Fait ci-dessus), sauf un point reporté** :
+   - ~~Touche K = téléphone~~ Fait : absorbe l'ancienne fenêtre rapide (J) + taxi (accepter/refuser avec
+     distance/revenu) + itinéraire joueur/garage (déjà existants, juste confirmés présents).
+   - ~~Touche O reste l'ordinateur du garage~~ Fait, inchangé.
+   - ~~Binding J supprimé~~ Fait (le tableau de bord HUD/FPS qui était sur K est passé sur L pour libérer K).
+   - ~~Message d'arrivée mentionnant les deux touches~~ Fait.
+   - **Reporté** : la disposition HUD native BeamNG basée sur « Basic Mission Layout » avec chat intégré — zone
+     non explorée (aucun fichier de layout HUD dans ce repo), à investiguer avant de coder quoi que ce soit.
 **Phase B — Verrouillage de la configuration véhicule** :
    - Empêcher toute configuration de pièces/réglages/peinture par le menu natif BeamNG (parts selector/configurateur
      accessible depuis Échap ou le sélecteur de véhicule) tant qu'on est en ligne GRNFR — seul l'ordinateur du

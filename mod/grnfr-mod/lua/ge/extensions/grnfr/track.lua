@@ -1,4 +1,4 @@
--- GRNFR Online : repère un joueur choisi depuis la fenêtre rapide (touche J). Dessine un point qui suit sa
+-- GRNFR Online : repère un joueur choisi depuis le téléphone (touche K). Dessine un point qui suit sa
 -- position, mise à jour à chaque fois que la liste des joueurs du serveur est reçue (~2-3 fois/s, largement
 -- suffisant pour l'usage demandé : « le point bouge avec la personne toutes les 2 s »). Indépendant de
 -- grnfr_nav (destinations de taxi) : les deux peuvent être actifs en même temps sans se gêner.
