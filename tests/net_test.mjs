@@ -33,6 +33,24 @@ function gameHttp(c) {
   }, 0)
 }
 globalThis.__t = { lcalls, engine, handlers, lua: c => c.startsWith("extensions.grnfr_http.request(") ? gameHttp(c) : engine.push(c) }
+
+// Faux relais (public/bridge.js) : un cadre dont la fenêtre reçoit {grnfr:"req"} par postMessage, interroge le faux
+// Supabase et répond {grnfr:"bridge", id, status, body} au parent. Au chargement il annonce {ready:true}.
+const bridgeCalls = [], winListeners = []
+let frameWin = null, frameSrc = ""
+const toParent = data => winListeners.forEach(f => f({ data, source: frameWin }))
+globalThis.window = { addEventListener: (t, f) => { if (t === "message") winListeners.push(f) } }
+globalThis.document = {
+  createElement: () => ({ style: {}, setAttribute() {}, set src(v) { frameSrc = v }, contentWindow: (frameWin = { postMessage: m => {
+    if (m.grnfr !== "req") return
+    bridgeCalls.push(m)
+    setTimeout(async () => {
+      const r = await fakeServer("https://fake.supabase.co" + m.path, { method: m.method, headers: { Authorization: m.authorization }, body: m.body || undefined })
+      toParent({ grnfr: "bridge", id: m.id, ...r })
+    }, 0)
+  } }) }),
+  body: { appendChild: () => setTimeout(() => toParent({ grnfr: "bridge", ready: true, configured: true }), 0) },
+}
 fs.writeFileSync(path.join(tmp, "bridge_stub.mjs"), `export const useBridge = () => ({ events: { on: (n, f) => { globalThis.__t.handlers[n] = f }, off: () => {} }, api: { engineLua: c => globalThis.__t.lua(c) } })`)
 fs.writeFileSync(path.join(tmp, "lua_stub.mjs"), `export const callLua = async (...a) => { globalThis.__t.lcalls.push(a) }\nexport const unwrapObj = d => d\nexport const unwrapList = d => d`)
 globalThis.localStorage = { s: {}, getItem(k) { return this.s[k] ?? null }, setItem(k, v) { this.s[k] = v }, removeItem(k) { delete this.s[k] } }
@@ -121,9 +139,20 @@ check(engine[1].includes("onNetResult(8,false,") && engine[1].includes("unknown_
 await handlers.GRNFRNetReq({ id: 9, fn: "drop table; --", args: {} })
 check(engine.length === 2, "nom de fonction suspect refusé")
 // jeton jamais écrit dans le texte envoyé au Lua
-check(!engine.join("").includes("tok_"), "le jeton n'est transmis au Lua que pour l'envoi HTTP (jamais dans les autres appels)")
-check(httpCalls.length > 0 && httpCalls.every(h => h.url.startsWith("https://fake.supabase.co/") && h.url.includes("apikey=anon")), "toutes les requêtes passent par le moteur du jeu, clé anon en paramètre d'URL")
-check(httpCalls.some(h => h.authorization === "Bearer tok_anon2"), "le jeton de session part en en-tête Authorization")
+check(!engine.join("").includes("tok_") && httpCalls.length === 0, "le jeton n'est jamais transmis au Lua (relais disponible : aucun envoi par le Lua)")
+check(frameSrc === "https://careermp.vercel.app/bridge.html", "le relais est chargé depuis le site")
+check(bridgeCalls.length > 0 && bridgeCalls.every(c => /^\/(rest|auth)\/v1\//.test(c.path)), "toutes les requêtes passent par le relais, avec un chemin seulement (jamais une URL complète)")
+check(bridgeCalls.some(c => c.authorization === "Bearer tok_anon2"), "le jeton de session part en en-tête Authorization")
 await net.signOut()
 check(st.status === "out" && st.server === null && lcalls.some(c => c[1] === "auth" && !JSON.parse(c[2]).loggedIn), "déconnexion : quitte le serveur, prévient le Lua")
+
+// Repli : relais impossible (pas de cadre) -> envoi par le Lua (grnfr/http.lua), erreur combinant les deux causes.
+delete globalThis.document
+const net2 = await import(pathToFileURL(path.join(tmp, "net.mjs")) + "?sans-relais")
+await net2.initNet()
+check(await net2.signUpAnonymous("zoe") === true && httpCalls.some(h => h.url.startsWith("https://fake.supabase.co/") && h.url.includes("apikey=anon")), "sans relais : repli sur le Lua du jeu (clé anon en paramètre d'URL)")
+const realLua = globalThis.__t.lua
+globalThis.__t.lua = c => c.startsWith("extensions.grnfr_http.request(") ? handlers.GRNFRHttp({ id: Number(c.match(/\((\d+),/)[1]), status: 0, error: "ssl indisponible" }) : realLua(c)
+await net2.signOut()
+check(await net2.signUpAnonymous("yann") === false && /relais impossible.*Lua : ssl indisponible/.test(net2.net.error), "les deux échecs (relais et Lua) sont affichés ensemble")
 console.log("=== TESTS CLIENT OK ===")

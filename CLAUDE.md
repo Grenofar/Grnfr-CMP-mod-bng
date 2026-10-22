@@ -96,7 +96,7 @@ node scripts/build.mjs
 npm run release -- "release notes"
 
 # Client network tests (fakes Supabase + the Lua bridge, including grnfr/http.lua's GRNFRHttp round trip;
-# fetch() throws, so any regression back to fetch fails) — 22 checks, covers profile creation
+# fetch() throws, so any regression back to fetch fails) — 25 checks (relay path + Lua fallback), covers profile creation
 # (signUpAnonymous — no e-mail/password path exists in the UI anymore, see below), server join/leave,
 # ghost sync, server-full, not_in_server recovery, Lua RPC bridge, token only sent to Lua for HTTP transport
 node tests/net_test.mjs
@@ -134,18 +134,22 @@ session, tokens and error handling) and gets results back via engine events (`GR
 **The UI must never `fetch()` an external host**: since BeamNG 0.40 the CEF UI has a Content-Security-Policy
 `connect-src 'self' localhost 127.0.0.1`, so every `fetch()` to Supabase failed with "Failed to fetch" for every
 player (diagnosed in v2.1.5–2.1.7 by wrongly chasing firewalls/DNS; the real proof was in `BeamNG.log`:
-`violates the following Content Security Policy directive`). `net.js`'s `http()` therefore sends each request to
-`grnfr/http.lua` (`extensions.grnfr_http.request(...)`), a small non-blocking HTTPS client written on the game's
-bundled LuaSocket (`require('socket')`) + LuaSec (`require('ssl')`): one coroutine per request, advanced every frame
-by `grnfr_http.update` (called from `grnfr.lua`'s `M.tick`, menu included), sets SNI itself (Cloudflare in front of
-Supabase requires it), `verify='none'` (no CA store in the game — known limitation), response returned via the
-`GRNFRHttp` event. Do **not** go back to either of these, both tried and failed: the engine's `SecureComm.apiCall`
-(v2.1.8 — only serves BeamNG's own API, silently never answered for Supabase) and `copas.http` (bundled, but never
-sets SNI). On load, `http.lua` logs to `BeamNG.log` (`grnfr_http`) whether `socket`/`ssl` loaded, and one line per
-request (method + path, never the query). The anon key is also in the URL (`?apikey=`, left from the v2.1.8
-design, harmless). The session token *does* reach Lua, but only in `grnfr_http.request` — `http.lua` must never log
-the URL or the Authorization value. `http.lua`'s response parsing (incl. chunked) was run under `fengari`
-(npm Lua VM) but the network path has only ever been tested in the real game, if at all — check the log. When a network bug is reported, ask for `BeamNG.log`
+`violates the following Content Security Policy directive`). The CSP is set by the engine, not in any game file,
+so only its `connect-src` is known. Transport history, all verified in the real game via `BeamNG.log` — do **not**
+retry the dead ends: v2.1.8 engine `SecureComm.apiCall` (only serves BeamNG's own API, never answered for
+Supabase); v2.1.9 Lua client on LuaSocket + LuaSec — the game ships LuaSocket 3.0-rc1 but **no LuaSec** (`module
+'ssl' not found`), so Lua has no HTTPS; `copas.http` is bundled but needs LuaSec too. Current (v2.1.10): **iframe
+relay** — `net.js` loads `https://careermp.vercel.app/bridge.html` (`public/bridge.html` + `bridge.js`) in a hidden
+iframe; that page isn't bound by the game's CSP, takes `{grnfr:"req", id, method, path, body, authorization}` by
+postMessage, fetches **only** `<config.js url> + path` (path must start `/rest/v1/` or `/auth/v1/` — never an open
+proxy) and posts back `{grnfr:"bridge", id, status, body}`. `vercel.json` exempts `/bridge.html` from the site-wide
+`X-Frame-Options: DENY` (and gives it a strict CSP of its own) — keep that exemption, or the relay stops loading.
+The site must be deployed (Vercel, from `main`) for the relay to work. Whether the game's CSP allows the iframe was
+unknown when this was written (only empirical test possible). If the relay doesn't load within 10 s, `net.js` falls
+back to `grnfr/http.lua` (the Lua client, kept for a future game version shipping LuaSec; it logs `socket`/`ssl`
+availability to `BeamNG.log` under `grnfr_http` on load) and the shown error combines both causes. If the iframe is
+blocked too, the remaining option is a local helper process on `localhost` (allowed by the CSP, like BeamMP's
+launcher) — every player would have to install it. When a network bug is reported, ask for `BeamNG.log`
 (`%LOCALAPPDATA%\BeamNG\BeamNG.drive\current\BeamNG.log`) first: CEF console errors are written there.
 `grnfr_online.call(fn, args, cb)` (`online.lua`) is a
 **generic RPC bridge**: any Supabase RPC can be invoked through it without adding new event plumbing — this
