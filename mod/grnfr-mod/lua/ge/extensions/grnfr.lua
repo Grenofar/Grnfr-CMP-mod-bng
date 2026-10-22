@@ -1,10 +1,10 @@
 -- GRNFR Mod : extension GE principale (orchestration uniquement).
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
-  'grnfr_places', 'grnfr_nav', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
+  'grnfr_places', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile' }
 
-local VERSION = '2.2.0'
+local VERSION = '2.2.1'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -451,6 +451,7 @@ function M.tick(dtReal)
       grnfr_chat.update(d0); grnfr_drag.update(d0)
     end
     grnfr_nav.update()
+    grnfr_http.update(d0)
     grnfr_online.update(d0)
     if modeInfo.session and grnfr_online.isAuthed() then grnfr_ghosts.update(d0); grnfr_convoy.update(d0); grnfr_track.update() end
   end

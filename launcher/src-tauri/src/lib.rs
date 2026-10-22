@@ -1,6 +1,6 @@
 // GRNFR CMP Launcher : couche Tauri mince. Toute la logique (relais local du mod, détection, installation du mod,
 // lancement) est dans launcher/core (testée avec cargo test) ; ici on ne fait que l'exposer à l'interface React.
-// Mises à jour de l'app : plugin officiel tauri-plugin-updater (signé, même clé que le host — voir launcher/README.md).
+// Mises à jour de l'app : plugin officiel tauri-plugin-updater (artefacts signés, voir CLAUDE.md).
 use grnfr_launcher_core::app::{Detected, LaunchReport, Launcher, ServerInfo, Status};
 use grnfr_launcher_core::modsync::{InstallReport, ModStatus};
 use grnfr_launcher_core::proxy::DEFAULT_ADDR;
@@ -62,7 +62,7 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
-            // Adresse et clé publique du serveur embarquées à la compilation (secrets GitHub, comme pour le host).
+            // Adresse et clé publique du serveur embarquées à la compilation (secrets GitHub).
             let server = ServerInfo {
                 url: option_env!("SUPABASE_URL").map(String::from),
                 anon_key: option_env!("SUPABASE_ANON_KEY").map(String::from),

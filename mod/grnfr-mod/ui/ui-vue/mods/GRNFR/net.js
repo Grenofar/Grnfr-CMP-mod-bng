@@ -53,6 +53,13 @@ class NetError extends Error { constructor(code, status, detail) { super(code); 
 // http://127.0.0.1:30815 et relaie vers Supabase en HTTPS. Hors du jeu (tests), fetch() direct vers Supabase.
 const LAUNCHER_URL = "http://127.0.0.1:30815"
 let inGame = false
+// Deux façons de joindre le launcher depuis le jeu : "ui" = fetch() de l'interface (autorisé par la CSP, mais le
+// navigateur intégré peut refuser le réseau local : constaté en jeu, launcher ouvert, « launcher pas ouvert »),
+// "lua" = grnfr/http.lua (LuaSocket, HTTP simple vers 127.0.0.1). On essaie "ui", puis "lua" ; le premier qui
+// répond est retenu pour la suite (route), on réessaie les deux si la route retenue se met à échouer.
+let route = null, httpSeq = 0
+const httpWait = new Map()
+const LUA_TIMEOUT = 25000
 
 async function send(url, method, body, authorization) {
   try {
@@ -61,14 +68,43 @@ async function send(url, method, body, authorization) {
   } catch (e) { return { status: 0, error: (e && (e.message || e.name)) || String(e) } }
 }
 
+function onHttp(d) {
+  const r = unwrapObj(d)
+  const w = r && httpWait.get(Number(r.id))
+  if (!w) return
+  httpWait.delete(Number(r.id)); clearTimeout(w.timer); w.resolve(r)
+}
+function sendViaLua(method, path, body, authorization) {
+  return new Promise(resolve => {
+    const id = ++httpSeq
+    const timer = setTimeout(() => { httpWait.delete(id); resolve({ status: 0, error: "le jeu n'a pas répondu (grnfr_http)" }) }, LUA_TIMEOUT)
+    httpWait.set(id, { resolve, timer })
+    engineLua("extensions.grnfr_http.request(" + id + "," + luaStr(method) + "," + luaStr(path) + "," + luaStr(body) + "," + luaStr(cfg.anonKey) + "," + luaStr(authorization) + ")")
+  })
+}
+
+async function sendToLauncher(method, path, body, authorization) {
+  const ui = () => send(LAUNCHER_URL + path, method, body, authorization)
+  const lua = () => sendViaLua(method.toLowerCase(), path, body, authorization)
+  const order = route === "lua" ? [["lua", lua], ["ui", ui]] : [["ui", ui], ["lua", lua]]
+  const errors = []
+  for (const [name, fn] of order) {
+    const r = await fn()
+    if (r.status) { route = name; return r }
+    errors.push((name === "ui" ? "interface" : "Lua") + " : " + (r.error || "aucune réponse"))
+  }
+  route = null
+  return { status: 0, error: errors.join(" ; ") }
+}
+
 async function http(path, body, token, method = "POST") {
   if (!net.configured) throw new NetError("not_configured", 0)
   const authorization = "Bearer " + (token || cfg.anonKey)
   const payload = body === undefined ? "" : JSON.stringify(body)
-  const r = await send((inGame ? LAUNCHER_URL : cfg.url) + path, method, payload, authorization)
+  const r = inGame ? await sendToLauncher(method, path, payload, authorization) : await send(cfg.url + path, method, payload, authorization)
   if (!r.status) {
-    if (inGame) { // rien n'écoute sur 127.0.0.1:30815 : le launcher n'est pas ouvert
-      net.lastNetworkDetail = errText({ code: "launcher_missing" })
+    if (inGame) { // ni l'interface ni le Lua n'ont joint 127.0.0.1:30815 : on montre les deux vraies causes
+      net.lastNetworkDetail = r.error || "aucune réponse"
       throw new NetError("launcher_missing", 0, r.error)
     }
     net.lastNetworkDetail = r.error || "aucune réponse"
@@ -78,7 +114,7 @@ async function http(path, body, token, method = "POST") {
   try { data = r.body ? JSON.parse(r.body) : null } catch (e) { /* corps vide ou non JSON */ }
   if (r.status >= 400) {
     const code = (data && (data.message || data.msg || data.error_description || data.error)) || ("http_" + r.status)
-    if (code === "launcher_upstream") net.lastNetworkDetail = errText({ code })
+    if (code === "launcher_upstream") net.lastNetworkDetail = (data && data.detail) || ""
     throw new NetError(String(code), r.status, data && data.detail)
   }
   return data
@@ -134,7 +170,7 @@ export const ui = (name, args) => callLua("ui", name, JSON.stringify(args || {})
 const ERR = {
   fr: {
     network: "Impossible de joindre le serveur (réseau).",
-    launcher_missing: "GRNFR CMP Launcher n'est pas ouvert : téléchargez-le sur careermp.vercel.app, lancez-le, puis réessayez.",
+    launcher_missing: "Impossible de joindre GRNFR CMP Launcher : vérifiez qu'il est ouvert (téléchargement sur careermp.vercel.app).",
     launcher_upstream: "GRNFR CMP Launcher n'arrive pas à joindre le serveur (connexion internet ?).", not_configured: "Ce mod n'est pas relié à un serveur (voir le site).",
     username_taken: "Ce pseudo est déjà pris.", username_invalid: "Pseudo invalide : 3 à 20 lettres, chiffres ou _.",
     username_required: "Choisissez un pseudo avant de rejoindre un serveur.", username_already_set: "Pseudo déjà choisi.",
@@ -151,7 +187,7 @@ const ERR = {
   },
   en: {
     network: "Cannot reach the server (network).",
-    launcher_missing: "GRNFR CMP Launcher is not running: download it from careermp.vercel.app, start it, then try again.",
+    launcher_missing: "Cannot reach GRNFR CMP Launcher: check that it is running (download from careermp.vercel.app).",
     launcher_upstream: "GRNFR CMP Launcher cannot reach the server (internet connection?).", not_configured: "This mod is not linked to a server (see the website).",
     username_taken: "This username is already taken.", username_invalid: "Invalid username: 3 to 20 letters, digits or _.",
     username_required: "Pick a username before joining a server.", username_already_set: "Username already chosen.",
@@ -172,7 +208,8 @@ export function errText(e) {
   const base = (ERR[net.lang] || ERR.fr)[code] || ((net.lang === "en" ? "Error: " : "Erreur : ") + code)
   // Même logique que hintFor() dans OnlineWindow.vue pour la vérif de pseudo en direct : montrer la cause
   // brute à chaque fois qu'on affiche une erreur "network", pas seulement à cet endroit-là.
-  return code === "network" && net.lastNetworkDetail ? `${base} (${net.lastNetworkDetail})` : base
+  const withDetail = code === "network" || code === "launcher_missing" || code === "launcher_upstream"
+  return withDetail && net.lastNetworkDetail ? `${base} (${net.lastNetworkDetail})` : base
 }
 
 // ------------------------------------------------------------------ compte
@@ -366,6 +403,7 @@ export async function initNet() {
   started = true
   let b; try { b = useBridge() } catch (e) { started = false; return }
   const on = (name, fn) => { b.events.on(name, fn); offs.push(() => b.events.off(name, fn)) }
+  on("GRNFRHttp", onHttp)
   inGame = true
   on("GRNFRNetReq", onNetReq)
   on("GRNFRSelf", onSelf)
@@ -399,5 +437,5 @@ export async function initNet() {
 
 export function stopNet() {
   offs.forEach(f => { try { f() } catch (e) { /* ignoré */ } })
-  offs = []; started = false; inGame = false
+  offs = []; started = false; inGame = false; route = null
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { relaunch } from "@tauri-apps/plugin-process"
 
-// Mise à jour de l'app (même principe que le host) : @tauri-apps/plugin-updater lit latest.json (release fixe
+// Mise à jour de l'app : @tauri-apps/plugin-updater lit latest.json (release fixe
 // "launcher-latest", voir .github/workflows/launcher-release.yml), télécharge l'installeur signé et le lance ; l'app
 // redémarre ensuite. Carte toujours visible (version, état, bouton), revérifie toutes les 6 h.
 const RECHECK_MS = 6 * 60 * 60 * 1000

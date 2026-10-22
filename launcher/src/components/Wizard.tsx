@@ -3,7 +3,7 @@ import { api, Settings } from "../api"
 import PathField from "./PathField"
 import ModeChooser from "./ModeChooser"
 
-// Assistant du premier lancement (relançable depuis les réglages) : 1. emplacements (détectés automatiquement),
+// Assistant du premier lancement (ensuite tout se règle dans Paramètres) : 1. emplacements (détectés automatiquement),
 // 2. façon de lancer le jeu, 3. récapitulatif. Rien n'est enregistré avant « Terminer ».
 export default function Wizard({ initial, onDone }: { initial: Settings; onDone: (s: Settings) => void }) {
   const [step, setStep] = useState(0)
