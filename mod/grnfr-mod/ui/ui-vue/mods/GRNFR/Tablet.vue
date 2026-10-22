@@ -297,7 +297,10 @@
           </div>
           <div class="tile wide">
             <div class="tname">Bus</div>
-            <div class="mut" v-if="bus.active">{{ bus.legs || 0 }} {{ L('arrêts', 'stops') }} · {{ money(bus.earned || 0) }}</div>
+            <div class="mut" v-if="bus.active">
+              <template v-if="bus.direction">{{ L('Ligne réelle, direction ', 'Real line, towards ') }}{{ bus.direction }} · </template>
+              {{ bus.legs || 0 }} {{ L('arrêts', 'stops') }} · {{ money(bus.earned || 0) }}
+            </div>
             <div class="acts">
               <button v-if="!bus.active" type="button" class="btn" @click="ui('bus.start')">{{ L('Commencer la ligne', 'Start the line') }}</button>
               <button v-else type="button" class="btn dim" @click="ui('bus.stop')">{{ L('Arrêter', 'Stop') }}</button>

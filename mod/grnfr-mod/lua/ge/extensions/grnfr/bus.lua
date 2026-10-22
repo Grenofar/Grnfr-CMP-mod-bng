@@ -14,9 +14,54 @@ local function L(fr, en) local o = online() return o and o.L(fr, en) or fr end
 local function toast(m, k) local o = online() if o then o.toast(m, k) end end
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
 
+-- Douceur de conduite (mêmes bases que la Phase C / taxi.lua) : le confort du bus choisi influe aussi sur le
+-- pourboire des passagers, pas seulement le taxi. Échantillonné pendant tout le tronçon (phase 'to_next').
+local comfortAcc, comfortSamples, lastVel = 0, 0, nil
+local COMFORT_TOLERANCE, COMFORT_SCALE = 3, 10
+local function playerVeh2() local ok, v = pcall(function() return be:getPlayerVehicle(0) end) if ok then return v end end
+local function vehModel()
+  local v = playerVeh2()
+  if not v then return nil, nil end
+  local ok, model = pcall(function() return tostring(v.jbeam or '') end)
+  local config
+  pcall(function() local pc = v.partConfig if type(pc) == 'string' then config = pc:match('([^/\\]+)%.pc$') end end)
+  return ok and model ~= '' and model or nil, config
+end
+local function resetComfort() comfortAcc, comfortSamples, lastVel = 0, 0, nil end
+local function sampleComfort(dt)
+  local v = playerVeh2()
+  if not v or not dt or dt <= 0 then return end
+  local ok, vel = pcall(function() return v:getVelocity() end)
+  if not ok or not vel then return end
+  if lastVel then
+    local dvx, dvy, dvz = vel.x - lastVel.x, vel.y - lastVel.y, vel.z - lastVel.z
+    local acc = math.sqrt(dvx * dvx + dvy * dvy + dvz * dvz) / dt
+    comfortAcc = comfortAcc + math.max(0, acc - COMFORT_TOLERANCE)
+    comfortSamples = comfortSamples + 1
+  end
+  lastVel = { x = vel.x, y = vel.y, z = vel.z }
+end
+local function comfortScore()
+  if comfortSamples <= 0 then return 100 end
+  return math.max(0, math.min(100, math.floor(100 - (comfortAcc / comfortSamples) * (100 / COMFORT_SCALE) + 0.5)))
+end
+
 local function stopName(i) return L('Arrêt ', 'Stop ') .. tostring(i) end
 
+-- Vraie ligne de bus de la carte (grand chantier Phase E) si elle existe (grnfr_facilities.busLines(), jamais
+-- vérifié en jeu — voir le commentaire dans facilities.lua), sinon repli sur l'ancienne génération au hasard.
+-- Renvoie stops, direction (direction = nil pour une ligne inventée).
+local function realStops()
+  local ok, lines = pcall(grnfr_facilities.busLines)
+  if not ok or type(lines) ~= 'table' or #lines == 0 then return nil end
+  local r = lines[math.random(#lines)]
+  if type(r.stops) ~= 'table' or #r.stops < 3 then return nil end
+  return r.stops, r.direction
+end
+
 local function buildStops(origin)
+  local real, direction = realStops()
+  if real then return real, direction end
   local first = grnfr_places.randomNear(origin, 80, 500)
   if not first then return nil end
   local stops = { first }
@@ -27,7 +72,7 @@ local function buildStops(origin)
   end
   if #stops < 3 then return nil end
   for i, s in ipairs(stops) do s.name = stopName(i) end
-  return stops
+  return stops, nil
 end
 
 local function target(i)
@@ -42,12 +87,17 @@ function M.start()
   if not (o and o.isAuthed()) then toast(L('Connectez-vous d\'abord (touche O).', 'Sign in first (O key).'), 'warning') return false end
   if run then return true end
   local origin = grnfr_places.playerPos()
-  local stops = origin and buildStops(origin)
+  local stops, direction = nil, nil
+  if origin then stops, direction = buildStops(origin) end
   if not stops then toast(L('Impossible de tracer une ligne ici (pas assez de routes).', 'Could not build a route here (not enough roads).'), 'error') return false end
-  run = { stops = stops, i = 1, phase = 'to_stop', dwell = 0 }
+  run = { stops = stops, i = 1, phase = 'to_stop', dwell = 0, direction = direction }
   busy, retry, lastMsg = false, 0, ''
   target(1)
-  toast(L('Ligne de bus lancée : rendez-vous au premier arrêt.', 'Bus line started: go to the first stop.'))
+  if direction then
+    toast(L('Vraie ligne de bus trouvée : direction ', 'Real bus line found: towards ') .. direction .. L('. Rendez-vous au premier arrêt.', '. Go to the first stop.'))
+  else
+    toast(L('Ligne de bus lancée : rendez-vous au premier arrêt.', 'Bus line started: go to the first stop.'))
+  end
   slog('info', 'Bus line started with ' .. #stops .. ' stops.')
   return true
 end
@@ -80,6 +130,7 @@ local function startLeg()
       if not ok2 then lastMsg = o.errText(data2) retry = 5 o.call('cancel_job', { p_job = data.id }) return end
       run.job, run.pax, run.fare = data.id, data.passengers, data.fare
       run.phase = 'to_next'
+      resetComfort()
       target(nextIndex(run.i))
       toast(tostring(data.passengers) .. L(' passager(s) à bord. Direction ', ' passenger(s) on board. Next: ') .. run.stops[nextIndex(run.i)].name)
     end)
@@ -91,20 +142,30 @@ local function endLeg()
   local p = grnfr_nav.playerPos()
   if not p then return end
   busy = true
-  o.call('complete_job', { p_job = run.job, p_pos = grnfr_places.xyz(p) }, function(ok, data)
+  local model, config = vehModel()
+  local smoothness = comfortScore()
+  o.call('complete_job', { p_job = run.job, p_pos = grnfr_places.xyz(p), p_model_key = model, p_config_key = config,
+    p_smoothness = smoothness }, function(ok, data)
     busy = false
     if not run then return end
     if not ok then lastMsg = o.errText(data) retry = 4 if data == 'job_unavailable' then run.job, run.phase = nil, 'dwell' end return end
     local paid = type(data) == 'table' and tonumber(data.paid) or 0
+    local tip = type(data) == 'table' and tonumber(data.tip) or 0
     earned, legs = earned + paid, legs + 1
     if type(data) == 'table' and data.capped then toast(L('Plafond de gains horaire atteint : gain réduit.', 'Hourly earnings cap reached: reduced payout.'), 'warning') end
-    toast(L('Arrêt desservi : +$', 'Stop served: +$') .. tostring(paid), 'success')
+    if tip > 0 then
+      toast(L('Arrêt desservi : +$', 'Stop served: +$') .. tostring(paid) .. L(' (dont ', ' (incl. ') .. '$' .. tostring(tip) .. L(' de pourboire confort)', ' comfort tip)'), 'success')
+    else
+      toast(L('Arrêt desservi : +$', 'Stop served: +$') .. tostring(paid), 'success')
+    end
+    slog('info', 'Bus: stop served, smoothness ' .. smoothness .. '/100.')
     run.i, run.job, run.phase, run.dwell = nextIndex(run.i), nil, 'dwell', 0
   end)
 end
 
 function M.update(dt)
   if not run or busy then return end
+  if run.phase == 'to_next' then sampleComfort(dt) end
   if retry > 0 then retry = retry - dt return end
   if run.phase == 'to_stop' then
     if grnfr_nav.arrived(4) then run.phase, run.dwell = 'dwell', 0 end
@@ -120,9 +181,10 @@ end
 function M.status()
   local d = run and grnfr_nav.get() and grnfr_nav.distance()
   return { active = run ~= nil, phase = run and run.phase or 'idle', stop = run and run.i or 0, stops = run and #run.stops or 0,
-           passengers = run and run.pax or 0, earned = earned, legs = legs, dist = d and math.floor(d) or nil, msg = lastMsg }
+           passengers = run and run.pax or 0, earned = earned, legs = legs, dist = d and math.floor(d) or nil, msg = lastMsg,
+           direction = run and run.direction or nil, comfort = (run and run.phase == 'to_next') and comfortScore() or nil }
 end
 
-function M.reset() run, busy, retry, lastMsg = nil, false, 0, '' grnfr_nav.clear() end
+function M.reset() run, busy, retry, lastMsg = nil, false, 0, '' resetComfort() grnfr_nav.clear() end
 
 return M

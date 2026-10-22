@@ -173,6 +173,69 @@ function M.deliveryPoints()
   return out
 end
 
-function M.reset() cache, dpCache = { level = nil, list = nil }, { level = nil, list = nil } end
+-- Vraies lignes de bus de la carte (grand chantier Phase E, 22/10/2026) : lues exactement comme le fait le jeu
+-- lui-même dans core_busRouteManager.lua (lua/ge/extensions/core/busRouteManager.lua, inspecté sur l'installation
+-- BeamNG de cette machine) — jamais vérifié depuis NOTRE mod, mais c'est du code copié du vrai module du jeu :
+--   * les lignes (ordre des arrêts, nom de direction) viennent de levels/<carte>/buslines/*.buslines.json ;
+--   * les positions des arrêts viennent des objets de la scène (SimGroup "busstops", des BeamNGTrigger de type
+--     "busstop", chacun avec un nom technique ET un nom affiché "stopName" plus lisible).
+-- Une carte sans ligne de bus renvoie une liste vide (bus.lua utilise alors son ancienne génération d'arrêts au
+-- hasard le long des routes, jamais de ligne inventée de toutes pièces).
+local blCache = { level = nil, list = nil }
+
+function M.busLines()
+  local level = grnfr_places.level()
+  if blCache.level == level and blCache.list then return blCache.list end
+  local dir = '/levels/' .. level .. '/'
+  local routes = {}
+  pcall(function()
+    for _, file in ipairs(FS:findFiles(dir .. 'buslines/', '*.buslines.json', -1, false, true) or {}) do
+      local d = jsonReadFile(file)
+      if type(d) == 'table' and type(d.routes) == 'table' then
+        for _, r in ipairs(d.routes) do routes[#routes + 1] = r end
+      end
+    end
+  end)
+  local stops = {}
+  pcall(function()
+    local folder = scenetree.findObject('busstops')
+    if not folder then return end
+    for i = 0, folder:getCount() - 1 do
+      local trig = folder:getObject(i)
+      if trig then
+        local okCls, cls = pcall(function() return trig:getClassName() end)
+        if okCls and cls == 'BeamNGTrigger' then
+          local up = (Sim and Sim.upcast and Sim.upcast(trig)) or trig
+          local okTy, ty = pcall(function() return up.type end)
+          if okTy and ty == 'busstop' then
+            local okN, name = pcall(function() return up.name end)
+            local okS, sname = pcall(function() return up.stopName end)
+            local okP, pos = pcall(function() return up:getPosition() end)
+            if okN and type(name) == 'string' and okP and pos then
+              stops[name] = { pos = vec3(pos.x, pos.y, pos.z), name = (okS and type(sname) == 'string' and sname ~= '' and sname) or name }
+            end
+          end
+        end
+      end
+    end
+  end)
+  local out = {}
+  for _, r in ipairs(routes) do
+    local tasklist = {}
+    for _, stopId in ipairs(r.tasklist or {}) do
+      local s = stops[stopId]
+      if s then tasklist[#tasklist + 1] = { x = s.pos.x, y = s.pos.y, z = s.pos.z, name = s.name } end
+    end
+    if #tasklist >= 3 then
+      out[#out + 1] = { routeID = r.routeID, variance = r.variance, direction = r.direction, stops = tasklist }
+    end
+  end
+  if #out > 0 then slog('info', 'Bus: ' .. #out .. ' real bus line(s) found on ' .. level .. '.')
+  else slog('info', 'Bus: no real bus line found on ' .. level .. ' (synthetic stops will be used).') end
+  blCache.level, blCache.list = level, out
+  return out
+end
+
+function M.reset() cache, dpCache, blCache = { level = nil, list = nil }, { level = nil, list = nil }, { level = nil, list = nil } end
 
 return M

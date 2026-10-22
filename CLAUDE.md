@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.14.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
+- Mod : **2.15.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
   à republier pour la 2.14.0 ; toutes les données ont aussi été réinitialisées ce jour-là à la demande de
   l'utilisateur : `wipe_all.sql` puis `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -745,6 +745,33 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   - Vérifié hors jeu : `luaparse` sur `delivery.lua`, `Tablet.vue` compile, `node tests/net_test.mjs` (30/30).
     **Jamais ouvert dans le vrai jeu.**
 
+- **Grand chantier Phase E — vraies lignes de bus, pourboire confort (mod 2.15.0)**.
+  - **🔎 Découverte en lisant les vraies sources du jeu** (BeamNG installé sur cette machine,
+    `lua/ge/extensions/core/busRouteManager.lua`) : certaines cartes (confirmé pour `west_coast_usa`,
+    `content/levels/west_coast_usa.zip!/levels/west_coast_usa/buslines/wca.buslines.json`) ont de VRAIES lignes
+    de bus définies par le jeu : 6 lignes (12 variantes), chacune avec un nom de direction réel (« Star Diner »,
+    « Riverway Plaza », « Central Hospital »...), un ordre d'arrêts réel (`tasklist`, des ids comme `wcu_bs_16`),
+    et un véhicule attendu (`citybus`/`base` — correspond exactement à notre Wentward DT40L déjà au
+    concessionnaire). Les POSITIONS des arrêts ne sont pas dans ce fichier : elles vivent comme objets de la
+    scène (`scenetree.findObject('busstops')`, des `BeamNGTrigger` de type `busstop`, avec un nom technique et
+    un nom affiché `stopName` plus lisible) — exactement le même principe que les garages (`facilities.lua`).
+  - `grnfr_facilities.busLines()` (nouveau) : lit `levels/<carte>/buslines/*.buslines.json` (comme
+    `core_busRouteManager.lua` le fait lui-même) + résout les positions via `scenetree.findObject('busstops')`,
+    copié du vrai module du jeu (cast `Sim.upcast`, vérification `type == 'busstop'`) — **jamais vérifié depuis
+    NOTRE mod** (pas d'accès au jeu cette session), mais c'est du code fidèle au vrai module, pas une hypothèse
+    en l'air. Carte sans ligne de bus → liste vide, pas de ligne inventée.
+  - `bus.lua` : `buildStops()` essaie maintenant une vraie ligne de la carte en premier (nom de direction affiché
+    au joueur), et ne retombe sur l'ancienne génération au hasard le long des routes que si la carte n'a aucune
+    vraie ligne de bus. Pourboire confort (mêmes bases que la Phase C, demandé explicitement) : `endLeg()`
+    envoie maintenant le véhicule du joueur et un score de douceur de conduite à `complete_job` (déjà prêt côté
+    serveur depuis 0023, mais jamais branché pour le bus jusqu'ici) — le confort du bus choisi influe donc aussi
+    sur le pourboire, pas seulement le taxi.
+  - `Tablet.vue` : affiche la direction de la vraie ligne quand il y en a une.
+  - Vérifié hors jeu : `luaparse` sur `bus.lua`/`facilities.lua`, `Tablet.vue` compile, `node tests/net_test.mjs`
+    (30/30, aucun changement SQL ce coup-ci — le pourboire bus réutilise 0023 tel quel). **Jamais ouvert dans le
+    vrai jeu** — en particulier `scenetree.findObject('busstops')`/`Sim.upcast` n'ont jamais été exécutés dans
+    notre mod, seulement lus dans le vrai module du jeu.
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -893,8 +920,8 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - ~~**Plusieurs entreprises, prix au poids et à la distance**~~ **Fait (mod 2.14.0, voir § Fait ci-dessus)**.
    - ~~**Système de salarié au garage**~~ **Fait (mod 2.10.0, avec niveaux, voir § Fait ci-dessus)** : revenu de
      fond tous les 100 km (temps réel, vitesse virtuelle), montant aléatoire par niveau, pas forcément gagnant.
-**Phase E — Bus** : reprendre/refaire les lignes de bus existantes (`taxi.lua`/anciennes lignes, voir Architecture)
-   avec les mêmes bases que la Phase C (classes de véhicule, etc. si applicable).
+~~**Phase E — Bus**~~ **Fait (mod 2.15.0, voir § Fait ci-dessus)** : vraies lignes de la carte quand elles
+   existent (west_coast_usa confirmé), pourboire confort comme le taxi.
 **Phase F — Multijoueur visible** :
    - Voir les autres joueurs ET leur véhicule avec un trait + pseudo façon BeamMP (`ghosts.lua` existe déjà, montre
      position + pseudo — à vérifier s'il manque le modèle réel du véhicule ou le lien visuel).
