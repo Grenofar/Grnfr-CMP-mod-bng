@@ -85,7 +85,18 @@ local function fromFiles(level)
   return out
 end
 
--- Liste des garages : { id, name, spots = { {pos, rot} }, tablet = vec3, hasComputer }.
+-- Un garage réel mais rattaché à un circuit/une piste de drag (pas un vrai garage résidentiel/commercial) :
+-- repéré à l'utilisateur en jeu comme « une sorte de petite tente pour les courses » (alderDragwayGarage sur
+-- west_coast_usa, confirmé en inspectant levels/west_coast_usa/facilities/facilities.facilities.json — un vrai
+-- garage du jeu, avec son vrai ordinateur, juste au bord d'une piste de drag plutôt que dans un vrai bâtiment).
+-- On ne l'exclut pas (ce serait inventer un garage ailleurs) : on le passe juste en dernier, comme un garage
+-- sans ordinateur, pour qu'un vrai garage "normal" soit toujours préféré quand il y en a un de libre.
+local function isTrackLike(id)
+  id = tostring(id or ''):lower()
+  return id:find('dragway') or id:find('racetrack') or id:find('raceway') or id:find('rallycross') or id:find('drift')
+end
+
+-- Liste des garages : { id, name, spots = { {pos, rot} }, tablet = vec3, hasComputer, trackLike }.
 function M.garages()
   local level = grnfr_places.level()
   if cache.level == level and cache.list then return cache.list end
@@ -102,10 +113,17 @@ function M.garages()
       end
     end
     tablet = tablet or (g.spots[1] and g.spots[1].pos)
-    if tablet then list[#list + 1] = { id = g.id, name = g.name, spots = g.spots, tablet = tablet, hasComputer = hasComputer == true } end
+    if tablet then
+      list[#list + 1] = { id = g.id, name = g.name, spots = g.spots, tablet = tablet, hasComputer = hasComputer == true,
+        trackLike = isTrackLike(g.id) ~= nil }
+    end
   end
-  -- garages avec ordinateur d'abord (un vrai poste de travail = la tablette)
-  table.sort(list, function(a, b) if a.hasComputer ~= b.hasComputer then return a.hasComputer end return a.name < b.name end)
+  -- garages avec ordinateur d'abord (un vrai poste de travail = la tablette), ceux liés à un circuit en dernier
+  table.sort(list, function(a, b)
+    if a.hasComputer ~= b.hasComputer then return a.hasComputer end
+    if a.trackLike ~= b.trackLike then return not a.trackLike end
+    return a.name < b.name
+  end)
   if #list > 0 then slog('info', 'Garages: ' .. #list .. ' real garages found on ' .. level .. '.')
   else slog('warn', 'Garages: no garage found on ' .. level .. '.') end
   cache.level, cache.list = level, list

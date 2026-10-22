@@ -365,7 +365,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.7.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.7.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
@@ -529,13 +529,22 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
 2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — reste à vérifier en
    jeu que `core_vehicle_partmgmt` (ou l'API réelle, encore à trouver) applique vraiment la pièce achetée au
    véhicule, pas seulement en base.
-2ter. **Garage : signalé en jeu par l'utilisateur, « je me suis trouvé dans une sorte de petite tente pour les
-   courses, qui n'est pas un garage »** (mod 2.6.1 ou avant). **Pas encore corrigé** : `grnfr_facilities.garages()`
-   (`getFacilitiesByType('garage'|'computer')`, ou son repli fichiers) a visiblement renvoyé une structure liée aux
-   courses (tente de départ/arrivée ?) comme si c'était un vrai garage résidentiel. À l'ouverture d'une session en
-   jeu : demander le `BeamNG.log`, et/ou lister ce que `getFacilitiesByType('garage')` renvoie vraiment sur la
-   carte concernée (nom, id) pour voir ce qui doit être filtré (peut-être se fier davantage à `hasComputer`, déjà
-   prioritaire, ou exclure les garages sans vraie structure/bâtiment associé).
+2ter. ~~**Garage : signalé en jeu par l'utilisateur, « je me suis trouvé dans une sorte de petite tente pour les
+   courses, qui n'est pas un garage »**~~ **Diagnostiqué et corrigé (mod 2.7.1)**. Grâce à l'installation BeamNG
+   trouvée sur cette machine : inspection directe de
+   `levels/west_coast_usa/facilities/facilities.facilities.json` (dans `content/levels/west_coast_usa.zip`, ouvert
+   en streaming via `System.IO.Compression.ZipFile` en PowerShell — `adm-zip`/`readFileSync` échoue sur ce fichier,
+   3 Go). Ce n'était pas un bug de filtrage : **`alderDragwayGarage` est un VRAI garage du jeu** (entrée `garages`
+   + son propre `computers` `alderDragwayGarageComputer`, `zoneNames`, `parkingSpotNames`, flag
+   `"noQuickTravel":true`), juste situé au bord de la piste de drag (Alder Dragway) plutôt que dans un vrai
+   bâtiment — d'où la "tente". `grnfr_facilities.garages()` (`facilities.lua`) marque maintenant ces garages
+   `trackLike` (id contenant `dragway`/`racetrack`/`raceway`/`rallycross`/`drift`) et `garage.lua`
+   (`sortedGarages()`) les passe en dernier dans le tri de distance (même pénalité que "pas d'ordinateur") : un
+   vrai garage normal est toujours préféré s'il y en a un de libre sur la carte, mais celui-ci reste utilisable
+   (jamais exclu : ce serait inventer un garage ailleurs) si c'est le seul disponible. **Pas d'autre carte
+   vérifiée** pour des garages similaires (le mot-clé couvre probablement d'autres cartes avec circuit, non
+   confirmé). Vérifié hors jeu : syntaxe Lua (`luaparse`), `node tests/net_test.mjs` (30/30). **Jamais revérifié en
+   jeu.**
 2quater. **« On voit les voitures des autres »** (demande reformulée par l'utilisateur, sens exact pas encore
    confirmé). Le principe existe déjà : `ghosts.lua` affiche la position + le pseudo de chaque joueur distant en
    fantôme. Si l'utilisateur voulait dire que ça ne marche pas (fantômes absents/invisibles) ou autre chose

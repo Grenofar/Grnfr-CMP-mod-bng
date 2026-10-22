@@ -49,8 +49,8 @@ local function sortedGarages()
   local list = {}
   for _, g in ipairs(grnfr_facilities.garages()) do list[#list + 1] = g end
   table.sort(list, function(a, b)
-    local sa = grnfr_facilities.dist(a.tablet, origin) + (a.hasComputer and 0 or 100000)
-    local sb = grnfr_facilities.dist(b.tablet, origin) + (b.hasComputer and 0 or 100000)
+    local sa = grnfr_facilities.dist(a.tablet, origin) + (a.hasComputer and 0 or 100000) + (a.trackLike and 50000 or 0)
+    local sb = grnfr_facilities.dist(b.tablet, origin) + (b.hasComputer and 0 or 100000) + (b.trackLike and 50000 or 0)
     return sa < sb
   end)
   return list
