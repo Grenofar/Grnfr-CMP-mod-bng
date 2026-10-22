@@ -216,6 +216,7 @@ local function buildState()
     chat = status('grnfr_chat'),
     drag = status('grnfr_drag'),
     track = status('grnfr_track'),
+    delivery = status('grnfr_delivery'),
     nav = (function()
       local t = grnfr_nav.get()
       if not t then return nil end

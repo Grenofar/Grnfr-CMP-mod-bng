@@ -18,9 +18,11 @@ export default function Home({ settings, onSettings, mod, modError, modBusy, onC
   const [launchMsg, setLaunchMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
+    // 4 s plutôt que 2 : l'état du relais (requêtes/erreurs) ne change pas assez vite pour justifier le double
+    // d'appels invoke() en arrière-plan.
     const poll = () => api.status().then(setStatus).catch(() => {})
     poll()
-    const t = setInterval(poll, 2000)
+    const t = setInterval(poll, 4000)
     return () => clearInterval(t)
   }, [])
 

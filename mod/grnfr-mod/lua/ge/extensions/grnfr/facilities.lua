@@ -9,6 +9,7 @@
 local M = {}
 
 local cache = { level = nil, list = nil }
+local dpCache = { level = nil, list = nil } -- points de livraison (deliveryProvider), phase 2
 
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
 local function v3(p)
@@ -127,6 +128,33 @@ function M.at(pos, within)
   return best
 end
 
-function M.reset() cache = { level = nil, list = nil } end
+-- Points de livraison (deliveryProvider) de la carte, pour les missions de colis (phase 2, TODO point 2) : liste de
+-- points nommés avec leur position. Même principe que les garages (module carrière, repli = liste vide, jamais un
+-- point au hasard) ; API `getFacilitiesByType('deliveryProvider', ...)` non vérifiée en jeu dans cette session.
+function M.deliveryPoints()
+  local level = grnfr_places.level()
+  if dpCache.level == level and dpCache.list then return dpCache.list end
+  local out = {}
+  pcall(function()
+    if not rawget(_G, 'freeroam_facilities') then extensions.load('freeroam_facilities') end
+    local fac = rawget(_G, 'freeroam_facilities')
+    if not fac or not fac.getFacilitiesByType then return end
+    for _, f in ipairs(fac.getFacilitiesByType('deliveryProvider', level) or {}) do
+      local pos
+      pcall(function()
+        for _, s in ipairs(fac.getParkingSpotsForFacility(f) or {}) do
+          if not pos then pos = v3(s.pos) end
+        end
+      end)
+      if pos then out[#out + 1] = { id = f.id, name = f.name or f.id, pos = pos } end
+    end
+  end)
+  if #out > 0 then slog('info', 'Deliveries: ' .. #out .. ' delivery points found on ' .. level .. '.')
+  else slog('warn', 'Deliveries: no delivery point found on ' .. level .. ' (getFacilitiesByType unverified here).') end
+  dpCache.level, dpCache.list = level, out
+  return out
+end
+
+function M.reset() cache, dpCache = { level = nil, list = nil }, { level = nil, list = nil } end
 
 return M

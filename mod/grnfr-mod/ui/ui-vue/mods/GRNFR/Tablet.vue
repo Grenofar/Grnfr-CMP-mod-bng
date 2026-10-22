@@ -232,6 +232,35 @@
               <button v-else type="button" class="btn dim" @click="ui('bus.stop')">{{ L('Arrêter', 'Stop') }}</button>
             </div>
           </div>
+
+          <!-- LIVRAISONS (phase 2) : colis entre vrais points de la carte, selon la capacité de stockage achetée
+               à l'ordinateur du garage. Un véhicule déjà sorti avec assez de capacité est nécessaire pour accepter. -->
+          <div class="tile wide">
+            <div class="tname">{{ L('Livraisons', 'Deliveries') }}</div>
+            <template v-if="delivery.active">
+              <div class="mut">{{ delivery.clientName || L('Client', 'Client') }} · {{ deliveryPhaseLabel(delivery.phase) }}
+                <template v-if="delivery.dist != null"> · {{ delivery.dist }} m</template></div>
+              <div class="price">{{ money(delivery.fare) }}</div>
+              <div class="acts"><button type="button" class="btn dim" @click="ui('delivery.cancel')">{{ L('Annuler', 'Cancel') }}</button></div>
+            </template>
+            <template v-else>
+              <div class="mut">{{ L('Gains de la session', 'Session earnings') }} : {{ money(delivery.earned || 0) }} · {{ delivery.deliveries || 0 }} {{ L('livraison(s)', 'delivery(ies)') }}</div>
+              <div class="acts"><button type="button" class="btn" @click="refreshDeliveries">{{ L('Chercher des livraisons', 'Find deliveries') }}</button></div>
+              <p v-if="net.deliveryError" class="bad small">{{ net.deliveryError }}</p>
+              <div v-for="o in net.deliveryOffers" :key="o.id" class="tile">
+                <div class="tname">{{ o.client_name || L('Colis', 'Package') }}</div>
+                <div class="mut">{{ (o.pickup && o.pickup.name) || '?' }} → {{ (o.dropoff && o.dropoff.name) || '?' }} · {{ Math.round(o.route_m / 100) / 10 }} km · {{ o.cargo_units }} {{ L('unité(s)', 'unit(s)') }}</div>
+                <div class="price">{{ money(o.fare) }}</div>
+                <div class="acts">
+                  <button type="button" class="btn" :disabled="!vehicleFor(o)" @click="acceptDelivery(o)">
+                    {{ L('Accepter', 'Accept') }}<template v-if="vehicleFor(o)"> ({{ vehicleFor(o).nickname || vehicleFor(o).model_key }})</template>
+                  </button>
+                </div>
+                <p v-if="!vehicleFor(o)" class="mut small">{{ L('Aucun véhicule sorti avec assez de stockage.', 'No vehicle out with enough storage.') }}</p>
+              </div>
+              <p v-if="!net.deliveryOffers.length" class="empty">{{ L('Aucune livraison pour l\'instant : cliquez « Chercher ».', 'No deliveries yet: click "Find".') }}</p>
+            </template>
+          </div>
         </main>
 
         <!-- ORDINATEUR DU GARAGE : personnalisation du véhicule sorti (pièces, réglages, peinture, stockage) -->
@@ -500,6 +529,12 @@ async function buyCargo() {
 const giftable = computed(() => vehicles.value.filter(v => !v.listed && !out(v)))
 const taxi = computed(() => net.game.taxi || {})
 const bus = computed(() => net.game.bus || {})
+const delivery = computed(() => net.game.delivery || {})
+const DELIVERY_PHASE_NAMES = { pickup: ["Vers le ramassage", "To pickup"], dropoff: ["Vers la livraison", "To drop-off"] }
+const deliveryPhaseLabel = p => (DELIVERY_PHASE_NAMES[p] ? L(...DELIVERY_PHASE_NAMES[p]) : "")
+const vehicleFor = o => vehicles.value.find(v => out(v) && (v.cargo_capacity || 0) >= o.cargo_units)
+function refreshDeliveries() { net.deliveryError = ""; ui("delivery.refresh") }
+function acceptDelivery(o) { const v = vehicleFor(o); if (!v) return; net.deliveryError = ""; ui("delivery.accept", { id: o.id, vehicle_id: v.id }) }
 const incoming = computed(() => d.trades.filter(x => x.direction === "in").length)
 
 const clock = ref("")

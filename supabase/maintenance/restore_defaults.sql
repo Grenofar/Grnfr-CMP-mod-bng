@@ -29,7 +29,12 @@ insert into public.server_config (key, value, description) values
   ('drag_max_distance_m',       '3000',   'Longueur maximum d''une course de drag (m)'),
   ('drag_max_speed_mps',        '100',    'Vitesse moyenne max crédible pour valider un temps de drag (m/s)'),
   ('drag_min_stake',            '100',    'Mise minimum pour une course de drag'),
-  ('drag_max_stake',            '50000',  'Mise maximum pour une course de drag')
+  ('drag_max_stake',            '50000',  'Mise maximum pour une course de drag'),
+  ('delivery_base_fare',             '40',  'Livraison : prise en charge'),
+  ('delivery_per_km',                '4',   'Livraison : prix au km'),
+  ('delivery_per_unit',              '15',  'Livraison : prix par unité de capacité cargo demandée'),
+  ('delivery_max_active_per_level',  '15',  'Livraison : nombre maximum d''offres disponibles en même temps par carte'),
+  ('delivery_offer_ttl_minutes',     '30',  'Livraison : durée de vie d''une offre non acceptée (minutes)')
 on conflict (key) do nothing;
 
 -- ------------------------------------------------------------------ catalogue de base (0001)

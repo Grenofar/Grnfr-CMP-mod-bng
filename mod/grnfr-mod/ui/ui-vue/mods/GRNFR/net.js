@@ -28,6 +28,8 @@ export const net = reactive({
   updateAvailable: null,  // version plus récente publiée sur le site (null si à jour ou non vérifié)
   profiles: [],           // profils trouvés sur cette machine (settings/grnfr/profiles/*.grnfrprofile.json)
   exportedPath: "",       // chemin du dernier profil exporté (pour l'afficher au joueur)
+  deliveryOffers: [],     // dernière liste d'offres de livraison reçue (delivery.lua, points réels de la carte)
+  deliveryError: "",      // message de la dernière tentative d'acceptation de livraison ratée
   lastNetworkDetail: "",  // raison brute du dernier échec réseau (fetch) : DNS, TLS, pare-feu, CORS... pour diagnostiquer
 })
 
@@ -442,6 +444,8 @@ export async function initNet() {
   on("GRNFRProfileExport", d => { const g = unwrapObj(d); if (g?.ok) net.exportedPath = g.path || "" })
   on("GRNFRProfileList", d => { const g = unwrapObj(d); if (g) net.profiles = g.list || [] })
   on("GRNFRProfileImport", onProfileImport)
+  on("GRNFRDeliveryOffers", d => { const g = unwrapObj(d); if (g) net.deliveryOffers = g.offers || [] })
+  on("GRNFRDeliveryAccept", d => { const g = unwrapObj(d); if (g) net.deliveryError = g.ok ? "" : (g.error || "") })
   on("GRNFRDragCount", d => {
     const g = unwrapObj(d)
     if (!g || typeof g.value !== "number") return

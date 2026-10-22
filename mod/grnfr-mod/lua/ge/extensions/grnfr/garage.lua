@@ -38,27 +38,27 @@ end
 
 function M.setHold(on) holdUntil = on and (clock + HOLD_MAX) or nil end
 
--- Le vrai garage libre le plus proche du joueur (ceux avec ordinateur d'abord).
-local function pickGarage()
+-- Tous les vrais garages de la carte, triés du plus proche au plus loin (ceux avec ordinateur d'abord) : la
+-- liste ENTIÈRE (pas juste le meilleur) est envoyée au serveur, qui choisit lui-même le premier non pris (voir
+-- requestClaim) — ça évite la course entre deux joueurs qui rejoignent presque en même temps : avant, chacun
+-- calculait de son côté le "meilleur garage libre" d'après un cache local pas toujours à jour (rafraîchi toutes
+-- les 5 s), et pouvait recevoir le MÊME garage que l'autre.
+local function sortedGarages()
   local origin = grnfr_places.playerPos()
-  if not origin then return nil end
-  local best, bestScore
-  for _, g in ipairs(grnfr_facilities.garages()) do
-    local free = true
-    for _, o in ipairs(others) do
-      if o.pos and grnfr_facilities.dist(g.tablet, o.pos) < TAKEN then free = false break end
-    end
-    if free then
-      local score = grnfr_facilities.dist(g.tablet, origin) + (g.hasComputer and 0 or 100000)
-      if not bestScore or score < bestScore then best, bestScore = g, score end
-    end
-  end
-  return best
+  if not origin then return {} end
+  local list = {}
+  for _, g in ipairs(grnfr_facilities.garages()) do list[#list + 1] = g end
+  table.sort(list, function(a, b)
+    local sa = grnfr_facilities.dist(a.tablet, origin) + (a.hasComputer and 0 or 100000)
+    local sb = grnfr_facilities.dist(b.tablet, origin) + (b.hasComputer and 0 or 100000)
+    return sa < sb
+  end)
+  return list
 end
 
 local function requestClaim()
-  local g = pickGarage()
-  if not g then
+  local list = sortedGarages()
+  if #list == 0 then
     if noGarageWarned ~= grnfr_places.level() then
       noGarageWarned = grnfr_places.level()
       grnfr_online.toast(L('Aucun garage libre sur cette carte.', 'No free garage on this map.'), 'warning')
@@ -66,14 +66,16 @@ local function requestClaim()
     return
   end
   claiming = true
-  local t = g.tablet
-  grnfr_online.call('claim_garage_spot', { p_level = grnfr_places.level(), p_pos = { x = t.x, y = t.y, z = t.z } }, function(ok, data)
+  local candidates = {}
+  for i, g in ipairs(list) do candidates[i] = { x = g.tablet.x, y = g.tablet.y, z = g.tablet.z } end
+  grnfr_online.call('claim_garage_spot', { p_level = grnfr_places.level(), p_candidates = candidates }, function(ok, data)
     claiming = false
-    -- Le serveur n'a pas pu enregistrer le garage : on prend quand même ce vrai garage, ici seulement (il sera
+    -- Le serveur n'a pas pu enregistrer le garage : on prend quand même le plus proche, ici seulement (il sera
     -- enregistré à la prochaine arrivée). Le joueur n'attend jamais devant un garage qui n'existe pas.
     local function useLocally(why)
+      local g = list[1]
       slog('warn', 'Garage: ' .. why .. ', using ' .. g.name .. ' on this machine only.')
-      mine = { slot = nil, level = grnfr_places.level(), pos = { x = t.x, y = t.y, z = t.z }, garage = g, localOnly = true }
+      mine = { slot = nil, level = grnfr_places.level(), pos = { x = g.tablet.x, y = g.tablet.y, z = g.tablet.z }, garage = g, localOnly = true }
     end
     if not (ok and type(data) == 'table' and type(data.pos) == 'table') then useLocally('the server refused the garage (' .. tostring(data) .. ')') return end
     local real = (data.level == nil or data.level == grnfr_places.level()) and grnfr_facilities.at(data.pos, 30) or nil
@@ -95,7 +97,7 @@ local function refreshOthers()
     if not ok or type(data) ~= 'table' then return end
     local out = {}
     for _, g in ipairs(data) do
-      if g.mine ~= true and type(g.pos) == 'table' then out[#out + 1] = { slot = g.slot, pos = g.pos } end
+      if g.mine ~= true and type(g.pos) == 'table' then out[#out + 1] = { slot = g.slot, pos = g.pos, username = g.username } end
     end
     others = out
   end)
@@ -136,7 +138,15 @@ function M.update(dt)
   end
   if p then
     for _, g in ipairs(others) do
-      if grnfr_facilities.dist(g.pos, p) <= MARK_RANGE then drawLabel(g.pos, L('Garage d\'un autre joueur', 'Another player\'s garage')) end
+      if grnfr_facilities.dist(g.pos, p) <= MARK_RANGE then
+        drawLabel(g.pos, g.username and (L('Garage de ', 'Garage of ') .. g.username) or L('Garage d\'un autre joueur', 'Another player\'s garage'))
+      end
+    end
+    -- vrais garages de la carte que personne n'a (encore) pris : "Garage non pris".
+    for _, g in ipairs(grnfr_facilities.garages()) do
+      local taken = (mine and mine.garage and mine.garage.id == g.id)
+      if not taken then for _, o in ipairs(others) do if grnfr_facilities.dist(g.tablet, o.pos) < TAKEN then taken = true break end end end
+      if not taken and grnfr_facilities.dist(g.tablet, p) <= MARK_RANGE then drawLabel(g.tablet, L('Garage non pris', 'Unclaimed garage')) end
     end
   end
 end
@@ -146,22 +156,38 @@ function M.name() return mine and mine.garage and mine.garage.name or nil end
 -- Mon garage sur ce serveur une fois attribué : { slot, level, pos, garage }, sinon nil.
 function M.mine() return mine end
 
--- Une place de parking libre de mon garage (pos, rot) pour y faire apparaître un véhicule.
+local function spotBusy(pos)
+  local busy = false
+  pcall(function()
+    for i = 0, be:getObjectCount() - 1 do
+      local o = be:getObject(i)
+      local op = o and o:getPosition()
+      if op and grnfr_facilities.dist(op, pos) < 3 then busy = true break end
+    end
+  end)
+  return busy
+end
+
+-- Une place de parking libre de mon garage (pos, rot) pour y faire apparaître un véhicule. Si TOUTES les places
+-- enregistrées semblent occupées (plusieurs voitures/fantômes au même garage), on ne force plus bêtement la
+-- première place (risque de faire apparaître la voiture DANS une autre) : on décale en rond autour d'elle
+-- jusqu'à trouver un point libre, à défaut la place d'origine (mieux qu'un blocage complet).
 function M.freeSpot()
   if not (mine and mine.garage) then return nil end
-  local best
   for _, s in ipairs(mine.garage.spots) do
-    local busy = false
-    pcall(function()
-      for i = 0, be:getObjectCount() - 1 do
-        local o = be:getObject(i)
-        local op = o and o:getPosition()
-        if op and grnfr_facilities.dist(op, s.pos) < 3 then busy = true break end
-      end
-    end)
-    if not busy then best = s break end
+    if not spotBusy(s.pos) then return s end
   end
-  return best or mine.garage.spots[1]
+  local s = mine.garage.spots[1]
+  if not s then return nil end
+  for _, a in ipairs({ 45, 90, 135, 180, 225, 270, 315 }) do
+    local rad = math.rad(a)
+    local p = { x = s.pos.x + 5 * math.cos(rad), y = s.pos.y + 5 * math.sin(rad), z = s.pos.z }
+    if not spotBusy(p) then
+      slog('info', 'Garage: all registered spots looked busy, using a safe spot next to ' .. tostring(mine.garage.name) .. '.')
+      return { pos = p, rot = s.rot }
+    end
+  end
+  return s
 end
 
 -- Place le véhicule du joueur sur une place de son garage (sinon à côté de la tablette), puis VÉRIFIE qu'il y est :

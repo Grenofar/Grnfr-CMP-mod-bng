@@ -14,7 +14,7 @@ Five pieces:
 - `mod/grnfr-mod/` — the BeamNG mod (Lua game logic + Vue UI). Its contents (not the folder itself) must sit
   at the root of the distributed zip.
 - `supabase/migrations/` — the entire backend: Postgres schema, RLS, and all game/money logic as SQL
-  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0015).
+  functions. Run strictly in numeric order (`0001_grnfr_online.sql` through the latest, currently 0017).
 - `public/` + `scripts/build.mjs` — the Vercel site (vanilla JS, no framework) and the mod zip builder.
 - `host/` — a standalone Tauri app (Rust backend + React/TypeScript frontend, one native window — not a
   local web server you open in a browser, and not the old egui/eframe version from earlier in this project's
@@ -365,12 +365,28 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.5.0** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
+- Mod : **2.6.1** poussé sur `main-n8m0cl` (dernière publiée connue : 2.4.2 ou 2.4.3 — à republier). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
-  `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : 0.1.1.
-- Migrations appliquées en prod : 0001 → 0015 (0015 appliquée via l'outil MCP `apply_migration`, aucun
-  delete/drop dedans donc pas besoin de la coller à la main ; testée en direct dans une transaction annulée
-  volontairement — voir plus bas).
+  `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
+  **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
+  à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
+  input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
+- Migrations appliquées en prod : 0001 → 0017 (0015, 0016, 0017 appliquées via l'outil MCP `apply_migration` ;
+  0017 a dû passer par un `drop function` pour renommer un paramètre, accepté sans confirmation interactive cette
+  fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait viser surtout
+  delete/drop sur des données ou des tables). Chacune testée en direct dans une transaction annulée
+  volontairement — voir plus bas.
+- **BeamNG.drive est installé sur CETTE machine** (`F:\SteamLibrary\steamapps\common\BeamNG.drive`, appid 284160
+  dans `F:\SteamLibrary\steamapps\libraryfolders.vdf`) — découverte faite en cherchant à améliorer l'ordinateur du
+  garage. Les véhicules (`content/vehicles/<model>.zip`) contiennent leurs vrais fichiers `.jbeam` (pièces réelles,
+  prix dans `information.value`, arborescence de slots via `slots`/`slots2`/`slotType`) : lisibles directement sur
+  disque, sans lancer le jeu. **Piste pour un futur « vrai » système de pièces** (voir TODO point 1bis) : un script
+  d'extraction (comme `scripts/build.mjs`) pourrait lire ces zips une fois sur cette machine et produire un
+  catalogue statique (slot réel -> pièces réelles + prix réel) à livrer avec le mod et à utiliser côté serveur
+  (remplacerait le système par catégories inventées de 0015). Pas commencé : jbeam est JSON5-like (commentaires
+  `//`, virgules traînantes), un seul vehicule (`barstow`) a été inspecté, aucun parseur écrit. Lancer le jeu
+  lui-même (pour vérifier `core_vehicle_partmgmt` ou les API de dégâts) n'a toujours pas été fait dans cette
+  session (pas de cargo/Tauri build testé non plus).
 - L'utilisateur publie le mod lui-même : `git fetch origin main-n8m0cl && git reset --hard origin/main-n8m0cl` puis
   `.\release.local.bat` (note de version modifiée à la main dans ce .bat, sans accents). Son `main` local a divergé
   par le passé : toujours lui donner ces deux commandes, jamais `git pull` seul.
@@ -415,23 +431,91 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     cette session). **Jamais ouvert dans le vrai jeu.**
 - Host 0.6.0 : « Carte en direct » (serveurs du mod, joueurs, carte 2D des routes envoyées par le mod).
 - Confirmé en jeu par l'utilisateur : arrivée au garage OK (2.4.x).
+- **Launcher 0.2.0 : notification (toast) de mise à jour disponible** (launcher ou mod), visible quelle que soit la
+  page affichée (avant : seulement sur l'onglet Accueil). Mod revérifié toutes les 5 min (avant : seulement à
+  l'ouverture). Code remonté dans `App.tsx` (état `mod` déplacé depuis `Home.tsx`, nouveau `Toast.tsx`). Vérifié :
+  `npm run build` (tsc + vite) sans erreur. **Jamais lancé en conditions réelles** (pas de `cargo` dans cette
+  session, donc pas de `cargo test` côté `launcher/core` ni de build Tauri complet).
+- **Livraisons de colis (mod 2.6.0, TODO point 2, premier morceau fait)** : nouvelle section « Livraisons » dans
+  l'app Travail de la tablette.
+  - Backend (`supabase/migrations/0016_deliveries.sql`) : nouvelle table `deliveries` (séparée de `jobs`, car une
+    livraison est partagée tant que personne ne l'a acceptée). `generate_deliveries` reçoit des paires
+    pickup/dropoff proposées par le Lua (vrais points de la carte) et recalcule lui-même distance/prix
+    (`private.route_length`, comme taxi/bus) — jamais un prix client. `list_deliveries`, `accept_delivery` (vérifie
+    `garage_vehicles.cargo_capacity` >= `cargo_units`, 0015), `complete_delivery` (position + durée crédible, comme
+    `complete_job`), `cancel_delivery`. Gains comptés dans le même plafond horaire que taxi PNJ/bus
+    (`private.capped_income`, kind `delivery` ajouté). `get_me()` renvoie la livraison en cours (`delivery`).
+    **Testé en direct contre le vrai Supabase** (cycle complet generate → list → accept → complete, dans une
+    transaction qui s'annule elle-même — y compris le refus `too_fast` avant le délai minimum).
+  - Lua (`delivery.lua`, nouveau, + `facilities.lua` : `M.deliveryPoints()`) : lit les vrais points
+    `deliveryProvider` de la carte (API `getFacilitiesByType('deliveryProvider')` **non vérifiée en jeu**, comme
+    les garages), construit des paires aléatoires parmi eux (jamais au hasard sur la route), guide vers le
+    ramassage puis la livraison (`grnfr_nav`, même principe que `taxi.lua`).
+  - UI : `Tablet.vue` (app Travail), `net.js` (événements `GRNFRDeliveryOffers`/`GRNFRDeliveryAccept`),
+    `online.lua` (`delivery` dans l'état poussé), routes `delivery.refresh`/`delivery.accept`/`delivery.cancel`
+    dans `grnfr.lua`. Vérifié hors jeu : `node tests/net_test.mjs` (30/30, pas de régression), `Tablet.vue`
+    compile, tous les `.lua` touchés syntaxiquement valides (`luaparse`). **Jamais ouvert dans le vrai jeu** —
+    en particulier `getFacilitiesByType('deliveryProvider', ...)` peut très bien ne rien renvoyer ou s'appeler
+    autrement ; si aucune livraison n'apparaît en jeu, c'est le premier endroit à vérifier (voir
+    `BeamNG.log`).
+  - **Pas encore fait côté phase 2** : remorques à livrer pour des entreprises (distinct des colis), compte rendu
+    détaillé de fin de mission (gain affiché simplement, pas de bonus/malus temps ni dégâts — la phase 3 gère les
+    dégâts), marqueurs visuels dédiés aux points de dépôt (réutilise le marqueur générique de `nav.lua`).
+- **Garage : corrige la course d'attribution (mod 2.6.1, confirmée par l'utilisateur en jeu : « tout le monde
+  spawn dans le même garage »)**. Avant : chaque client calculait tout seul "le meilleur garage libre" d'après un
+  cache local des garages déjà pris (rafraîchi toutes les 5 s) puis demandait au serveur de l'enregistrer à CETTE
+  position — deux joueurs qui rejoignent presque en même temps (cas fréquent : `travel.lua` place un nouveau
+  joueur tout près d'un joueur déjà présent) voyaient tous les deux le même garage comme libre. Fix
+  (`0017_garage_claim_fix.sql`) : le Lua envoie maintenant TOUTE la liste des vrais garages triée par distance
+  (`p_candidates`, `claim_garage_spot` a changé de signature : `p_pos` -> `p_candidates`), et le serveur verrouille
+  (`for update`) tous les garages de ce serveur puis choisit lui-même le premier candidat non pris par un membre
+  toujours présent — un seul `claim_garage_spot` à la fois peut s'exécuter par serveur, plus de course possible.
+  **Testé en direct** (candidat A déjà pris simulé + membre toujours présent -> le code reçoit bien le candidat B,
+  dans une transaction annulée). `get_server_garage_spots()` renvoie maintenant aussi `username` (pas une donnée
+  secrète, déjà visible par `server_sync`). `garage.lua` : étiquettes améliorées (« Garage de <pseudo> » au lieu
+  de « Garage d'un autre joueur », + « Garage non pris » sur les vrais garages de la carte que personne n'a encore
+  pris) ; `freeSpot()` ne force plus la 1ʳᵉ place du garage quand toutes semblent occupées (risque de faire
+  apparaître une voiture dans une autre) : il essaie des points sûrs tout autour avant de s'y résoudre. **Jamais
+  revérifié en jeu après ce correctif** (l'utilisateur testait pendant que ce correctif était écrit).
+- **Audit rapide des ressources du launcher** (demandé par l'utilisateur) : le relais (`proxy.rs`,
+  `tiny_http::Server::incoming_requests()`) bloque sur l'attente réseau, aucune boucle active trouvée côté Rust.
+  Côté React : `Home.tsx` sondait `get_status` (en mémoire, pas de réseau) toutes les 2 s -> passé à 4 s. Le reste
+  (vérif mod/launcher) est déjà peu fréquent (5 min / 6 h). **Pas de mesure réelle de CPU/RAM** (app jamais lancée
+  dans cette session, pas de `cargo`/Tauri ici) : si l'utilisateur observe une vraie surconsommation, il faudra le
+  gestionnaire des tâches Windows (nom du processus, CPU, mémoire) pour aller plus loin.
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus),
    mais pièces/réglages sans effet en jeu réel vérifié** : à la première session en jeu, chercher la vraie API
    (`core_vehicle_partmgmt` ou équivalent) pour que « Pièces »/« Réglages » changent vraiment le véhicule, pas
    seulement la base de données ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
-2. **Phase 2 — missions / livraisons comme la carrière, en multi** (prochaine étape demandée) :
-   - Points de ramassage/dépôt = `deliveryProvider` facilities de la carte (`freeroam_facilities.getFacilitiesByType
-     ('deliveryProvider')`, `manualAccessPoints` → `parkingSpots.byName`), comme `career/modules/delivery/generator.lua`.
-   - Colis (selon la capacité cargo du véhicule : `core_vehicleBridge.requestValue(veh, cb, 'getCargoContainers')`),
-     remorques à livrer pour des entreprises, passagers taxi ; génération côté serveur (nouvelle table `jobs`/
-     `deliveries`, RPC `list_jobs`, `accept_job`, `complete_job` avec contrôle de vraisemblance temps/distance comme
-     `too_fast`/`too_short`).
-   - Navigation : itinéraire GPS vers le point (`core_groundMarkers.setPath` sous pcall, déjà utilisé par nav.lua),
-     marqueurs des points de dépôt.
-   - **Compte rendu de fin de mission** (gain, bonus/malus temps, dégâts), application « Travail » de la tablette
-     refaite (liste des missions, mission en cours, historique des gains).
+2. **Phase 2 — missions / livraisons comme la carrière, en multi** — **colis fait (mod 2.6.0, voir ci-dessus),
+   reste à faire** :
+   - Remorques à livrer pour des entreprises (distinct des colis : probablement une variante de `deliveries` avec
+     un `kind`/une colonne en plus plutôt qu'une nouvelle table, à voir une fois les colis vérifiés en jeu).
+   - Passagers taxi : existe déjà séparément (`taxi_requests`, `taxi.lua`, entre joueurs) — voir si la demande
+     portait sur autre chose (taxi PNJ amélioré ?) ou si c'est déjà couvert.
+   - **Compte rendu de fin de mission** plus détaillé (bonus/malus de temps, dégâts) et marqueurs dédiés aux points
+     de dépôt (`core_groundMarkers`, déjà utilisé par `nav.lua` de façon générique).
+2bis. **Ordinateur du garage, vraies pièces** (redemandé explicitement par l'utilisateur après le point 1 : « c'est
+   vraiment customiser genre on voit les trucs à l'intérieur comme pour la carrière », pas des libellés libres).
+   **Non commencé**, mais une vraie piste existe (voir § BeamNG.drive est installé sur cette machine, plus haut) :
+   écrire un script d'extraction qui lit les `.jbeam` réels des véhicules du jeu (prix réel, arborescence de slots
+   réelle) et produit un catalogue statique livré avec le mod ; remplacer le système par catégories inventées de
+   `0015_vehicle_customization.sql` par un vrai `vehicle_parts_catalog` côté serveur (prix toujours décidé par le
+   serveur, mais basé sur le vrai catalogue, pas une formule en %). Gros morceau : mérite sa propre session dédiée
+   plutôt que d'être bâclé à la fin d'une longue session déjà chargée.
+3bis. **Dégâts persistants + sauvegarde périodique** (demandé par l'utilisateur, **non commencé**) :
+   - Les dégâts du véhicule doivent survivre au rangement/à la reconnexion (aujourd'hui : rien n'est enregistré,
+     lié à la phase 3 "réparation" déjà prévue plus bas — probablement à faire ensemble plutôt que deux fois).
+   - Sauvegarde automatique toutes les ~2 minutes (position, argent — l'argent est déjà toujours à jour côté
+     serveur à chaque RPC, donc surtout la position/carte/véhicule) ; à la reconnexion, si le joueur n'est pas à
+     proximité de son garage, le faire réapparaître à sa DERNIÈRE position sauvegardée plutôt que systématiquement
+     au garage ; annuler toute mission en cours (taxi/bus/drag/livraison) à ce moment-là plutôt que la laisser
+     bloquée. Implique : nouvelle colonne (ex. `profiles.last_pos`/`last_level`, ou table dédiée), nouvelle RPC
+     d'enregistrement périodique, un minuteur côté Lua, et une branche dans `travel.lua`/`online.lua` pour choisir
+     entre "arrivée au garage" (comportement actuel) et "reprise à la dernière position". Assez gros pour mériter
+     sa propre passe plutôt qu'être ajouté en vitesse.
 3. **Phase 3 — réparation comme la carrière** : interdire le reset/recovery gratuit quand le véhicule est endommagé
    (`core_recoveryPrompt` / hook `onResetGameplay` — à vérifier), estimation des dommages (`core_vehicleBridge.
    requestValue(veh, cb, 'getPartConditions')`, pièce cassée = `integrityValue == 0`, coût = valeur des pièces),

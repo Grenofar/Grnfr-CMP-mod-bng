@@ -2,9 +2,10 @@
 local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter', 'grnfr_traffic',
   'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage', 'grnfr_convoy',
-  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer' }
+  'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
+  'grnfr_delivery' }
 
-local VERSION = '2.5.0'
+local VERSION = '2.6.1'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -254,6 +255,15 @@ local ROUTES = {
   ['computer.paint']  = function(a) grnfr_computer.applyPaint(a.id, a.paint) end,
   ['computer.parts']  = function(a) grnfr_computer.applyParts(a.id, a.parts) end,
   ['computer.tuning'] = function(a) grnfr_computer.applyTuning(a.id, a.tuning) end,
+  ['delivery.refresh'] = function()
+    grnfr_delivery.refresh(function(ok, data) guihooks.trigger('GRNFRDeliveryOffers', { ok = ok == true, offers = (ok and data) or {} }) end)
+  end,
+  ['delivery.accept']  = function(a)
+    grnfr_delivery.accept(a.id, a.vehicle_id, function(ok, data)
+      guihooks.trigger('GRNFRDeliveryAccept', { ok = ok == true, error = ok and '' or grnfr_online.errText(data) })
+    end)
+  end,
+  ['delivery.cancel']  = function() grnfr_delivery.cancel() end,
   ['garage.store']    = function(a)
     if not grnfr_garage.isNear() then grnfr_online.toast(grnfr_online.L('Approchez-vous de votre garage.', 'Get closer to your garage.'), 'warning'); return end
     grnfr_online.storeVehicle(a.id)
@@ -391,7 +401,7 @@ end
 local function resetGameplayFeatures()
   grnfr_traffic.reset()
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset); pcall(grnfr_places.reset); pcall(grnfr_facilities.reset)
-  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
   if onlineOpen then onlineOpen = false; guihooks.trigger('GRNFROnlineWin', { open = false }) end
   if tabletOpen then tabletOpen = false; guihooks.trigger('GRNFRTabletWin', { open = false }) end
   if quickOpen then quickOpen = false; guihooks.trigger('GRNFRQuickWin', { open = false }) end
@@ -487,7 +497,7 @@ function M.tick(dtReal)
     if d0 > 0.5 then d0 = 0.5 end
     if modeInfo.session and grnfr_online.isAuthed() then
       grnfr_taxi.update(d0); grnfr_taxibot.update(d0); grnfr_bus.update(d0); grnfr_garage.update(d0)
-      grnfr_chat.update(d0); grnfr_drag.update(d0); grnfr_roadmap.update(d0)
+      grnfr_chat.update(d0); grnfr_drag.update(d0); grnfr_roadmap.update(d0); grnfr_delivery.update(d0)
     end
     grnfr_nav.update()
     grnfr_http.update(d0)
@@ -552,7 +562,7 @@ function M.onExtensionUnloaded()
   wasSession = false
   pcall(grnfr_sessionlog.finish, 'The mod was unloaded.')
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset)
-  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset)
+  pcall(grnfr_garage.reset); pcall(grnfr_convoy.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
   pcall(grnfr_stutter.apply, false)
   if guihooks then guihooks.trigger('GRNFRStatic', { session = false, hudOpen = false }) end
   grnfr_perf.reset()
