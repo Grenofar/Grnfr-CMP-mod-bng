@@ -103,13 +103,16 @@ local function refreshOthers()
   end)
 end
 
+-- Texte en noir (demandé explicitement, y compris pour « Garage non pris ») : fond clair semi-transparent en
+-- repli pour rester lisible (du texte noir sans fond, sur un sol sombre, serait aussi illisible que l'ancien
+-- texte blanc sur un sol clair).
 local function drawLabel(pos, label)
   pcall(function()
     local p = vec3(pos.x, pos.y, (pos.z or 0) + 1.4)
     if debugDrawer.drawTextAdvanced then
-      debugDrawer:drawTextAdvanced(p, String(label), ColorF(1, 1, 1, 1), true, false, ColorI(0, 0, 0, 170))
+      debugDrawer:drawTextAdvanced(p, String(label), ColorF(0, 0, 0, 1), true, false, ColorI(255, 255, 255, 170))
     else
-      debugDrawer:drawText(p, String(label), ColorF(1, 1, 1, 1))
+      debugDrawer:drawText(p, String(label), ColorF(0, 0, 0, 1))
     end
   end)
 end

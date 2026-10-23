@@ -389,7 +389,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.19.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
+- Mod : **2.20.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
   23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
@@ -961,6 +961,45 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     raisonnable mais pas mesuré contre les 9 FPS réels rapportés ; si ça ne suffit pas, le candidat suivant à
     creuser serait `GrnfrPanel.vue` lui-même (coût de rendu par image de ses cartes/graphique, pas seulement
     leur fréquence).
+
+- **Téléport fiable, garages en noir, HUD forcé, réparation/sélecteur bloqués (mod 2.20.0, 23/10/2026)** —
+  quatre demandes explicites de l'utilisateur dans le même message.
+  - **Bug trouvé et corrigé (`travel.lua`)** : « parfois pas de tp auto, sans le véhicule de jeu libre, ça ne
+    marche qu'en relançant ». `M.update` exigeait un véhicule (`playerVeh()`) pour laisser le délai de
+    stabilisation (`settle`) avancer après le chargement de la carte — si le jeu démarre parfois le joueur à
+    pied (sans voiture par défaut de jeu libre), `settle` était remis à 0 en boucle indéfiniment, bloquant tout
+    jusqu'au timeout de 90 s (`WAIT_LOAD`), sans jamais atteindre la phase « garage ». Supprimé cette condition :
+    `placeNear`/`teleportHome` gèrent déjà un véhicule absent (retournent `false` sans planter) et `M.arrive` a
+    déjà un repli « à pied ». **Jamais revérifié en jeu.**
+  - **Garages en noir (`garage.lua`)** : les étiquettes (« Garage de X », « Garage non pris », etc.) étaient en
+    blanc (`ColorF(1,1,1,1)`) — passées en noir (`ColorF(0,0,0,1)`) comme demandé, avec le fond semi-transparent
+    inversé en clair (`ColorI(255,255,255,170)` au lieu de noir) pour rester lisible. **Jamais revérifié en
+    jeu.**
+  - **HUD forcé en ligne (`grnfr/hud_force.lua`, nouveau)** : « force le HUD de GRNFR CMP avec minimap, vitesse,
+    etc. » — **🔎 découverte en lisant les vraies sources du jeu** (`lua/ge/extensions/ui/appLayouts.lua`,
+    extension publique `ui_appLayouts`, confirmée utilisée sous ce nom par `ui/apps.lua`) : le jeu a un vrai
+    système de dispositions HUD (`.uilayout.json`, `settings/ui_apps/`), et la disposition `freeroam` PAR
+    DÉFAUT du jeu (`originalLayouts/default/freeroam.uilayout.json`, lue directement) contient déjà `navigation`
+    (minimap) et `tacho2` (vitesse). `setCurrentLayout` (pas `setUsedLayout`, qui enregistrerait notre choix
+    comme préférence PERMANENTE même hors de nos serveurs) force cette disposition par défaut tant qu'on est en
+    ligne sur un serveur GRNFR, et restaure la disposition personnelle du joueur (sauvegardée avant) dès qu'il
+    quitte. **Jamais vérifié en jeu** — en particulier, jamais confirmé que l'extension s'appelle bien
+    `ui_appLayouts` à l'exécution (lu dans le code, pas exécuté depuis notre mod).
+  - **Réparation/sélecteur de véhicule natifs bloqués en ligne (`grnfr/inputlock.lua`, nouveau)** : « fais en
+    sorte que Insert pour réparer la voiture ou apparaître une voiture à sa guise ne fonctionne pas ». **🔎
+    découverte en lisant les vraies sources du jeu** (`lua/ge/extensions/core/input/actionFilter.lua`) : le jeu
+    a un vrai mécanisme PUBLIC pour bloquer des actions d'entrée (`core_input_actionFilter.addAction(filtre,
+    groupe, bloqué)`, déjà utilisé par le jeu lui-même pour les modes compétitifs), avec des groupes déjà
+    définis pile pour ce qu'on veut : `vehicleRecovery` (`recover_vehicle`/`recover_vehicle_alt`/
+    `recover_to_last_road` — Insert par défaut) et `vehicleMenues` (`vehicle_selector`/`parts_selector`/
+    `vehicledebugMenu`). Les deux groupes sont bloqués tant qu'on est en ligne, `clear()` dès qu'on quitte.
+    Renforce au niveau du RACCOURCI clavier le verrouillage de configuration déjà fait côté API par
+    `computer.lua`/Phase B. **Jamais vérifié en jeu** — en particulier, jamais confirmé que ces noms d'action
+    sont bien ceux utilisés par la configuration clavier par défaut actuelle du jeu (lus dans le fichier de
+    définition des actions, pas dans un fichier de bindings clavier réel).
+  - Vérifié hors jeu : `luaparse` sur les 5 fichiers touchés, `node tests/net_test.mjs` (30/30, aucun de ces
+    modules n'est couvert par cette suite — dépendent tous d'API BeamNG réelles). **Rien de tout ça n'a jamais
+    été ouvert dans le vrai jeu.**
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0) ET

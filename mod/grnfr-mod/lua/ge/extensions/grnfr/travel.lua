@@ -130,7 +130,13 @@ function M.update(dt)
   target.t = target.t + dt
   if target.phase == 'load' or target.phase == 'host' then
     if target.t > WAIT_LOAD then target = nil; hold(false); slog('warn', 'Travel: gave up waiting for the server map.') return end
-    if grnfr_places.level() ~= target.level or not playerVeh() then target.settle = 0 return end
+    -- AVANT : attendait aussi un véhicule de jeu libre (playerVeh()) avant de laisser "settle" avancer. Bug
+    -- signalé par l'utilisateur (23/10/2026) : « parfois pas de tp auto, sans le véhicule de jeu libre, ça ne
+    -- marche qu'en relançant » -- si le jeu démarre parfois le joueur à pied (sans voiture par défaut), cette
+    -- condition bloquait tout indéfiniment (settle remis à 0 en boucle) jusqu'au timeout WAIT_LOAD (90 s), sans
+    -- jamais atteindre la phase "garage". placeNear/teleportHome gèrent déjà un véhicule absent (retournent
+    -- false sans planter) et M.arrive a déjà un repli "à pied" -- plus besoin d'un véhicule ici.
+    if grnfr_places.level() ~= target.level then target.settle = 0 return end
     target.settle = target.settle + dt
     if target.settle < SETTLE then return end
     -- repli : carte chargée sans le mode jeu libre -> on dit au jeu qu'on est en partie (interface de jeu)

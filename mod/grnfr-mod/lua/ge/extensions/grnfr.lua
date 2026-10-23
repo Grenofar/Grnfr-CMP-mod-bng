@@ -3,9 +3,9 @@ local M = {}
 M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter',
   'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
-  'grnfr_delivery', 'grnfr_radar' }
+  'grnfr_delivery', 'grnfr_radar', 'grnfr_hud_force', 'grnfr_inputlock' }
 
-local VERSION = '2.19.0'
+local VERSION = '2.20.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -478,6 +478,8 @@ function M.tick(dtReal)
   end
   grnfr_perf.sample(dtReal)
   grnfr_computer.update() -- verrouille la config véhicule native dès que core_vehicle_partmgmt est disponible
+  grnfr_hud_force.update() -- force le HUD natif (minimap, vitesse...) pendant qu'on est en ligne
+  grnfr_inputlock.update() -- bloque réparation/sélecteur de véhicule natifs pendant qu'on est en ligne
   do -- GRNFR Online : actif seulement dans une partie où il est autorisé
     local d0 = tonumber(dtReal) or 0
     if d0 > 0.5 then d0 = 0.5 end
