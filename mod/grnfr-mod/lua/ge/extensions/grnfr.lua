@@ -1,15 +1,13 @@
 -- GRNFR Mod : extension GE principale (orchestration uniquement).
 local M = {}
-M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_keys', 'grnfr_stutter',
+M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mode', 'grnfr_stutter',
   'grnfr_places', 'grnfr_facilities', 'grnfr_nav', 'grnfr_http', 'grnfr_online', 'grnfr_taxi', 'grnfr_taxibot', 'grnfr_bus', 'grnfr_ghosts', 'grnfr_garage',
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
-  'grnfr_delivery', 'grnfr_radar', 'grnfr_hud_force', 'grnfr_inputlock' }
+  'grnfr_delivery', 'grnfr_radar', 'grnfr_hudforce', 'grnfr_inputlock' }
 
-local VERSION = '2.21.0'
+local VERSION = '2.22.0'
 local uiAttached = false
-local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
-local hudOpen = false
-local bigOpen = false -- grande fenêtre en jeu (bouton Option du HUD)
+local consumers = {} -- UI abonnées (panel, overlay...) : on ne pousse des données que si au moins une est ouverte
 local onlineOpen = false -- fenêtre GRNFR Online (touche O, hors de son garage)
 local quickOpen = false -- téléphone : chat, joueurs, taxi, drag (touche K)
 local tabletOpen = false -- tablette du garage (touche O devant SON garage)
@@ -63,7 +61,6 @@ end
 -- Reads the game mode and keeps the session log in step: a session starts when a map is loaded, ends when it is left.
 local function refreshMode()
   modeInfo = grnfr_mode.detect()
-  if not modeInfo.session then hudOpen = false; bigOpen = false end
   if modeInfo.session and not wasSession then
     wasSession, lastModeEn = true, modeLabelEn()
     pcall(grnfr_sessionlog.begin, { mode = lastModeEn, map = levelName(), modVersion = VERSION,
@@ -104,40 +101,14 @@ local function buildStatic()
     onlineAllowed = isOnlineAllowed(),
     onlineOpen = onlineOpen,
     quickOpen = quickOpen,
-    hudOpen = hudOpen,
-    bigOpen = bigOpen,
     hooks = cntPre + cntUpd,
-    angular = consumers.angular == true, -- app HUD AngularJS placée par le joueur : le HUD Vue s'efface alors
-    keyLabel = grnfr_keys.getDisplay(),
     settings = grnfr_settings.get(),
   }
 end
 local function pushStatic(force) guihooks.trigger('GRNFRStatic', buildStatic()) end
 
--- Appelé par l'action clavier "grnfr_toggle" (système d'actions officiel).
 local function toast(msg)
   pcall(function() guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CMP', msg = msg }) end)
-end
-
-function M.toggleHud()
-  refreshMode()
-  if not modeInfo.session then
-    toast(L("Le HUD GRNFR s'ouvre uniquement en partie (une carte doit être chargée).", 'The GRNFR HUD only opens in-game (a map must be loaded).'))
-    return
-  end
-  if not grnfr_settings.get().hudEnabled then
-    slog('info', 'You pressed ' .. grnfr_keys.getDisplay() .. ' but the HUD is turned off in Settings.')
-    toast(L('HUD désactivé : activez-le dans GRNFR CMP > Paramètres.', 'HUD disabled: enable it in GRNFR CMP > Settings.'))
-    return
-  end
-  if bigOpen then -- la grande fenêtre est ouverte : K la ferme (et le petit HUD ne revient pas)
-    bigOpen, hudOpen = false, false
-    slog('info', 'You closed the big window (' .. grnfr_keys.getDisplay() .. ').')
-  else
-    hudOpen = not hudOpen
-    slog('info', hudOpen and ('You opened the small HUD (' .. grnfr_keys.getDisplay() .. ').') or ('You closed the small HUD (' .. grnfr_keys.getDisplay() .. ').'))
-  end
-  pushStatic(true) -- envoyé même si aucune UI n'est encore abonnée (le HUD Vue s'abonne en recevant l'état)
 end
 
 -- ------------------------------------------------------------------ GRNFR Online
@@ -288,18 +259,6 @@ function M.ui(name, json)
   return true
 end
 
--- Bouton « Option » du HUD : le petit HUD disparaît, la grande fenêtre apparaît (K pour la fermer).
-function M.openBig()
-  refreshMode()
-  if not modeInfo.session then return false end
-  bigOpen, hudOpen = true, false
-  slog('info', 'You opened the big window (Option button).')
-  toast(L('Pour fermer l\'interface, appuyez sur ', 'To close the interface, press ') .. grnfr_keys.getDisplay() .. '.')
-  pushStatic(true)
-  return true
-end
-function M.closeBig() bigOpen = false; slog('info', 'You closed the big window.'); pushStatic(true); return true end
-
 -- Appelé par l'UI au chargement de l'application.
 local function onlyOverlay()
   local n = 0
@@ -309,13 +268,12 @@ end
 -- Cadence rapide (à chaque image) seulement si le HUD est ouvert ou si une UI détaillée (fenêtre, app) s'est abonnée.
 -- Sinon : une mesure toutes les 0,5 s, envoyée même sans abonnement (l'abonnement UI -> Lua n'est pas fiable).
 local function needFast()
-  if hudOpen then return true end
   for id in pairs(consumers) do if id ~= 'overlay' and id ~= 'welcome' then return true end end
   return false
 end
 
 function M.requestState(id)
-  consumers[id or 'angular'] = true
+  consumers[id or 'unknown'] = true
   uiAttached = true
   refreshMode()
   pushStatic()
@@ -329,15 +287,13 @@ function M.getState()
 end
 
 function M.uiClosed(id)
-  consumers[id or 'angular'] = nil
+  consumers[id or 'unknown'] = nil
   uiAttached = next(consumers) ~= nil
   return true
 end
 
 local SETTING_NAMES = {
-  hudEnabled = 'HUD enabled', showFps = 'HUD: show FPS', showAvg = 'HUD: show average FPS', showMode = 'HUD: show game mode',
-  showGraph = 'HUD: show FPS graph', compact = 'HUD: compact size', refreshRate = 'HUD refresh rate (0 = automatic)',
-  accent = 'Accent color', opacity = 'HUD opacity', lang = 'Language', hudPos = 'HUD position',
+  refreshRate = 'HUD refresh rate (0 = automatic)', accent = 'Accent color', lang = 'Language',
   fpsOverlay = 'FPS counter', fpsBg = 'FPS counter background', fpsPos = 'FPS counter position', fpsSize = 'FPS counter size',
   fpsColor = 'FPS counter color', fpsOpacity = 'FPS counter opacity', antiStutter = 'Anti-stutter',
 }
@@ -346,7 +302,6 @@ local function valueText(v) if v == true then return 'ON' elseif v == false then
 function M.setSetting(key, value)
   if grnfr_settings.set(key, value) then
     slog('info', 'Setting changed: ' .. (SETTING_NAMES[key] or tostring(key)) .. ' is now ' .. valueText(value) .. '.')
-    if key == 'hudEnabled' and value == false then hudOpen = false; bigOpen = false end
     if key == 'antiStutter' then grnfr_stutter.apply(value) end
     pushStatic()
   else
@@ -378,14 +333,6 @@ function M.chooseLanguage(lang)
   return true
 end
 
--- Appelé par le bouton du menu principal (ui/ui-vue/mods/GRNFR/index.js).
-function M.showInfo()
-  local msg = 'v' .. VERSION .. ' | ' .. L('Touche du HUD : ', 'HUD key: ') .. grnfr_keys.getDisplay()
-    .. ' | ' .. L('HUD App : Pause > System > HUD Apps', 'HUD App: Pause > System > HUD Apps')
-  pcall(function()
-    guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CMP', msg = msg })
-  end)
-end
 
 local function onStateEvent()
   refreshMode()
@@ -448,9 +395,7 @@ end
 -- Notification affichée UNE SEULE FOIS (introShown, mémorisé dans settings/grnfr.json), au premier lancement
 -- d'une partie, quel que soit le mode de jeu.
 local function notifyStart()
-  local key = grnfr_keys.getDisplay()
-  local msg = L('Appuyez sur ', 'Press ') .. key .. L(' pour ouvrir / fermer le HUD GRNFR.', ' to open / close the GRNFR HUD.')
-    .. L(' (modifiable : Options > Contrôles > « GRNFR CMP »)', ' (changeable: Options > Controls > "GRNFR CMP")')
+  local msg = L('Ordinateur du garage : touche O. Téléphone : touche K.', 'Garage computer: O key. Phone: K key.')
   pcall(function()
     guihooks.trigger('toastrMsg', { type = 'info', title = 'GRNFR CMP', msg = msg })
   end)
@@ -477,9 +422,17 @@ function M.tick(dtReal)
     pcall(function() timer:stopAndReset() end) -- garde le chronomètre synchronisé
   end
   grnfr_perf.sample(dtReal)
-  grnfr_computer.update() -- verrouille la config véhicule native dès que core_vehicle_partmgmt est disponible
-  grnfr_hud_force.update() -- force le HUD natif (minimap, vitesse...) pendant qu'on est en ligne
-  grnfr_inputlock.update() -- bloque réparation/sélecteur de véhicule natifs pendant qu'on est en ligne
+  -- Ces 3 modules dépendent d'API du jeu non vérifiées en jeu réel : un pcall ICI (en plus de celui éventuel à
+  -- l'intérieur de chaque module) protège TOUT le reste de M.tick (en dessous) si un module ne se charge pas du
+  -- tout -- c'est exactement ce qui est arrivé le 23/10/2026 : "grnfr_hud_force" (un deuxième underscore dans le
+  -- nom) a planté chaque image pendant toute une session car BeamNG traduit le nom d'extension en chemin de
+  -- fichier en remplaçant CHAQUE "_" par un "/" ("grnfr_hud_force" -> "grnfr/hud/force.lua", qui n'existe pas),
+  -- donc le module (renommé grnfr_hudforce, un seul "_") ne s'est jamais chargé et tout le code plus bas dans
+  -- M.tick (taxi, garage, chat, drag, roadmap, delivery, nav, http, online, travel, ghosts, track, sessionlog,
+  -- et même le GRNFRTick final) n'a plus jamais tourné de toute la session.
+  pcall(grnfr_computer.update) -- verrouille la config véhicule native dès que core_vehicle_partmgmt est disponible
+  pcall(grnfr_hudforce.update) -- force le HUD natif (minimap, vitesse...) pendant qu'on est en ligne
+  pcall(grnfr_inputlock.update) -- bloque réparation/sélecteur de véhicule natifs pendant qu'on est en ligne
   do -- GRNFR Online : actif seulement dans une partie où il est autorisé
     local d0 = tonumber(dtReal) or 0
     if d0 > 0.5 then d0 = 0.5 end
@@ -553,7 +506,7 @@ function M.onExtensionUnloaded()
   pcall(grnfr_taxi.reset); pcall(grnfr_taxibot.reset); pcall(grnfr_bus.reset); pcall(grnfr_online.reset); pcall(grnfr_ghosts.reset)
   pcall(grnfr_garage.reset); pcall(grnfr_chat.reset); pcall(grnfr_drag.reset); pcall(grnfr_track.reset); pcall(grnfr_delivery.reset)
   pcall(grnfr_stutter.apply, false)
-  if guihooks then guihooks.trigger('GRNFRStatic', { session = false, hudOpen = false }) end
+  if guihooks then guihooks.trigger('GRNFRStatic', { session = false }) end
   grnfr_perf.reset()
 end
 

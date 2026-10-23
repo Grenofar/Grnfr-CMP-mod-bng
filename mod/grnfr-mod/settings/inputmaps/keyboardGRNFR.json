@@ -1,10 +1,6 @@
 {
   "bindings": [
     {
-      "action": "grnfr_toggle",
-      "control": "l"
-    },
-    {
       "action": "grnfr_online_toggle",
       "control": "o"
     },

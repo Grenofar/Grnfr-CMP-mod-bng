@@ -1,12 +1,4 @@
 {
-  "grnfr_toggle": {
-    "cat": "general",
-    "order": 900,
-    "ctx": "tlua",
-    "onDown": "if extensions.grnfr then extensions.grnfr.toggleHud() end",
-    "title": "GRNFR CMP : ouvrir / fermer",
-    "desc": "Ouvre ou ferme le GRNFR CMP"
-  },
   "grnfr_online_toggle": {
     "cat": "general",
     "order": 901,

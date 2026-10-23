@@ -389,7 +389,9 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.21.0** poussé sur `main-n8m0cl` ET publiée (confirmé dans `mod_releases`, 23/10/2026). Toutes les
+- Mod : **2.22.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.21.0,
+  23/10/2026 — voir ci-dessous, **2.21.0 a planté le jeu en boucle, bug critique corrigé en 2.22.0, à publier
+  en priorité**). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
   avait aussi vidé `game_servers` (les 3 « Serveur 1/2/3 »), que `restore_defaults.sql` ne réensemençait pas
@@ -417,6 +419,32 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
 - L'utilisateur publie le mod lui-même : `git fetch origin main-n8m0cl && git reset --hard origin/main-n8m0cl` puis
   `.\release.local.bat` (note de version modifiée à la main dans ce .bat, sans accents). Son `main` local a divergé
   par le passé : toujours lui donner ces deux commandes, jamais `git pull` seul.
+
+### ⚠️ BUG CRITIQUE DANS LA 2.21.0 PUBLIÉE — plantage en boucle, corrigé en 2.22.0, à publier en priorité
+
+La **2.21.0** (déjà publiée, confirmée par l'utilisateur) **plante le jeu en boucle dès le menu principal** —
+confirmé via un vrai `BeamNG.log` fourni par l'utilisateur le 23/10/2026. Cause : le nouveau module
+`grnfr_hud_force` (Phase HUD forcé, voir plus bas) avait un second underscore dans son nom — BeamNG traduit un
+nom d'extension en chemin de fichier en remplaçant **chaque** `_` par un `/`, donc il cherchait
+`grnfr/hud/force.lua` au lieu de notre vrai fichier `grnfr/hud_force.lua`. Le module n'a donc jamais pu se
+charger (`extension unavailable: "grnfr_hud_force" at location: "grnfr/hud/force"`), et comme `grnfr.lua`
+appelait `grnfr_hud_force.update()` sans aucun `pcall` au tout début de `M.tick` (juste après
+`grnfr_computer.update()`), chaque image du jeu levait une **erreur Lua fatale non rattrapée**
+(`attempt to index global 'grnfr_hud_force' (a nil value)`), répétée en boucle (visible des centaines de fois
+dans le log, du menu principal jusqu'à la fermeture). **Conséquence directe** : tout le code PLUS BAS dans
+`M.tick` (taxi, garage, chat, drag, roadmap, delivery, `grnfr_nav`, `grnfr_http`, `grnfr_online`, `grnfr_travel`,
+`grnfr_ghosts`, `grnfr_track`, le journal de session, et l'évènement final `GRNFRTick`) **n'a plus jamais tourné
+de toute la session** — ce qui explique directement le symptôme rapporté par l'utilisateur côté profil
+(« impossible fetch grnfr-http ») : `grnfr_http.update()`, qui avance la coroutine réseau Lua, n'était simplement
+jamais appelé.
+
+**Corrigé en 2.22.0** : fichier renommé `grnfr/hudforce.lua` (un seul `_`, comme toutes les autres extensions
+`grnfr_*`), ET les 3 appels `grnfr_computer.update()`/`grnfr_hudforce.update()`/`grnfr_inputlock.update()` sont
+maintenant chacun entourés d'un `pcall()` au site d'appel dans `grnfr.lua` (pas seulement à l'intérieur de
+chaque module) — pour qu'une erreur de ce genre (module non chargé, API qui change) ne puisse plus jamais
+bloquer silencieusement tout le reste de `M.tick` pendant une session entière. **La 2.21.0 ne doit plus être
+distribuée** : publier la 2.22.0 dès que possible pour la remplacer. Vérifié hors jeu (`luaparse`,
+`node tests/net_test.mjs`) seulement — pas encore reconfirmé avec un nouveau `BeamNG.log` après ce correctif.
 
 ### Fait (vérifié seulement hors jeu : tests node, LuaJIT avec faux jeu, navigateur avec données factices)
 - Rejoindre un serveur → charge la carte de l'hôte en jeu libre → place au **vrai garage** attribué (garages de
@@ -1016,15 +1044,47 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     nouvel id), avec `unregisterModTab` au déchargement. Résultat : Échap affiche maintenant un onglet
     « GRNFR CMP » à part entière, pas « Mods ».
   - **`GrnfrPanel.vue`/`i18n.js`** : nouvel onglet « Comment jouer » (`help`), devenu l'onglet de départ
-    (avant : « Tableau de bord », qui ne parlait que FPS) — explique comment rejoindre un serveur, les 3 touches
-    (O = ordinateur du garage, K = téléphone, L = tableau de bord), que GRNFR CMP Launcher doit être ouvert à
-    côté du jeu, et un aperçu des fonctionnalités une fois sur un serveur. Les indices de réglages (
-    `game_settings_hint`) mis à jour pour ne plus mentionner « Mods » (« menu pause > GRNFR CMP » au lieu de
-    « menu pause > Mods > GRNFR CMP »).
+    (avant : « Tableau de bord », qui ne parlait que FPS) — explique comment rejoindre un serveur, les touches
+    (O = ordinateur du garage, K = téléphone — la touche L du tableau de bord FPS mentionnée ici a depuis été
+    supprimée, voir mod 2.22.0 ci-dessous), que GRNFR CMP Launcher doit être ouvert à côté du jeu, et un aperçu
+    des fonctionnalités une fois sur un serveur. Les indices de réglages (`game_settings_hint`) mis à jour pour
+    ne plus mentionner « Mods » (« menu pause > GRNFR CMP » au lieu de « menu pause > Mods > GRNFR CMP »).
   - Vérifié hors jeu : `GrnfrPanel.vue` compile (`@vue/compiler-sfc`), `node --check` sur `index.js`/`i18n.js`,
     `node tests/net_test.mjs` (30/30, aucun changement SQL/Lua ce coup-ci). **Jamais ouvert dans le vrai jeu** —
     en particulier, jamais confirmé que `registerModTab` produit bien un onglet visuellement distinct de
     « Mods » dans le vrai menu Échap (lu dans le code du jeu, jamais exécuté depuis notre mod).
+
+- **Correctif critique + touche L et tableau de bord FPS retirés (mod 2.22.0, 23/10/2026)** — voir le
+  § BUG CRITIQUE plus haut pour le détail du plantage en boucle de la 2.21.0 et sa correction
+  (`grnfr_hud_force` → `grnfr_hudforce`, `pcall` autour des 3 appels risqués dans `M.tick`). En plus de ce
+  correctif, demandé explicitement par l'utilisateur dans le même tour : « enlève la touche L et ses trucs de
+  FPS » / « enlève tableau de bord de FPS ».
+  - **Touche L + grande fenêtre HUD supprimées** : l'action clavier `grnfr_toggle` (binding L par défaut,
+    `keyboardGRNFR.json` + `actions/grnfr.json`) retirée ; `M.toggleHud`/`M.openBig`/`M.closeBig`/`hudOpen`/
+    `bigOpen` retirés de `grnfr.lua` ; `HudOverlay.vue` (petit HUD en coin + grande fenêtre, tout l'affichage
+    qui dépendait de la touche L) supprimé entièrement, plus monté dans `index.js`. Le message de bienvenue au
+    premier lancement (`notifyStart`) ne mentionne plus la touche du HUD, seulement O et K.
+  - **Tableau de bord ET Performance retirés de `GrnfrPanel.vue`** (plus seulement l'onglet Optimisation
+    fusionné dans Réglages, voir mod 2.21.0) : ces deux onglets ne montraient que des chiffres FPS/graphique —
+    `FpsGraph.vue` supprimé (plus aucun consommateur). Resté : Comment jouer (onglet de départ), Réglages
+    (langue, compteur FPS en coin — toujours disponible séparément via son propre réglage, cadence HUD, accent,
+    anti-stutter), Mods (placeholder).
+  - **Réglages « HUD » orphelins nettoyés** : `hudEnabled`/`showFps`/`showAvg`/`showMode`/`showGraph`/
+    `compact`/`hudPos`/`opacity` ne pilotaient plus RIEN (plus aucun composant ne les lisait) depuis la
+    suppression de `HudOverlay.vue` — retirés du schéma `settings.lua`, de `GrnfrPanel.vue` et de `i18n.js`
+    (les anciens fichiers `settings/grnfr.json` qui ont encore ces clés sont simplement ignorés au chargement,
+    sans erreur). Le compteur FPS en coin (`fpsOverlay` et ses réglages propres) n'est PAS concerné, il reste
+    entièrement fonctionnel et séparé.
+  - **Legacy nettoyé en passant** : `ui/modules/apps/GRNFR/` (une app « HUD natif » AngularJS plus ancienne,
+    séparée de notre UI Vue, découverte en cherchant d'autres références à `hudEnabled` — devenue
+    silencieusement invisible pour toujours par cette même suppression, puisque sa condition d'affichage
+    dépendait de `st.settings.hudEnabled`) supprimée entièrement : son contenu est désormais couvert par
+    `GrnfrPanel.vue` (onglet Échap + Réglages). Le champ `angular` de `buildStatic()` (servait uniquement à
+    cette app) retiré aussi.
+  - Vérifié hors jeu : `luaparse` sur `grnfr.lua`/`settings.lua`, `GrnfrPanel.vue` compile
+    (`@vue/compiler-sfc`), `node tests/net_test.mjs` (30/30), `GRNFR_ALLOW_UNLINKED=1 node scripts/build.mjs`
+    (le zip se construit toujours, 50 fichiers). **Jamais ouvert dans le vrai jeu** — en particulier, le
+    correctif du plantage n'a pas encore été reconfirmé avec un nouveau `BeamNG.log`.
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0) ET

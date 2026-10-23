@@ -5,31 +5,24 @@ local saveWarned = false
 local function slog(kind, msg) local sl = rawget(_G, 'grnfr_sessionlog') if sl then pcall(sl.add, kind, msg) end end
 
 local SCHEMA = {
-  hudEnabled   = { t = 'bool', d = true },
-  showFps      = { t = 'bool', d = true },
-  showAvg      = { t = 'bool', d = true },
-  showMode     = { t = 'bool', d = true },
-  showGraph    = { t = 'bool', d = true },
-  compact      = { t = 'bool', d = false },
-  -- 0 = automatique : le HUD se met à jour à la cadence des images du PC ; sinon N fois par seconde
+  -- 0 = automatique : GRNFRTick se met à jour à la cadence des images du PC (plafonnée à 30 Hz côté Lua,
+  -- grnfr.lua) ; sinon N fois par seconde
   refreshRate  = { t = 'enum', d = 0, values = { [0] = true, [1] = true, [2] = true, [4] = true, [10] = true } },
+  -- Accent de couleur de l'interface GRNFR CMP (fenêtre, onglet Réglages, onglet du menu Échap)
   accent       = { t = 'enum', d = 'orange', values = { orange = true, cyan = true, green = true, amber = true, violet = true } },
-  opacity      = { t = 'num', d = 1, min = 0.5, max = 1 },
   -- Langue : choisie au premier lancement (langChosen), mémorisée dans settings/grnfr.json
   lang         = { t = 'enum', d = 'fr', values = { fr = true, en = true } },
   langChosen   = { t = 'bool', d = false },
-  -- Compteur FPS (visible en jeu, indépendant du HUD)
+  -- Compteur FPS (petit cadran toujours visible en jeu, indépendant de toute fenêtre GRNFR)
   fpsOverlay   = { t = 'bool', d = false },
   fpsBg        = { t = 'bool', d = true },
   fpsPos       = { t = 'enum', d = 'top-right', values = { ['top-right'] = true, ['top-left'] = true, ['bottom-right'] = true, ['bottom-left'] = true } },
   fpsSize      = { t = 'enum', d = 'medium', values = { small = true, medium = true, large = true } },
   fpsColor     = { t = 'color', d = '#ff6600' },
   fpsOpacity   = { t = 'num', d = 0.9, min = 0.3, max = 1 },
-  introShown   = { t = 'bool', d = false }, -- notification « touche du HUD » affichée une seule fois, jamais réinitialisée
+  introShown   = { t = 'bool', d = false }, -- notification de bienvenue affichée une seule fois, jamais réinitialisée
   -- Optimisation (en développement)
   antiStutter  = { t = 'bool', d = false },
-  -- Position du HUD en jeu (touche L)
-  hudPos       = { t = 'enum', d = 'top-left', values = { ['top-left'] = true, ['top-right'] = true, ['bottom-left'] = true, ['bottom-right'] = true } },
 }
 
 local cur = {}

@@ -5,7 +5,6 @@
 import { useBridge } from "@/bridge"
 import { createApp } from "vue"
 import FpsOverlay from "./FpsOverlay.vue"
-import HudOverlay from "./HudOverlay.vue"
 import OnlineWindow from "./OnlineWindow.vue"
 import QuickPanel from "./QuickPanel.vue"
 import ServerBar from "./ServerBar.vue"
@@ -18,8 +17,6 @@ const PAUSE_BUTTON_ID = "grnfr-mods-button"
 const PAUSE_TAB_ID = "grnfr"
 let overlayApp = null
 let overlayEl = null
-let hudApp = null
-let hudEl = null
 let onlineApp = null
 let onlineEl = null
 let quickApp = null
@@ -42,19 +39,13 @@ function addGrnfrButton(addButton) {
 
 export async function onLoad() {
   events.on("MainMenuButtons", addGrnfrButton)
-  startPerfStore() // historique FPS partagé (HUD, grande fenêtre, menu)
-  // Compteur FPS : monté directement dans <body>, indépendant du HUD et des slots
+  startPerfStore() // historique FPS partagé (compteur, menu pause, onglet Réglages)
+  // Compteur FPS : monté directement dans <body>, indépendant des slots
   overlayEl = document.createElement("div")
   overlayEl.id = "grnfr-fps-overlay-root"
   document.body.appendChild(overlayEl)
   overlayApp = createApp(FpsOverlay)
   overlayApp.mount(overlayEl)
-  // HUD en jeu (touche L) : monté dans <body>, ne dépend pas de l'app « HUD Apps »
-  hudEl = document.createElement("div")
-  hudEl.id = "grnfr-hud-root"
-  document.body.appendChild(hudEl)
-  hudApp = createApp(HudOverlay)
-  hudApp.mount(hudEl)
   // GRNFR Online (touche O) : fenêtre de compte / serveurs / garage / marché / taxi / bus
   onlineEl = document.createElement("div")
   onlineEl.id = "grnfr-online-root"
@@ -102,8 +93,6 @@ export async function onUnload() {
   stopPerfStore()
   overlayApp?.unmount()
   overlayEl?.remove()
-  hudApp?.unmount()
-  hudEl?.remove()
   stopNet()
   onlineApp?.unmount()
   onlineEl?.remove()
@@ -113,7 +102,7 @@ export async function onUnload() {
   barEl?.remove()
   tabApp?.unmount()
   tabEl?.remove()
-  overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = tabApp = tabEl = null
+  overlayApp = overlayEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = tabApp = tabEl = null
   try { await lua.extensions.ui_pause_actions.unregisterModButton(PAUSE_BUTTON_ID) } catch (e) { /* ignoré */ }
   try { await lua.extensions.ui_pause_actions.unregisterModTab(PAUSE_TAB_ID) } catch (e) { /* ignoré */ }
 }
