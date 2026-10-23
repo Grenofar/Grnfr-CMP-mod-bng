@@ -1050,8 +1050,14 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
 ~~**Phase H — Recherche de pièces**~~ **Fait (mod 2.16.1, voir § Fait ci-dessus)**.
 ~~**Phase I — Sécurité routière**~~ **Fait (mod 2.17.0, voir § Fait ci-dessus)** : vrais radars/caméras du jeu
    (pas systématique, pas inventé), amende décidée par le serveur.
-**Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
-   — demande peut-être déjà couverte.
+~~**Phase J — Profils**~~ **Vérifiée : déjà entièrement couverte avant cette session (23/10/2026), rien à coder.**
+   `OnlineWindow.vue` (onglet Compte, pas encore connecté) affiche déjà « Vos profils » = la liste des fichiers
+   `settings/grnfr/profiles/*.grnfrprofile.json` trouvés sur la machine (`profile.lua`), avec un bouton
+   « Utiliser » par profil et la possibilité d'en créer un nouveau — exactement ce qui était demandé (« une
+   liste de profils qu'on possède et qu'on peut choisir »). Seul manque identifié, mais PAS demandé
+   explicitement donc pas ajouté (éviter le travail non sollicité) : aucun bouton pour supprimer un vieux
+   profil de la liste (il faudrait l'effacer à la main sur le disque) — à faire seulement si l'utilisateur le
+   demande.
 ~~**Phase K — `host/`**~~ **Les 2 points réalisables cette passe faits (voir § Fait ci-dessus) ; le 3ème reste un
 gros morceau d'architecture, pas une passe rapide** :
    - ~~Démarrage à vide~~ **Déjà fait avant cette session** (`App.tsx` : `<NewServer firstRun />` si aucun
