@@ -1,4 +1,5 @@
-// GRNFR CMP : un seul bouton dans le menu principal + une carte dans l'onglet "Mods" du menu pause.
+// GRNFR CMP : un seul bouton dans le menu principal + son propre onglet "GRNFR CMP" dans le menu pause
+// (registerModTab, pas imbriqué dans l'onglet générique "Mods" du jeu).
 // Un seul point d'entrée : le bouton ouvre directement la fenêtre GRNFR CMP (OnlineWindow, la même qu'avec
 // la touche O), qui a maintenant son propre onglet Réglages (GrnfrPanel, embarqué).
 import { useBridge } from "@/bridge"
@@ -14,6 +15,7 @@ import { startPerfStore, stopPerfStore } from "./perfStore.js"
 
 const { events, lua } = useBridge()
 const PAUSE_BUTTON_ID = "grnfr-mods-button"
+const PAUSE_TAB_ID = "grnfr"
 let overlayApp = null
 let overlayEl = null
 let hudApp = null
@@ -78,16 +80,20 @@ export async function onLoad() {
   tabApp = createApp(Tablet)
   tabApp.mount(tabEl)
   initNet().catch(e => console.error("[GRNFR] online", e))
+  // Son propre onglet dans le menu pause (pas imbriqué dans l'onglet générique "Mods" du jeu) : demandé
+  // explicitement par l'utilisateur (« quand on appuie sur Échap, que ça soit GRNFR CMP et plus "Mod" ») --
+  // registerModTab (API publique du jeu, lua/ge/extensions/ui/pause/actions.lua) crée un vrai onglet à son nom.
   try {
+    await lua.extensions.ui_pause_actions.registerModTab({ id: PAUSE_TAB_ID, label: "GRNFR CMP", icon: "wrench" })
     await lua.extensions.ui_pause_actions.registerModButton({
       id: PAUSE_BUTTON_ID,
-      tabId: "mods",
+      tabId: PAUSE_TAB_ID,
       label: "GRNFR CMP",
       icon: "wrench",
       componentName: "/ui/ui-vue/mods/GRNFR/GrnfrPanel.vue",
     })
   } catch (e) {
-    console.error("[GRNFR] bouton de pause non enregistré", e)
+    console.error("[GRNFR] onglet de pause non enregistré", e)
   }
 }
 
@@ -109,4 +115,5 @@ export async function onUnload() {
   tabEl?.remove()
   overlayApp = overlayEl = hudApp = hudEl = onlineApp = onlineEl = quickApp = quickEl = barApp = barEl = tabApp = tabEl = null
   try { await lua.extensions.ui_pause_actions.unregisterModButton(PAUSE_BUTTON_ID) } catch (e) { /* ignoré */ }
+  try { await lua.extensions.ui_pause_actions.unregisterModTab(PAUSE_TAB_ID) } catch (e) { /* ignoré */ }
 }

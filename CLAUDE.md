@@ -389,7 +389,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.20.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
+- Mod : **2.21.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
   23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
@@ -1001,6 +1001,31 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     modules n'est couvert par cette suite — dépendent tous d'API BeamNG réelles). **Rien de tout ça n'a jamais
     été ouvert dans le vrai jeu.**
 
+- **Menu Échap : vrai onglet « GRNFR CMP » + guide « Comment jouer » (mod 2.21.0, 23/10/2026)** — demandé
+  explicitement par l'utilisateur (« quand on appuie sur Échap en jeu, fais que ça soit GRNFR CMP et plus Mod,
+  et ça donne des infos, comment jouer etc »), reprend le point resté ouvert de la Phase B/L (« nettoyer le
+  menu Échap »).
+  - **Avant** : `index.js` enregistrait notre carte dans l'onglet GÉNÉRIQUE « Mods » du menu pause
+    (`tabId: "mods"`, `MODS_TAB_ID` côté jeu) — on voyait donc « Mods » en premier, pas « GRNFR CMP », et le
+    contenu affiché (`GrnfrPanel.vue`) ne parlait QUE du HUD/FPS, jamais du jeu en ligne lui-même (comment
+    rejoindre un serveur, les touches O/K/L...).
+  - **🔎 Découverte en lisant les vraies sources du jeu** (`lua/ge/extensions/ui/pause/actions.lua`) :
+    `ui_pause_actions.registerModTab({id, label, icon})` est une vraie API PUBLIQUE qui crée un VRAI onglet à
+    son propre nom dans le menu pause (pas seulement une carte dans l'onglet « Mods » générique) — remplace le
+    `tabId: "mods"` par notre propre `tabId: "grnfr"` (`registerModTab` + `registerModButton` pointant vers ce
+    nouvel id), avec `unregisterModTab` au déchargement. Résultat : Échap affiche maintenant un onglet
+    « GRNFR CMP » à part entière, pas « Mods ».
+  - **`GrnfrPanel.vue`/`i18n.js`** : nouvel onglet « Comment jouer » (`help`), devenu l'onglet de départ
+    (avant : « Tableau de bord », qui ne parlait que FPS) — explique comment rejoindre un serveur, les 3 touches
+    (O = ordinateur du garage, K = téléphone, L = tableau de bord), que GRNFR CMP Launcher doit être ouvert à
+    côté du jeu, et un aperçu des fonctionnalités une fois sur un serveur. Les indices de réglages (
+    `game_settings_hint`) mis à jour pour ne plus mentionner « Mods » (« menu pause > GRNFR CMP » au lieu de
+    « menu pause > Mods > GRNFR CMP »).
+  - Vérifié hors jeu : `GrnfrPanel.vue` compile (`@vue/compiler-sfc`), `node --check` sur `index.js`/`i18n.js`,
+    `node tests/net_test.mjs` (30/30, aucun changement SQL/Lua ce coup-ci). **Jamais ouvert dans le vrai jeu** —
+    en particulier, jamais confirmé que `registerModTab` produit bien un onglet visuellement distinct de
+    « Mods » dans le vrai menu Échap (lu dans le code du jeu, jamais exécuté depuis notre mod).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0) ET
    `computer.lua` réécrit avec la vraie API (mod 2.18.0, voir 2bis ci-dessous pour le détail)** — reste
@@ -1129,9 +1154,10 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - **Reporté** : la disposition HUD native BeamNG basée sur « Basic Mission Layout » avec chat intégré — zone
      non explorée (aucun fichier de layout HUD dans ce repo), à investiguer avant de coder quoi que ce soit.
 ~~**Phase B — Verrouillage de la configuration véhicule**~~ **Fait pour la partie verrouillage (mod 2.12.0, voir
-§ Fait ci-dessus — monkey-patch des 5 vraies fonctions `core_vehicle_partmgmt`)** :
-   - **Reste ouvert** : nettoyer le menu Échap (« on voit toujours l'ancien UI ») — demande trop vague pour agir,
-     à clarifier avec l'utilisateur avant de toucher au menu pause natif.
+§ Fait ci-dessus — monkey-patch des 5 vraies fonctions `core_vehicle_partmgmt`), plus réparation/sélecteur de
+véhicule natifs bloqués (mod 2.20.0, `inputlock.lua`) et menu Échap nettoyé (mod 2.21.0, vrai onglet
+« GRNFR CMP » + guide, voir § Fait ci-dessus pour les deux)** : la demande initialement trop vague a été
+précisée par l'utilisateur dans les tours suivants, plus rien d'ouvert sur ce point.
 **Phase C — Véhicules taxi/bus, classes perf/confort** :
    - Chaque véhicule du catalogue reçoit une classe de performance et une classe de confort (nouvelles colonnes,
      `dealership_catalog`/`garage_vehicles` probablement).
@@ -1191,8 +1217,8 @@ gros morceau d'architecture, pas une passe rapide** :
      liste sans pouvoir le rejoindre serait pire que ne rien afficher (bouton qui ne marche pas). Un vrai
      chantier impliquerait d'ajouter un troisième chemin réseau au launcher (proxy WebSocket vers le relais
      `host/` choisi) + un protocole de connexion côté mod — multi-session, pas fait ici.
-**Phase L — Branding/nettoyage UI** : fusionnée avec la Phase B (menu Échap doit toujours rediriger proprement
-   vers GRNFR CMP, jamais montrer un résidu d'ancien UI).
+~~**Phase L — Branding/nettoyage UI**~~ **Fait (fusionnée avec la Phase B, mod 2.21.0, voir § Fait ci-dessus)** :
+   le menu Échap a maintenant son propre onglet « GRNFR CMP » (plus « Mods ») avec un guide « Comment jouer ».
 **Phase M — Performance et règles de jeu** :
    - ~~Aucun trafic IA sur les routes~~ **Fait (mod 2.9.1)** : `convoy.lua` (trafic partagé, probable cause du bug
      critique ci-dessus) et `traffic.lua` (trafic adaptatif, expérimental) supprimés entièrement — voir § BUG

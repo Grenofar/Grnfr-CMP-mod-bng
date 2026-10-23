@@ -6,6 +6,24 @@
       </button>
     </nav>
 
+    <!-- Comment jouer : onglet de départ (menu pause/principal en particulier), demandé explicitement par
+         l'utilisateur -- avant, ce panneau ne parlait que du HUD/FPS, rien sur le jeu en ligne lui-même. -->
+    <section v-if="tab === 'help'">
+      <div class="head"><b>GRNFR CMP</b><span class="ver">v{{ st.version }}</span></div>
+      <p class="note">{{ t('help_intro') }}</p>
+      <h3>{{ t('help_join') }}</h3>
+      <p class="note">{{ t('help_join_txt') }}</p>
+      <h3>{{ t('help_keys') }}</h3>
+      <ul class="helplist">
+        <li><b>O</b> — {{ t('help_key_o') }}</li>
+        <li><b>K</b> — {{ t('help_key_k') }}</li>
+        <li><b>L</b> — {{ t('help_key_l') }}</li>
+      </ul>
+      <h3>{{ t('help_launcher') }}</h3>
+      <p class="note">{{ t('help_launcher_txt') }}</p>
+      <p class="note">{{ t('help_more') }}</p>
+    </section>
+
     <section v-if="tab === 'dashboard'">
       <div class="head"><b>GRNFR CMP</b><span class="ver">v{{ st.version }}</span></div>
       <p class="tagline">{{ t('subtitle') }}</p>
@@ -168,9 +186,10 @@ const { events } = useBridge()
 const props = defineProps({ variant: { type: String, default: "menu" } })
 const isGame = computed(() => props.variant === "game")
 const tabIds = computed(() => isGame.value
-  ? ["dashboard", "performance", "optim"]
-  : ["dashboard", "performance", "settings", "mods"])
+  ? ["help", "dashboard", "performance", "optim"]
+  : ["help", "dashboard", "performance", "settings", "mods"])
 const icons = {
+  help: "M12 17h.01M12 8a2.5 2.5 0 112.5 2.5c-.9.9-1.5 1.5-1.5 3M12 3a9 9 0 100 18 9 9 0 000-18z",
   dashboard: "M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z",
   performance: "M3 17l5-6 4 4 8-10",
   optim: "M13 2L4 14h7l-1 8 9-12h-7z",
@@ -186,7 +205,7 @@ const rates = [0, 1, 2, 4, 10]
 const accents = ["orange", "cyan", "green", "amber", "violet"]
 const HIST = 120
 
-const tab = ref("dashboard")
+const tab = ref("help")
 // Valeurs par défaut : l'onglet Paramètres s'affiche même si Lua n'a pas (encore) répondu.
 const DEFAULTS = {
   hudEnabled: true, hudPos: "top-left", showFps: true, showAvg: true, showMode: true, showGraph: true, compact: false,
@@ -322,6 +341,7 @@ h3 { margin: 14px 0 4px; padding-bottom: 4px; font-size: 12px; font-weight: 700;
 .val { font-size: 14px; margin-top: 2px; word-break: break-word; &.na { color: var(--mut); font-style: italic; } }
 .src { margin-top: 3px; font-size: 10px; color: var(--mut); }
 .note { color: var(--mut); font-size: 11px; margin: 6px 0; }
+.helplist { margin: 4px 0 10px; padding-left: 18px; font-size: 12px; li { margin: 4px 0; } b { color: var(--ac); } }
 .reset { width: 100%; margin-top: 14px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--line);
   transition: background 0.15s;
