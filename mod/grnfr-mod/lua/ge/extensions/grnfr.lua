@@ -5,7 +5,7 @@ M.dependencies = { 'grnfr_sessionlog', 'grnfr_settings', 'grnfr_perf', 'grnfr_mo
   'grnfr_chat', 'grnfr_track', 'grnfr_drag', 'grnfr_profile', 'grnfr_travel', 'grnfr_roadmap', 'grnfr_vehinfo', 'grnfr_computer',
   'grnfr_delivery', 'grnfr_radar' }
 
-local VERSION = '2.18.0'
+local VERSION = '2.19.0'
 local uiAttached = false
 local consumers = {} -- UI abonnées (angular, panel, overlay) : on ne pousse des données que si au moins une est ouverte
 local hudOpen = false
@@ -508,8 +508,16 @@ function M.tick(dtReal)
   local dt = tonumber(dtReal) or 0
   acc, modeAcc = acc + dt, modeAcc + dt
   local cfg = grnfr_settings.get()
-  -- cadence de mise à jour du HUD : 0 = automatique (à chaque image, aucune limite), sinon N fois par seconde
-  local period = (cfg.refreshRate or 0) > 0 and 1 / cfg.refreshRate or 0
+  -- cadence de mise à jour du HUD : 0 = automatique. AVANT : "automatique" voulait dire "à chaque image du
+  -- jeu, aucune limite" -- dès qu'une fenêtre GRNFR (tablette, téléphone, menu, pas seulement le HUD) était
+  -- ouverte, ça poussait un évènement GRNFRTick (donc une écriture réactive Vue dans perfStore.js + un
+  -- re-rendu de tout GrnfrPanel.vue, qui lit perf.fps/perf.avg directement dans son template) jusqu'à 60+
+  -- fois par seconde -- signalé par l'utilisateur (23/10/2026) : l'UI (CEF) tombait à ~9 FPS avec le jeu à
+  -- 60 FPS. 30 Hz reste parfaitement fluide pour un compteur FPS/graphique et retire une bonne partie de
+  -- cette charge réactive. Un réglage explicite de l'utilisateur (refreshRate > 0) est toujours respecté tel
+  -- quel, y compris s'il choisit plus de 30.
+  local AUTO_HZ = 30
+  local period = (cfg.refreshRate or 0) > 0 and 1 / cfg.refreshRate or 1 / AUTO_HZ
   if not needFast() then period = 0.5 end -- compteur FPS / fenêtre : une valeur toutes les 0,5 s suffit
   if modeAcc >= 1 then -- le mode de jeu est relu une fois par seconde (pas à chaque image)
     modeAcc = 0

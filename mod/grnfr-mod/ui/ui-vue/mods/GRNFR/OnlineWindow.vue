@@ -73,6 +73,22 @@
           </template>
         </section>
 
+        <!-- RÉGLAGES (HUD, compteur FPS, langue, mods) : AVANT la case "pas connecté" ci-dessous (sinon, dans
+             cette chaîne v-if/v-else-if, le réglage n'était jamais atteint sans compte/profil : on retombait
+             toujours sur "Connectez-vous d'abord") -- accessible sans compte ni profil, comme demandé. Quand
+             aucun profil n'est encore choisi, on peut aussi en reprendre un récemment joué directement ici,
+             sans passer par l'onglet Compte. -->
+        <section v-else-if="tab === 'settings'" class="embed-panel">
+          <div v-if="!logged && net.profiles.length" class="recent">
+            <h4>{{ t('your_profiles') }}</h4>
+            <div v-for="p in net.profiles" :key="p.path" class="row">
+              <span>{{ p.username }}</span>
+              <button type="button" class="btn dim" @click="importProfile(p.path)">{{ t('use_this') }}</button>
+            </div>
+          </div>
+          <GrnfrPanel />
+        </section>
+
         <p v-else-if="!logged" class="mut">{{ t('login_first') }}</p>
 
         <!-- SERVEURS -->
@@ -112,12 +128,6 @@
         <section v-else-if="tab === 'board'">
           <p class="mut">{{ t('lb_wealth') }}</p>
           <table class="tb"><tr v-for="(r, i) in d.board" :key="r.username" :class="{ me: r.username === net.username }"><td>{{ i + 1 }}</td><td>{{ r.username }}</td><td>{{ money(r.wealth) }}</td></tr></table>
-        </section>
-
-        <!-- RÉGLAGES (HUD, compteur FPS, langue, mods) : le même panneau que le menu principal, réutilisé ici
-             pour qu'il n'y ait plus qu'une seule fenêtre GRNFR CMP au lieu de deux. -->
-        <section v-else-if="tab === 'settings'" class="embed-panel">
-          <GrnfrPanel />
         </section>
 
         <!-- ADMIN -->
@@ -317,4 +327,5 @@ input, select { padding: 5px 8px; color: #fff; background: rgba(0, 0, 0, 0.6); b
 .err { color: #ff6b6b; margin: 0 0 6px; } .ok, .good { color: #4ade80; } .bad { color: #ff6b6b; } .warn { color: #f5b942; } .mut { color: rgba(255, 255, 255, 0.6); }
 small { font-size: 12px; }
 .embed-panel { margin: -10px -14px; padding: 0; :deep(.grnfr) { width: 100%; height: 440px; max-width: none; } }
+.embed-panel .recent { margin: 10px 14px; padding: 8px 10px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 102, 0, 0.3); border-radius: 6px; }
 </style>

@@ -389,7 +389,8 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.18.0** poussé sur `main-n8m0cl` ET publiée (confirmé dans `mod_releases`, 23/10/2026). Toutes les
+- Mod : **2.19.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
+  23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
   avait aussi vidé `game_servers` (les 3 « Serveur 1/2/3 »), que `restore_defaults.sql` ne réensemençait pas
@@ -934,6 +935,32 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   ne reste que ce qu'utilise encore `index.html` (`rpcPublic`, `esc`, `money`, `releaseUrl`, messages d'erreur
   génériques réseau/configuration). Vérifié : `node --check public/site.js`, rien dans `scripts/build.mjs` ne
   référençait ces fichiers.
+
+- **Réglages accessible sans compte, profils récents, optimisation UI (mod 2.19.0, 23/10/2026)** — demandé
+  explicitement par l'utilisateur.
+  - **Bug trouvé et corrigé** : dans `OnlineWindow.vue`, l'onglet Réglages (`tab === 'settings'`) était dans une
+    chaîne `v-if`/`v-else-if` APRÈS la case `!logged` — en pratique, cliquer sur Réglages sans compte/profil ne
+    montrait jamais le panneau : on retombait toujours sur « Connectez-vous d'abord », y compris au tout premier
+    lancement (langue pas encore choisie, donc l'onglet de départ est justement Réglages — probablement le cas
+    le plus fréquent où ce bug se voyait). La section Réglages est maintenant testée AVANT la case `!logged`,
+    donc toujours accessible. **Profils récents** : quand on n'est pas connecté, l'onglet Réglages affiche
+    maintenant aussi la liste des profils trouvés sur la machine (même liste que l'onglet Compte,
+    `net.profiles`) avec un bouton « Utiliser » par profil, sans avoir à changer d'onglet.
+  - **Optimisation UI** : signalé par l'utilisateur — l'UI (CEF) tombait à ~9 FPS avec le jeu à 60 FPS.
+    Cause trouvée en lisant `grnfr.lua` (`M.tick`) : la cadence « automatique » (réglage HUD à 0, valeur par
+    défaut) ne limitait RIEN — dès qu'une fenêtre GRNFR (tablette/téléphone/menu, pas seulement le HUD) est
+    ouverte (`needFast()`), l'évènement `GRNFRTick` partait à CHAQUE image du jeu (jusqu'à 60+/s), et
+    `perfStore.js` + `GrnfrPanel.vue` (qui lit `perf.fps`/`perf.avg` directement dans son template, affiché
+    aussi dans l'onglet Réglages via `<GrnfrPanel />`) réagissaient à chacune — un re-rendu Vue à chaque image
+    du jeu. Corrigé : l'« automatique » est maintenant plafonné à 30 Hz (`AUTO_HZ`) au lieu d'aucune limite ;
+    un réglage explicite de l'utilisateur (`refreshRate > 0`) reste respecté tel quel. **Pas d'autre source
+    évidente trouvée** à ce stade (GRNFRPos/GRNFROnline/GRNFRSelf sont déjà throttlés à 5 s/sur changement/300 ms
+    — seul GRNFRTick ne l'était pas).
+  - Vérifié hors jeu : `luaparse` sur `grnfr.lua`, `OnlineWindow.vue` compile (`@vue/compiler-sfc`),
+    `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le vrai jeu** — en particulier, 30 Hz est un choix
+    raisonnable mais pas mesuré contre les 9 FPS réels rapportés ; si ça ne suffit pas, le candidat suivant à
+    creuser serait `GrnfrPanel.vue` lui-même (coût de rendu par image de ses cartes/graphique, pas seulement
+    leur fréquence).
 
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0) ET
