@@ -957,10 +957,11 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     évidente trouvée** à ce stade (GRNFRPos/GRNFROnline/GRNFRSelf sont déjà throttlés à 5 s/sur changement/300 ms
     — seul GRNFRTick ne l'était pas).
   - Vérifié hors jeu : `luaparse` sur `grnfr.lua`, `OnlineWindow.vue` compile (`@vue/compiler-sfc`),
-    `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le vrai jeu** — en particulier, 30 Hz est un choix
-    raisonnable mais pas mesuré contre les 9 FPS réels rapportés ; si ça ne suffit pas, le candidat suivant à
-    creuser serait `GrnfrPanel.vue` lui-même (coût de rendu par image de ses cartes/graphique, pas seulement
-    leur fréquence).
+    `node tests/net_test.mjs` (30/30).
+  - **Confirmé en jeu par l'utilisateur (23/10/2026, après publication de la 2.21.0) : « 60 fps »** — le
+    plafond à 30 Hz a bien réglé la chute à ~9 FPS de l'UI. Premier retour en conditions réelles du grand lot
+    2.19.0-2.21.0 (tout le reste de ce lot — profils récents en Réglages, téléport sans véhicule de jeu libre,
+    garages en noir, HUD forcé, réparation/sélecteur bloqués, onglet Échap — reste non confirmé en jeu).
 
 - **Téléport fiable, garages en noir, HUD forcé, réparation/sélecteur bloqués (mod 2.20.0, 23/10/2026)** —
   quatre demandes explicites de l'utilisateur dans le même message.
