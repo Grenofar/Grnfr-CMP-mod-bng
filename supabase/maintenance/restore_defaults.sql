@@ -39,7 +39,12 @@ insert into public.server_config (key, value, description) values
   ('employee_speed_kmh',             '60',   'Salarié : vitesse virtuelle (km/h) utilisée pour faire avancer sa progression en temps réel'),
   ('employee_income_per_100km',      '500',  'Salarié : revenu généré tous les 100 km parcourus'),
   ('employee_wage_per_100km',        '200',  'Salarié : salaire payé tous les 100 km parcourus (déduit du revenu ci-dessus)'),
-  ('employee_max_tick_seconds',      '120',  'Salarié : écart de temps réel maximum accepté par mise à jour (protège contre une longue coupure/reconnexion)')
+  ('employee_max_tick_seconds',      '120',  'Salarié : écart de temps réel maximum accepté par mise à jour (protège contre une longue coupure/reconnexion)'),
+  ('radar_fine_base',                '50',   'Radar : amende de base pour excès de vitesse'),
+  ('radar_fine_per_kmh_over',        '5',    'Radar : amende supplémentaire par km/h au-dessus de la limite'),
+  ('radar_max_speed_kmh',            '300',  'Radar : vitesse maximum plausible acceptée du client (sécurité)'),
+  ('redlight_fine',                  '150',  'Feu rouge : amende fixe'),
+  ('fine_cooldown_seconds',          '20',   'Radars/feux rouges : délai minimum entre deux amendes pour un même joueur')
 on conflict (key) do nothing;
 
 -- ------------------------------------------------------------------ catalogue de base (0001)

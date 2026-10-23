@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.16.1** poussé sur `main-n8m0cl` **et publié** (confirmé dans `mod_releases`, 23/10/2026 — toutes les
+- Mod : **2.17.0** poussé sur `main-n8m0cl` (dernière publiée confirmée : 2.16.1, 23/10/2026 — toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -390,7 +390,7 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
   à un outil MCP GitHub pour lancer `workflow_dispatch` de `launcher-release.yml` elle-même — à faire manuellement,
   input `version` = 0.2.0, ou laisser une session future avec cet accès le faire).
-- Migrations appliquées en prod : 0001 → 0022 (0015 à 0022 appliquées via l'outil MCP `apply_migration` ; 0017 et
+- Migrations appliquées en prod : 0001 → 0025 (0015 à 0025 appliquées via l'outil MCP `apply_migration` ; 0017 et
   0018 ont dû passer par un `drop function` pour changer une signature de paramètres, accepté sans confirmation
   interactive cette fois — la mise en garde « delete/drop demandent une confirmation » dans ce fichier semblait
   viser surtout delete/drop sur des données ou des tables, 0018 contient 1405 lignes d'insertion appliquées en
@@ -829,6 +829,37 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     changement d'UI, aucun changement SQL/Lua.
   - Vérifié hors jeu : `Tablet.vue` compile, `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le vrai jeu.**
 
+- **Grand chantier Phase I — radars de vitesse + caméras de feu rouge (mod 2.17.0)**. Demande précisée par
+  l'utilisateur en cours de route : « le radar n'est pas dans la voiture » / « mets-en pas partout » / « quand il
+  passe à proximité il en tire la vitesse et c'est une amende ou pas ».
+  - **🔎 Découverte en lisant les vraies sources du jeu** (`lua/ge/extensions/gameplay/speedTraps.lua`) : le jeu a
+    déjà un vrai système de radars/caméras de feu rouge — de VRAIS déclencheurs (`BeamNGTrigger`, `speedTrapType`
+    = `"speed"` ou `"redLight"`) placés par le jeu à des endroits précis de certaines cartes (pas partout, pas
+    inventé par nous). Le jeu calcule déjà TOUT seul si la vitesse dépassait la limite dans le bon sens, et pour
+    les feux rouges si le feu était réellement rouge au passage (`core_trafficSignals`) — il ne déclenche le hook
+    (`extensions.hook`) que dans ce cas précis. Mécanisme d'extension standard du jeu : n'importe quelle extension
+    chargée qui définit une fonction du même nom (`onSpeedTrapTriggered`/`onRedLightCamTriggered`) la reçoit
+    automatiquement, comme `onClientStartMission` — aucun câblage supplémentaire nécessaire une fois l'extension
+    déclarée en dépendance.
+  - `grnfr/radar.lua` (nouveau, ajouté à `M.dependencies` dans `grnfr.lua`) : écoute ces deux hooks, demande une
+    amende au serveur (`report_speeding`/`report_red_light`, `supabase/migrations/0025_radar_fines.sql`) —
+    **toujours décidée entièrement par le serveur**, jamais par le client. La vitesse/limite rapportées par le
+    client (en m/s côté jeu, converties en km/h) ne servent qu'à l'affichage du message et sont plafonnées côté
+    serveur par sécurité (`radar_max_speed_kmh`) — **limité, pas infaillible comme le reste de l'anti-triche du
+    projet** : rien n'empêche un client de simplement ne jamais appeler ces fonctions, volontairement pas corrigé
+    ici (mécanisme de jeu de rôle, pas une mesure de sécurité dure).
+  - SQL : amende radar = `radar_fine_base + radar_fine_per_kmh_over × (vitesse - limite)`, amende feu rouge =
+    montant fixe (`redlight_fine`) ; les deux plafonnées au solde du joueur (jamais de solde négatif) et protégées
+    par un délai anti-spam entre deux amendes (`fine_cooldown_seconds`, nouvelle colonne `profiles.last_fine_at`).
+    **Testé en direct contre le vrai Supabase** (vitesse à la limite exacte → pas d'amende ; 40 km/h au-dessus →
+    amende exacte vérifiée ; immédiatement après → bloqué par le cooldown ; feu rouge après le cooldown → amende
+    fixe appliquée) — tout dans une transaction annulée volontairement (compte de test créé dans la même
+    transaction, soldes vérifiés identiques après coup).
+  - Vérifié hors jeu : `luaparse` sur `radar.lua`/`grnfr.lua`, `node tests/net_test.mjs` (30/30, pas de
+    régression). **Jamais ouvert dans le vrai jeu** — en particulier, jamais confirmé que `west_coast_usa` (ou
+    une autre carte) a bien de vrais radars/caméras placés dessus ; si aucune amende n'apparaît jamais en jeu,
+    c'est le premier endroit à vérifier (la carte n'a peut-être simplement aucun de ces déclencheurs).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -991,7 +1022,8 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - **Reste ouvert, pas vérifiable sans le jeu** : revérifier que le garage d'un joueur qui part redevient bien
      « non pris » (fix 2.6.1) ; « le nom du garage reste affiché H24 » pas traité, à clarifier.
 ~~**Phase H — Recherche de pièces**~~ **Fait (mod 2.16.1, voir § Fait ci-dessus)**.
-**Phase I — Sécurité routière** : radars + amendes aux feux rouges (pas systématique à chaque feu).
+~~**Phase I — Sécurité routière**~~ **Fait (mod 2.17.0, voir § Fait ci-dessus)** : vrais radars/caméras du jeu
+   (pas systématique, pas inventé), amende décidée par le serveur.
 **Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
    — demande peut-être déjà couverte.
 **Phase K — `host/`** :
