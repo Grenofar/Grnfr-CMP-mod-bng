@@ -6,6 +6,13 @@
 -- supabase/migrations/. Suppose que le schéma existe déjà (0001 à 0011 déjà appliquées une fois).
 -- =====================================================================================
 
+-- ------------------------------------------------------------------ serveurs de jeu (0002) : manquait ici avant
+-- le 23/10/2026 -- un wipe_all.sql vidait game_servers (0002 ne les crée qu'une seule fois, "where not exists"),
+-- et comme ce script ne les réensemençait pas, les 3 serveurs par défaut ne revenaient jamais après un reset.
+insert into public.game_servers (name, max_players)
+select v.n, 4 from (values ('Serveur 1'), ('Serveur 2'), ('Serveur 3')) v(n)
+where not exists (select 1 from public.game_servers where lower(name) = lower(v.n));
+
 -- ------------------------------------------------------------------ réglages (0001, 0002, 0007)
 insert into public.server_config (key, value, description) values
   ('starting_money',            '25000',  'Argent donné à l''inscription'),

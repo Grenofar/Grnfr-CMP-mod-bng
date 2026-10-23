@@ -391,7 +391,10 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
 ### Versions au moment d'écrire ceci
 - Mod : **2.18.0** poussé sur `main-n8m0cl` ET publiée (confirmé dans `mod_releases`, 23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
-  `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
+  `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
+  avait aussi vidé `game_servers` (les 3 « Serveur 1/2/3 »), que `restore_defaults.sql` ne réensemençait pas
+  (seul `0002_game_servers.sql` les créait, une seule fois, `where not exists`) ; corrigé dans le script ET
+  recréés en direct sur Supabase**. Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
   `host-release.yml`, input `version` = 0.6.0, quand l'utilisateur le demande). Launcher : **0.2.0** dans le code,
   **pas encore publié** (dernière release `launcher-v0.1.1` ; cette session n'avait accès ni à `gh` authentifié ni
