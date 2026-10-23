@@ -389,8 +389,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.21.0** poussé sur `main-n8m0cl`, **pas encore publié** (dernière publiée confirmée : 2.18.0,
-  23/10/2026). Toutes les
+- Mod : **2.21.0** poussé sur `main-n8m0cl` ET publiée (confirmé dans `mod_releases`, 23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro — **bug trouvé le 23/10/2026 : ce reset
   avait aussi vidé `game_servers` (les 3 « Serveur 1/2/3 »), que `restore_defaults.sql` ne réensemençait pas
