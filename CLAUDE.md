@@ -389,7 +389,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.17.0** poussé sur `main-n8m0cl` (dernière publiée confirmée : 2.16.1, 23/10/2026 — toutes les
+- Mod : **2.18.0** poussé sur `main-n8m0cl` (dernière publiée confirmée : 2.16.1, 23/10/2026 — toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -886,20 +886,67 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     `cargo` dans cette session locale, donc pas de build Tauri complet ni de test du formulaire dans la vraie
     fenêtre de l'app).
 
+- **`computer.lua` réécrit avec la vraie API du jeu (mod 2.18.0, TODO 1/2bis, 23/10/2026)** — demandé
+  explicitement par l'utilisateur (« Reecrire computer.lua »), en s'appuyant sur les 5 fonctions publiques de
+  `core_vehicle_partmgmt` trouvées pendant la Phase B. Relu plus en détail le vrai `partmgmt.lua` et `ge_utils.lua`
+  du jeu (BeamNG installé sur cette machine) pour connaître les VRAIES formes de données attendues, plutôt que de
+  deviner :
+  - **Peinture (`setConfigPaints`) : confiance raisonnable.** Forme exacte trouvée dans `ge_utils.lua`
+    (`createVehiclePaint`) : `{baseColor = {r,g,b,a}, metallic, roughness, clearcoat, clearcoatRoughness}` — nos
+    3 couches de couleur (Tablet.vue) sont converties dans ce format, métallique/rugosité/vernis fixés aux mêmes
+    valeurs par défaut que le jeu utilise. Appelée avec `respawn=false` (le jeu applique alors la couleur
+    immédiatement via `vehManager.liveUpdateVehicleColors`, pas besoin de recréer le véhicule) et un id de
+    véhicule explicite (fonctionne même si le joueur n'est pas assis dedans).
+  - **Pièces (`setPartsTreeConfig`) : confiance moyenne sur le mécanisme.** Découverte importante en lisant
+    `mergeConfigOfVehicle` : le merge de config est SUPERFICIEL (`tableMerge`, pas récursif), donc envoyer
+    `{partsTree = ...}` REMPLACE tout l'arbre existant — `computer.lua` relit donc l'arbre RÉEL actuel
+    (`core_vehicle_partmgmt.getConfig().partsTree`), y trouve le nœud du bon emplacement en parcourant
+    `node.children` par id (structure confirmée en lisant `partsTreeToPartsMap`/`flattenPartsTreeRecursive` dans
+    le vrai fichier du jeu : chaque nœud a `id`/`path`/`chosenPartName`/`children`), pose `chosenPartName` au vrai
+    `part_key` (0018), puis renvoie l'arbre complet avec `respawn=true` (seul moyen trouvé pour que le jeu charge
+    les nouveaux jbeam — `veh:respawn(serialize(...))`). **Limites découvertes et documentées dans le fichier** :
+    cette fonction n'accepte pas d'id de véhicule explicite (elle agit sur `be:getPlayerVehicleID(0)` via
+    `core_vehicle_configTarget`) donc ne marche que si le joueur est ASSIS dans le véhicule qu'il configure ; et
+    retirer une pièce ne peut pas remettre la pièce d'origine/stock (le serveur ne garde jamais trace de laquelle
+    c'était, voir `remove_vehicle_part` dans 0019).
+  - **Réglages (`setConfigVars`) : confiance faible, honnêtement documentée.** L'appel passe maintenant par la
+    vraie fonction (mieux que l'ancien code qui ne faisait littéralement rien), mais les vraies clés de variables
+    jbeam par véhicule (ex. `$brakebias`, `$fuel`, `$spoiler_angle_R`, vues en lisant de vrais `.jbeam` du jeu
+    pendant cette recherche) n'ont pas été trouvées pour nos deux réglages (hauteur de caisse/pression des pneus,
+    clés `ride`/`tire` côté UI) — très probablement un no-op silencieux tant que les vraies clés ne sont pas
+    identifiées. **Ne pas présenter les Réglages comme fonctionnels avant vérification en jeu.**
+  - Le verrouillage Phase B (`withLockDisabled`) entoure maintenant réellement les 3 fonctions (avant : jamais
+    utilisé, puisque rien n'appelait encore la vraie API).
+  - Vérifié hors jeu : `luaparse` sur `computer.lua`/`grnfr.lua`, `node tests/net_test.mjs` (30/30, pas de
+    régression — ce module n'est pas testé par cette suite). **Jamais ouvert dans le vrai jeu** — en particulier,
+    l'effet réel d'un changement de pièce sur un nœud dont les enfants ne correspondent plus à la nouvelle pièce
+    n'est pas vérifié, et le respawn du véhicule (même id ou pas) n'est qu'une hypothèse raisonnable.
+
+- **Site : pages Compte/Admin retirées (23/10/2026)**, demandé explicitement par l'utilisateur (« enleve compte
+  et admin du site »). `public/account.html` et `public/admin.html` (login e-mail/mot de passe + panneau admin,
+  système d'authentification du SITE distinct du mod — sans rapport avec les profils pseudo-only du jeu)
+  supprimés ; lien de navigation retiré de `public/index.html` (seul lien « Accueil » restant). `public/site.js`
+  nettoyé en conséquence : tout le client d'authentification (jeton, `signIn`/`signUp`/`signOut`, `rpc`
+  authentifié, messages d'erreur liés au login/admin) supprimé puisqu'il ne servait plus qu'à ces deux pages ;
+  ne reste que ce qu'utilise encore `index.html` (`rpcPublic`, `esc`, `money`, `releaseUrl`, messages d'erreur
+  génériques réseau/configuration). Vérifié : `node --check public/site.js`, rien dans `scripts/build.mjs` ne
+  référençait ces fichiers.
+
 ### TODO — dans l'ordre demandé par l'utilisateur
-1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
-   La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
-   réécrit pour l'utiliser** — reste à faire avant de pouvoir dire que « Pièces »/« Réglages » changent vraiment
-   le véhicule ; la peinture devrait déjà marcher (`setColor`). Jamais testé dans le vrai BeamNG.
+1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0) ET
+   `computer.lua` réécrit avec la vraie API (mod 2.18.0, voir 2bis ci-dessous pour le détail)** — reste
+   uniquement : trouver les vraies clés de variables jbeam par véhicule pour que les Réglages aient un effet
+   (voir 2bis), et tout vérifier dans le vrai jeu (jamais fait).
 2. **Phase 2 — missions / livraisons comme la carrière, en multi** — **colis fait (mod 2.6.0, voir ci-dessus) ;
    le reste est repris et élargi dans la Phase D du grand chantier plus bas** (entreprises, poids/distance,
    salarié, blocage sans pièce de fret).
-2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0, voir § Fait ci-dessus)** — la vraie API
-   `core_vehicle_partmgmt` a maintenant été TROUVÉE en lisant les sources du jeu (mod 2.12.0, Phase B, voir § Fait
-   ci-dessus : 5 fonctions publiques `setConfig`/`setConfigOfVehicle`/`setConfigPaints`/`setConfigVars`/
-   `setPartsTreeConfig`), mais **`computer.lua` n'a pas encore été réécrit pour les utiliser** (toujours les
-   anciens appels spéculatifs qui ne marchaient probablement pas) — reste à faire : forme exacte de l'arbre de
-   pièces attendu par `setPartsTreeConfig`, et gérer le respawn du véhicule que ça implique.
+2bis. ~~**Ordinateur du garage, vraies pièces**~~ **Fait (mod 2.7.0 pour le catalogue, mod 2.18.0 pour
+   `computer.lua` réécrit avec la vraie API, voir § Fait ci-dessus)**. Reste ouvert, non résolu cette fois :
+   les vraies clés de variables jbeam par véhicule (pour que l'onglet Réglages ait un effet) n'ont toujours pas
+   été trouvées — `setConfigVars` est appelée avec nos propres clés (`ride`/`tire`), qui ne correspondent
+   presque certainement à aucune vraie variable jbeam (celles-ci sont spécifiques à chaque véhicule/pièce, ex.
+   `$brakebias`, `$fuel`, `$spoiler_angle_R`, vues en lisant de vrais `.jbeam`) ; et retirer une pièce ne peut
+   pas remettre la pièce d'origine/stock (le serveur ne garde pas trace de laquelle c'était).
 2ter. ~~**Garage : signalé en jeu par l'utilisateur, « je me suis trouvé dans une sorte de petite tente pour les
    courses, qui n'est pas un garage »**~~ **Diagnostiqué et corrigé (mod 2.7.1)**. Grâce à l'installation BeamNG
    trouvée sur cette machine : inspection directe de
