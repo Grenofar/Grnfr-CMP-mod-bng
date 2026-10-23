@@ -389,7 +389,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.18.0** poussé sur `main-n8m0cl` (dernière publiée confirmée : 2.16.1, 23/10/2026 — toutes les
+- Mod : **2.18.0** poussé sur `main-n8m0cl` ET publiée (confirmé dans `mod_releases`, 23/10/2026). Toutes les
   données avaient aussi été réinitialisées le 22/10/2026 à la demande de l'utilisateur : `wipe_all.sql` puis
   `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
