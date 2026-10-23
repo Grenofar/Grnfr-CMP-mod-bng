@@ -363,7 +363,11 @@
           <div v-if="cust.tab === 'parts'" class="panel wide">
             <p v-if="cust.catalogLoading" class="mut">{{ L('Chargement du catalogue…', 'Loading catalog…') }}</p>
             <p v-else-if="!catalogSlots.length" class="empty">{{ L('Aucune pièce connue pour ce véhicule.', 'No known parts for this vehicle.') }}</p>
-            <div v-for="s in catalogSlots" :key="s.slot" class="tile wide">
+            <template v-else>
+              <input v-model="partSearch" type="search" class="partsearch" :placeholder="L('Rechercher une pièce…', 'Search for a part…')" />
+              <p v-if="partSearch && !filteredSlots.length" class="empty">{{ L('Aucune pièce ne correspond.', 'No part matches.') }}</p>
+            </template>
+            <div v-for="s in filteredSlots" :key="s.slot" class="tile wide">
               <div class="tname">{{ slotLabel(s.slot) }}</div>
               <div class="mut">{{ currentPartName(s.slot) }}</div>
               <div class="chips">
@@ -580,6 +584,15 @@ const catalogCargoSlots = computed(() => {
   return Object.values(bySlot)
 })
 const slotLabel = slot => String(slot || "").replace(/^[a-z0-9]+_/i, "").replace(/_/g, " ")
+// Recherche de pièces (grand chantier Phase H) : filtre par nom de pièce ou d'emplacement, insensible à la casse.
+const partSearch = ref("")
+const filteredSlots = computed(() => {
+  const q = partSearch.value.trim().toLowerCase()
+  if (!q) return catalogSlots.value
+  return catalogSlots.value
+    .map(s => ({ slot: s.slot, options: slotLabel(s.slot).toLowerCase().includes(q) ? s.options : s.options.filter(o => o.name.toLowerCase().includes(q)) }))
+    .filter(s => s.options.length > 0)
+})
 const currentPartName = slot => {
   const p = cust.v && cust.v.parts && cust.v.parts[slot]
   return p ? (p.name || p.part_key) : L("Pièce d'origine", "Stock part")
@@ -603,6 +616,7 @@ function refreshCustVeh() {
 }
 function openCustomize(v) {
   cust.v = v; cust.tab = "parts"; cust.busy = false
+  partSearch.value = ""
   cust.paintLayers = (v.paint && v.paint.length) || 1
   cust.paintHex = [0, 1, 2].map(i => rgbToHex(v.paint && v.paint[i]))
   cust.tuning = Object.assign({ ride: 0, tire: 30 }, v.tuning || {})
@@ -780,6 +794,7 @@ main { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .seg { display: inline-flex; padding: 3px; margin-bottom: 14px; border-radius: 10px; background: rgba(255, 255, 255, 0.06);
   button { border: 0; padding: 7px 14px; border-radius: 8px; background: none; color: rgba(255, 255, 255, 0.7); font: 600 13px inherit; cursor: pointer; &.on { background: var(--ac); color: #fff; } } }
 .panel { display: flex; flex-direction: column; gap: 8px; max-width: 560px; label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255, 255, 255, 0.6); margin-top: 6px; } &.wide { max-width: none; } }
+.partsearch { width: 100%; margin-bottom: 10px; }
 input[type="color"] { width: 46px; height: 32px; padding: 2px; border-radius: 8px; cursor: pointer; }
 input[type="range"] { width: 100%; max-width: 320px; accent-color: var(--ac); }
 .customize .vhead { margin-bottom: 4px; }

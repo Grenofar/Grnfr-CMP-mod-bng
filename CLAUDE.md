@@ -382,7 +382,7 @@ Le projet est en train de devenir une **copie multijoueur de la carrière de Bea
 ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : répondre en français.
 
 ### Versions au moment d'écrire ceci
-- Mod : **2.16.0** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
+- Mod : **2.16.1** poussé sur `main-n8m0cl` (dernière publiée confirmée dans `mod_releases` : 2.13.0, 22/10/2026 —
   à republier pour la 2.14.0 ; toutes les données ont aussi été réinitialisées ce jour-là à la demande de
   l'utilisateur : `wipe_all.sql` puis `restore_defaults.sql`, serveurs/comptes/véhicules repartis de zéro). Host : **0.6.0**
   dans le code, **pas encore publié** (dernière release host-v0.5.2 ; publier via `workflow_dispatch` de
@@ -821,6 +821,14 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
   - Vérifié hors jeu : `Tablet.vue` compile, `node tests/net_test.mjs` (30/30, aucun changement SQL — réutilise
     `create_listing` tel quel). **Jamais ouvert dans le vrai jeu.**
 
+- **Grand chantier Phase H — recherche de pièces (mod 2.16.1)**.
+  - `Tablet.vue` (ordinateur du garage, onglet Pièces) : nouveau champ de recherche au-dessus de la liste des
+    emplacements (`partSearch`), filtre insensible à la casse sur le nom de la pièce OU le nom de l'emplacement
+    (`filteredSlots`) — un emplacement reste affiché si son propre nom correspond même si aucune pièce dedans ne
+    correspond. Remis à vide chaque fois qu'on ouvre l'ordinateur sur un véhicule (`openCustomize`). Pur
+    changement d'UI, aucun changement SQL/Lua.
+  - Vérifié hors jeu : `Tablet.vue` compile, `node tests/net_test.mjs` (30/30). **Jamais ouvert dans le vrai jeu.**
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -982,7 +990,7 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    - ~~Vente simplifiée~~ **Fait** — bouton « Vendre » qui ouvre l'onglet Annonces, procédure de prix déplacée là.
    - **Reste ouvert, pas vérifiable sans le jeu** : revérifier que le garage d'un joueur qui part redevient bien
      « non pris » (fix 2.6.1) ; « le nom du garage reste affiché H24 » pas traité, à clarifier.
-**Phase H — Recherche de pièces** : ajouter une recherche dans l'onglet Pièces de l'ordinateur du garage.
+~~**Phase H — Recherche de pièces**~~ **Fait (mod 2.16.1, voir § Fait ci-dessus)**.
 **Phase I — Sécurité routière** : radars + amendes aux feux rouges (pas systématique à chaque feu).
 **Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
    — demande peut-être déjà couverte.
