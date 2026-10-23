@@ -291,6 +291,13 @@ which design is actually in place.
 - **No console on Windows** (`#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`, set
   automatically by the Tauri scaffold) — `host/src-tauri/src/logger.rs` writes to `grnfr-host.log` instead
   of relying on a terminal.
+- **Already has a first-run wizard and starts with no server** (`App.tsx`: `servers.length === 0` →
+  `<NewServer firstRun />`, a dedicated "Premier lancement" screen) — this was wrongly listed as missing in an
+  earlier version of this file's TODO (written without checking the current code, corrected 23/10/2026). The
+  only real gap found was `ServerForm.tsx`'s name field defaulting to the literal text "Serveur GRNFR" (fixed:
+  now starts empty, required before submit) — the `host_servers.name` column itself still has a SQL-level
+  default of `'Serveur GRNFR'` (`0012_host_multi_server.sql`) but it's never actually used in practice since
+  `host_server_upsert`'s `p_name` parameter has no default and the app always sends one explicitly.
 - **Config lives in Supabase**, not a local file — `host/src-tauri/src/supabase.rs`, RPCs defined in
   `0011_host_config.sql` (single-server, superseded) and `0012_host_multi_server.sql` (multi-server,
   current: `host_servers_list`/`host_server_upsert`/`host_server_delete`). No player account: a random
@@ -860,6 +867,25 @@ ordinateur), pas les menus/missions de BeamNG. L'utilisateur parle français : r
     une autre carte) a bien de vrais radars/caméras placés dessus ; si aucune amende n'apparaît jamais en jeu,
     c'est le premier endroit à vérifier (la carte n'a peut-être simplement aucun de ces déclencheurs).
 
+- **Grand chantier Phase K — `host/` (23/10/2026)** : en relisant le code AVANT de coder (évite l'erreur déjà
+  faite pour le cooldown taxi), découverte que 2 des 3 points étaient déjà faits avant cette session :
+  - `App.tsx` affiche déjà `<NewServer firstRun />` (un vrai écran « Premier lancement ») quand
+    `servers.length === 0` — démarrage à vide déjà en place, rien à construire.
+  - `UpdateBanner.tsx` est déjà une vraie mise à jour signée (le même `@tauri-apps/plugin-updater` que le
+    launcher), déjà affichée sur l'écran d'accueil — auto-mise à jour déjà en place.
+  - **Seul vrai défaut trouvé** : `ServerForm.tsx` pré-remplissait le champ nom avec le texte littéral
+    "Serveur GRNFR" (un `useState` par défaut, pas une vraie valeur choisie) — corrigé : le champ démarre vide
+    (avec un `placeholder`), et le formulaire refuse maintenant de soumettre sans nom (au lieu de retomber
+    silencieusement sur "Serveur GRNFR"). La colonne SQL `host_servers.name` a toujours ce défaut au niveau du
+    schéma (`0012_host_multi_server.sql`) mais n'est jamais réellement utilisée en pratique (le paramètre
+    `p_name` de `host_server_upsert` est obligatoire, toujours fourni par l'app) — pas touché, inoffensif.
+  - **Le 3ème point (serveur `host/` visible dans la liste du jeu) reste un gros morceau d'architecture, pas
+    traité cette fois** (voir § TODO ci-dessous pour le détail) — `net.js` ne sait tout simplement pas parler à
+    un relais `host/`, donc l'afficher sans pouvoir le rejoindre serait pire que ne rien afficher.
+  - Vérifié : `cd host && npm run build` (tsc + vite) sans erreur. **Jamais lancé en conditions réelles** (pas de
+    `cargo` dans cette session locale, donc pas de build Tauri complet ni de test du formulaire dans la vraie
+    fenêtre de l'app).
+
 ### TODO — dans l'ordre demandé par l'utilisateur
 1. ~~**Ordinateur du garage = personnalisation de la voiture**~~ **Fait côté serveur/UI (mod 2.5.0, voir ci-dessus).
    La vraie API est maintenant connue (voir 2bis et Phase B ci-dessus) mais `computer.lua` doit encore être
@@ -1026,14 +1052,23 @@ construit progressivement, par endroits contradictoire). Points clarifiés avec 
    (pas systématique, pas inventé), amende décidée par le serveur.
 **Phase J — Profils** : vérifier/améliorer la liste de profils déjà existante (voir § Architecture, « Accounts »)
    — demande peut-être déjà couverte.
-**Phase K — `host/`** :
-   - Démarrage à vide : aucun serveur GRNFR prédéfini avec ses paramètres déjà remplis — l'utilisateur doit créer
-     lui-même son serveur (nom, mot de passe, paramètres) depuis l'app.
-   - Un serveur créé dans `host/` doit apparaître dans la liste des serveurs du jeu (actuellement, voir § Live map
-     ci-dessus : les serveurs du mod sur Supabase et les relais `host/` sont deux systèmes totalement séparés —
-     gros morceau d'intégration, pas encore de conception détaillée).
-   - Wizard de première configuration + auto-mise à jour pour `host/`, même principe que GRNFR CMP Launcher
-     (`host/` a déjà l'updater Tauri officiel signé, mais pas de wizard first-run).
+~~**Phase K — `host/`**~~ **Les 2 points réalisables cette passe faits (voir § Fait ci-dessus) ; le 3ème reste un
+gros morceau d'architecture, pas une passe rapide** :
+   - ~~Démarrage à vide~~ **Déjà fait avant cette session** (`App.tsx` : `<NewServer firstRun />` si aucun
+     serveur) — seul vrai défaut trouvé (le nom pré-rempli "Serveur GRNFR") corrigé.
+   - ~~Wizard + auto-mise à jour~~ **Déjà fait avant cette session** (`NewServer firstRun` = l'écran de premier
+     lancement ; `UpdateBanner.tsx` = la vraie mise à jour signée, déjà affichée sur l'écran d'accueil) — la
+     description de ce point affirmait le contraire SANS avoir relu le code, ce qui était faux (même type
+     d'erreur que le cooldown taxi de la Phase C).
+   - **Reste ouvert, gros morceau** : un serveur créé dans `host/` doit apparaître dans la liste des serveurs du
+     jeu. Vu en relisant le code : `game_servers`/`get_servers()` (liste du jeu) et `host_servers` (relais
+     auto-hébergés) sont deux tables et deux systèmes TOTALEMENT séparés, et surtout **le mod n'a aucun moyen
+     de parler à un relais `host/` même si on l'affichait** — `net.js` ne parle qu'à Supabase (REST), jamais à
+     un WebSocket, et le launcher (seul point de sortie réseau du jeu depuis BeamNG 0.40) ne relaie
+     actuellement que `/rest/v1/*`/`/auth/v1/*` vers Supabase, rien d'autre. Afficher un serveur `host/` dans la
+     liste sans pouvoir le rejoindre serait pire que ne rien afficher (bouton qui ne marche pas). Un vrai
+     chantier impliquerait d'ajouter un troisième chemin réseau au launcher (proxy WebSocket vers le relais
+     `host/` choisi) + un protocole de connexion côté mod — multi-session, pas fait ici.
 **Phase L — Branding/nettoyage UI** : fusionnée avec la Phase B (menu Échap doit toujours rediriger proprement
    vers GRNFR CMP, jamais montrer un résidu d'ancien UI).
 **Phase M — Performance et règles de jeu** :

@@ -13,7 +13,7 @@ export default function ServerForm({
   busy: boolean
   onSubmit: (values: ServerFormValues) => void
 }) {
-  const [name, setName] = useState(initial?.name ?? "Serveur GRNFR")
+  const [name, setName] = useState(initial?.name ?? "")
   const [hasPassword, setHasPassword] = useState(initial?.hasPassword ?? false)
   const [password, setPassword] = useState("")
   const [port, setPort] = useState(String(initial?.port ?? 30814))
@@ -22,6 +22,10 @@ export default function ServerForm({
   function submit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    if (!name.trim()) {
+      setError("Donnez un nom à votre serveur.")
+      return
+    }
     const portNum = Number(port)
     if (!Number.isInteger(portNum) || portNum <= 0 || portNum > 65535) {
       setError("Port invalide (nombre entre 1 et 65535 attendu).")
@@ -31,14 +35,14 @@ export default function ServerForm({
       setError("Entrez un mot de passe (ou décochez la case pour ne pas en utiliser).")
       return
     }
-    onSubmit({ name: name.trim() || "Serveur GRNFR", password: hasPassword ? password.trim() : null, port: portNum })
+    onSubmit({ name: name.trim(), password: hasPassword ? password.trim() : null, port: portNum })
   }
 
   return (
     <form onSubmit={submit}>
       <label>
         Nom du serveur
-        <input value={name} maxLength={40} onChange={e => setName(e.target.value)} />
+        <input value={name} maxLength={40} placeholder="Mon serveur" onChange={e => setName(e.target.value)} />
       </label>
 
       <label className="row">
